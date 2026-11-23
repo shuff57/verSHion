@@ -77,6 +77,9 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::bool("grid", "Gridlines", true),
         ParamDef::choice("grid_weight", "Gridline weight", &WEIGHTS, "Light").hint("Bold survives a photocopy"),
         ParamDef::choice("minor", "Minor gridlines", &MINOR, "None"),
+        ParamDef::choice("grid_directions", "Gridlines run", &["Across", "Both ways"], "Across")
+            .hint("Both ways adds upright lines at the horizontal numbers (and the minor ones between), like graph paper"),
+        ParamDef::bool("axis_arrows", "Arrowheads on the axes", false).hint("A filled arrowhead past the right end of the horizontal axis and the top of the vertical one"),
         ParamDef::choice("title_mode", "Chart title", &TITLE_MODES, "Text").hint("Blank line leaves a line for students to write a title on"),
         ParamDef::text("title", "Title", ""),
         ParamDef::choice("x_title_mode", "Horizontal axis title", &TITLE_MODES, "Text"),
@@ -106,7 +109,7 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
         "fill" => p.s("polygon") != "Alone",
         "x_auto" => step,
         "x_from" | "x_to" | "x_step" => step && !p.b("x_auto"),
-        "grid_weight" | "minor" => p.b("grid"),
+        "grid_weight" | "minor" | "grid_directions" => p.b("grid"),
         "title" => p.s("title_mode") != "Blank line" && p.s("title_mode") != "None",
         "x_title" => p.s("x_title_mode") != "Blank line" && p.s("x_title_mode") != "None",
         "y_title" => p.s("y_title_mode") != "Blank line" && p.s("y_title_mode") != "None",
@@ -738,8 +741,36 @@ fn draw(p: &Params, cs: &[Class]) -> String {
             }
         }
     }
+    // graph paper: upright lines at the horizontal numbers, and the minor ones between them
+    if grid && p.s("grid_directions") == "Both ways" {
+        let m = minor_per(p.s("minor"));
+        if m > 1 {
+            let col = if fills.is_print() { "#e4e4e4" } else { "#eef1f5" };
+            for pair in xticks.windows(2) {
+                for j in 1..m {
+                    let x = frame.px(pair[0].0 + (pair[1].0 - pair[0].0) * j as f64 / m as f64);
+                    d.line(x, frame.top(), x, frame.bottom(), col, 0.8);
+                }
+            }
+        }
+        let (col, sw) = match (weight, fills.is_print()) {
+            ("Light", _) => (chart::GRID, 1.0),
+            ("Bold", false) => ("#6f7d8c", 1.5),
+            ("Bold", true) => ("#6e6e6e", 1.5),
+            (_, false) => ("#a9b2bd", 1.0),
+            (_, true) => ("#ababab", 1.0),
+        };
+        for (v, _) in &xticks {
+            let x = frame.px(*v);
+            d.line(x, frame.top(), x, frame.bottom(), col, sw);
+        }
+    }
     // the light grid and the axes are the shared ones the figure always drew
     chart::axes(&mut d, &frame, &AxesOpts { xticks: &xticks, yticks: &yticks, grid: grid && weight == "Light", x_title, y_title, fs });
+    if p.b("axis_arrows") {
+        d.arrow(frame.left(), frame.bottom(), frame.left(), frame.top() - 14.0, INK, 2.0);
+        d.arrow(frame.left(), frame.bottom(), frame.right() + 14.0, frame.bottom(), INK, 2.0);
+    }
     if x_title.is_empty() && xmode == "Blank line" {
         let cx = (frame.left() + frame.right()) / 2.0;
         blank_line(&mut d, cx - 100.0, h - 12.0, cx + 100.0, h - 12.0);
@@ -761,7 +792,12 @@ fn draw(p: &Params, cs: &[Class]) -> String {
             }
         }
         // the axes are drawn again over the bars' feet so the baseline stays crisp
-        d.line(frame.left(), frame.bottom(), frame.right(), frame.bottom(), INK, 2.0);
+        if p.b("axis_arrows") {
+            d.arrow(frame.left(), frame.bottom(), frame.right() + 14.0, frame.bottom(), INK, 2.0);
+            d.arrow(frame.left(), frame.bottom(), frame.left(), frame.top() - 14.0, INK, 2.0);
+        } else {
+            d.line(frame.left(), frame.bottom(), frame.right(), frame.bottom(), INK, 2.0);
+        }
         let mut segs: Vec<((f64, f64), (f64, f64))> = Vec::new();
         let mut dots: Vec<(f64, f64)> = Vec::new();
         if poly_drawn {

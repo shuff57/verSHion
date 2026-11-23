@@ -22,7 +22,7 @@ pub(crate) mod ogive;
 mod prob_tree;
 mod residual;
 mod samplingdist;
-mod scatter;
+pub(crate) mod scatter;
 mod stem;
 pub(crate) mod twoway;
 pub(crate) mod venn;

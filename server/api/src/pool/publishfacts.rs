@@ -40,11 +40,12 @@ fn truthy(v: Option<&Value>) -> bool {
     }
 }
 
-/// A short statement, decided on the SERVED form (key-free, so nothing about a hidden key decides it): no explanation, image or figure, and by kind a stem of
+/// A short statement, decided on the SERVED form (key-free, so nothing about a hidden key decides it): no explanation, image or figure (a picture choice's
+/// counts too), and by kind a stem of
 /// at most `SHORT_WORDS` words (Tf; Short and Blank with a served key of at most `SHORT_KEY_WORDS`) or an Mc whose stem and choices total at most
 /// `SHORT_KEY_WORDS`. Matching and Multipart: never.
 pub fn is_short(q: &Value) -> bool {
-    if q.get("explanation").and_then(Value::as_str).is_some_and(|e| !e.trim().is_empty()) || truthy(q.get("image")) || truthy(q.get("figure")) || truthy(q.get("keyless")) {
+    if q.get("explanation").and_then(Value::as_str).is_some_and(|e| !e.trim().is_empty()) || truthy(q.get("image")) || truthy(q.get("figure")) || truthy(q.get("keyless")) || super::pictures::has_choice_pictures(q) {
         return false;
     }
     let k = kind_tag(q);
@@ -144,7 +145,8 @@ pub struct Facts {
     pub short40: Vec<bool>,
     pub served_text: Vec<Vec<String>>,
     pub hidden_text: Vec<Vec<String>>,
-    pub img_at: Vec<Option<String>>,
+    /// Each served question's pictures: its image, then its picture choices'.
+    pub img_at: Vec<Vec<String>>,
 }
 
 fn text_keys(fp: &Fingerprinter, q: &Value) -> Vec<String> {

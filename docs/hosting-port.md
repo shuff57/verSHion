@@ -1,5 +1,15 @@
 # Hosting port plan: off Cloudflare, SQLite file on a server
 
+> **Current deployment, verified 2026-11-15:** production is `https://vershion.lefthanddev.com` on
+> `ssh vps`, with configuration at `/etc/vershion/api.env` (root, mode 600), compose/binary under
+> `/opt/vershion`, data under `/var/lib/vershion`, and web files under `/var/www/vershion`.
+> OpenRouter, CheaperInference and `AI_RELAY_KEY` credentials are present in that configuration.
+> Staging was deliberately removed on 2026-11-07; the staging paths and tests below are historical.
+> Production purchases are deliberately disabled and its environment contains no Stripe credentials.
+> No retained Stripe TEST credential copy was found when checking with the Claude figures session.
+> Local saved AI keys are in `~/.local/share/vershion/ai-keys.json`; never print or commit their values.
+
+
 Status: draft 2026-10-31, nothing built. Decided: Rust server on a VPS (see Decisions).
 
 ## What the Worker depends on today

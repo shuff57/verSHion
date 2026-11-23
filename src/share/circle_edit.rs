@@ -776,7 +776,7 @@ fn question_using(payload: &[u8], file: &str) -> String {
     let stem = v
         .pointer("/bank/questions")
         .and_then(serde_json::Value::as_array)
-        .and_then(|qs| qs.iter().find(|q| q.pointer("/image/file").and_then(serde_json::Value::as_str) == Some(file)))
+        .and_then(|qs| qs.iter().find(|q| super::pool::picture_files(q).contains(&file)))
         .and_then(|q| q.get("stem"))
         .and_then(serde_json::Value::as_str)
         .unwrap_or("")
@@ -3743,6 +3743,16 @@ impl CircleEditModel {
                                 fetch.push(file.clone());
                             }
                         }
+                        // A question sent as the base has it names the circle's files for its picture choices too.
+                        // The job fetches only those this computer lacks (this bank's own are here).
+                        let composed_v: serde_json::Value = serde_json::from_slice(&c.payload).unwrap_or_default();
+                        for q in composed_v.pointer("/bank/questions").and_then(serde_json::Value::as_array).into_iter().flatten() {
+                            for file in super::pool::choice_picture_files(q) {
+                                if !fetch.iter().any(|f| f == file) {
+                                    fetch.push(file.to_string());
+                                }
+                            }
+                        }
                         let payload = c.payload.clone();
                         composed = Some(c);
                         payload
@@ -5794,7 +5804,7 @@ fn question_lines(payload: &[u8]) -> Vec<QuestionLine> {
             number: i + 1,
             stem: api::plain(q.get("stem").and_then(|s| s.as_str()).unwrap_or("")).lines().next().unwrap_or("").chars().take(160).collect(),
             kind: q.get("kind").and_then(|k| k.as_object()).and_then(|o| o.keys().next().cloned()).unwrap_or_default(),
-            has_image: q.pointer("/image/file").is_some(),
+            has_image: !super::pool::picture_files(q).is_empty(),
         })
         .collect()
 }

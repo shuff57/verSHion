@@ -1,0 +1,1365 @@
+[
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      -2.0,
+      3.4641016151377544
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      -8.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -8.0,
+      -13.856406460551018
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      16.0,
+      -27.712812921102035
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      64.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      64.0,
+      110.85125168440814
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      -128.0,
+      221.70250336881628
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      -512.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      -512.0,
+      -886.8100134752651
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      1024.0,
+      -1773.6200269505302
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      4096.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -2.732050807568877,
+      -0.7320508075688773
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.36602540378443865,
+      -1.3660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.5481881585886564,
+      2.949489742783178
+    ]
+  },
+  {
+    "params": {
+      "zr": "1",
+      "zi": "sqrt(3)",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      1.0134395405144594,
+      0.8664398856814125
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      2.0,
+      3.4641016151377544
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      0.0,
+      8.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -8.0,
+      13.856406460551018
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      -27.712812921102035,
+      16.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      -64.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      -110.85125168440814,
+      -64.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      -128.0,
+      -221.70250336881628
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      0.0,
+      -512.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      512.0,
+      -886.8100134752651
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      1773.6200269505302,
+      -1024.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      4096.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -2.732050807568877,
+      0.7320508075688773
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -0.36602540378443865,
+      -1.3660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      1.949489742783178,
+      2.2802389661575337
+    ]
+  },
+  {
+    "params": {
+      "zr": "sqrt(3)",
+      "zi": "1",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      1.310884330125857,
+      0.2436391815949584
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      -0.5,
+      0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      -1.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -0.5,
+      -0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      0.5,
+      -0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      0.5,
+      0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      -0.5,
+      0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      -1.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      -0.5,
+      -0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      0.5,
+      -0.8660254037844386
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -1.3660254037844386,
+      -0.36602540378443865
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.18301270189221933,
+      -0.6830127018922193
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.2740940792943282,
+      1.474744871391589
+    ]
+  },
+  {
+    "params": {
+      "zr": "1/2",
+      "zi": "sqrt(3)/2",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.5067197702572297,
+      0.43321994284070625
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      -2.0,
+      3.4641016151377544
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      -8.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -8.0,
+      -13.856406460551018
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      16.0,
+      -27.712812921102035
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      64.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      64.0,
+      110.85125168440814
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      -128.0,
+      221.70250336881628
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      -512.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      -512.0,
+      -886.8100134752651
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      1024.0,
+      -1773.6200269505302
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      4096.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -2.732050807568877,
+      -0.7320508075688773
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.36602540378443865,
+      -1.3660254037844386
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.5481881585886564,
+      2.949489742783178
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "pi/3",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      1.0134395405144594,
+      0.8664398856814125
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      -2.0,
+      3.4641016151377544
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      -8.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -8.0,
+      -13.856406460551018
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      16.0,
+      -27.712812921102035
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      64.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      64.0,
+      110.85125168440814
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      -128.0,
+      221.70250336881628
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      -512.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      -512.0,
+      -886.8100134752651
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      1024.0,
+      -1773.6200269505302
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      4096.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -2.732050807568877,
+      -0.7320508075688773
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.36602540378443865,
+      -1.3660254037844386
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.5481881585886564,
+      2.949489742783178
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "2",
+      "theta": "60",
+      "unit": "Degrees",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      1.0134395405144594,
+      0.8664398856814125
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      0.0,
+      2.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      -2.0,
+      2.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -4.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      -4.0,
+      -4.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      0.0,
+      -8.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      8.0,
+      -8.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      16.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      16.0,
+      16.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      0.0,
+      32.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      -32.0,
+      32.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      -64.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      -2.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.0,
+      -1.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.914213562373095,
+      1.9142135623730951
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "sqrt(2)",
+      "theta": "pi/4",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      0.8507615832769312,
+      0.4063171388324867
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 2
+    },
+    "expected": [
+      0.0,
+      -9.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 3
+    },
+    "expected": [
+      19.091883092036785,
+      19.091883092036785
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 4
+    },
+    "expected": [
+      -81.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 5
+    },
+    "expected": [
+      171.82694782833104,
+      -171.82694782833104
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 6
+    },
+    "expected": [
+      0.0,
+      729.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 7
+    },
+    "expected": [
+      -1546.4425304549795,
+      -1546.4425304549795
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 8
+    },
+    "expected": [
+      6561.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 9
+    },
+    "expected": [
+      -13917.982774094815,
+      13917.982774094815
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 10
+    },
+    "expected": [
+      0.0,
+      -59049.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 11
+    },
+    "expected": [
+      125261.84496685333,
+      125261.84496685333
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Powers",
+      "n": 12
+    },
+    "expected": [
+      -531441.0,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Product",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      0.0,
+      -4.242640687119285
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Quotient",
+      "wr": "-1",
+      "wi": "1"
+    },
+    "expected": [
+      2.1213203435596424,
+      0.0
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Product",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      -4.060660171779821,
+      1.9393398282201788
+    ]
+  },
+  {
+    "params": {
+      "input": "Polar cis",
+      "radius": "3",
+      "theta": "3pi/4",
+      "operation": "Quotient",
+      "wr": "sqrt(2)",
+      "wi": "1/2"
+    },
+    "expected": [
+      -0.8619288125423017,
+      1.804737854124365
+    ]
+  }
+]

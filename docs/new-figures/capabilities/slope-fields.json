@@ -1,0 +1,231 @@
+{
+ "figure": "slope-fields",
+ "site": "new",
+ "slug": "slope-fields",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type the differential equation dy/dx = f(x, y)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Draw the field's segments on a grid over a chosen range",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Draw a solution curve through a typed point (x_0, y_0)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw several solution curves, each through its own point",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw Euler's method from (x_0, y_0) with step h and n steps, as joined segments",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "List the Euler steps' x and y values in a table",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Set how far apart the segments are",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Set how long the segments are",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Draw the segments as plain segments or as arrows",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-10",
+   "text": "Mark the equilibrium solutions (where dy/dx = 0 for every x) as lines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-11",
+   "text": "Mark and label each starting point",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-12",
+   "text": "Draw the solution curve beside Euler's steps to compare them",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-13",
+   "text": "Draw a solution curve forward from its point only, or both ways",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-14",
+   "text": "Draw each solution curve solid, dashed or dotted",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-15",
+   "text": "Rename the variables, such as dP/dt against t",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-16",
+   "text": "Load a classic example (dy/dx = x, growth, x - y, circles, logistic, Euler with h = 0.5)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-17",
+   "text": "Set each axis's From, To and Count by",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-18",
+   "text": "Make the gridlines light, standard, bold or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-19",
+   "text": "Add minor gridlines between the numbered lines",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-20",
+   "text": "Number the axes, or leave the numbers off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-21",
+   "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-22",
+   "text": "Write a title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-23",
+   "text": "Put a blank line in place of the title for students",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-24",
+   "text": "Make the labels small, medium or large",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-25",
+   "text": "Draw it in black and white for photocopying (Print)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-26",
+   "text": "A student copy with the field and the starting point only, for students to sketch the solution",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-27",
+   "text": "A student copy with dots at the grid points and no segments, for students to draw the field (AP 'sketch at the nine points')",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-28",
+   "text": "A student copy with a blank line for the equation",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-29",
+   "text": "Four candidate equations labelled A to D under the field, the matching one marked in the key",
+   "class": "version",
+   "evidence": "",
+   "note": "AP multiple choice"
+  },
+  {
+   "id": "cap-30",
+   "text": "An answer key line giving the Euler values and the solution",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-31",
+   "text": "Drag the starting point on the figure to move its solution curve",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: (0, 1) is a handle"
+  },
+  {
+   "id": "cap-32",
+   "text": "Click on the field on the figure to start a solution curve there",
+   "class": "interaction",
+   "evidence": "",
+   "note": "opening state: the field is a click target"
+  }
+ ]
+}

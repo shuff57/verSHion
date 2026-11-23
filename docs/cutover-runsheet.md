@@ -1,5 +1,10 @@
 # Cutover run sheet (draft, 2026-11-03, NOT executed)
 
+> Historical planning document: production was launched on 2026-11-06 and staging was removed
+> on 2026-11-07. This checklist is not the current deployment status. See the current deployment
+> note in `docs/hosting-port.md` before using any staging paths or requesting credentials again.
+
+
 An ordered version of the cutover checklist in `docs/hosting-port.md`, with today's staging results folded in. Who: **You** = the owner, **Me** = Claude. Every step has a check and a way back. Secrets are copied by hand, never through chat or git.
 
 ## Before cutover day

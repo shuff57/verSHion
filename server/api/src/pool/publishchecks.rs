@@ -89,7 +89,7 @@ pub fn run(x: &PoolCtx, store: &BlobStore, me: &str, item_id: &str, is_new: bool
             }
         }
         if !gone.is_empty() {
-            let positions: Vec<usize> = rw.images.iter().enumerate().filter(|(_, s)| s.as_ref().is_some_and(|s| gone.contains(s))).map(|(i, _)| i).take(100).collect();
+            let positions: Vec<usize> = rw.images.iter().enumerate().filter(|(_, s)| s.iter().any(|s| gone.contains(s))).map(|(i, _)| i).take(100).collect();
             return Err(PoolError::new(422, "blob_missing").with("reason", json!("reupload")).with("positions", json!(positions)).into());
         }
     }

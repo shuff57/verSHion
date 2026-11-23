@@ -63,7 +63,8 @@ pub struct QuestionInfo {
     pub number: usize,
     pub stem: String,
     pub kind: String,
-    /// `media/<sha>.<ext>` when the question has a picture.
+    /// `media/<sha>.<ext>` when the question has a picture: its own, else its first picture choice's (one tick,
+    /// `image_ok`, covers all of a question's pictures).
     pub image: Option<String>,
 }
 
@@ -136,7 +137,7 @@ impl ShareSource {
                         number: i + 1,
                         stem: q.get("stem").and_then(Value::as_str).unwrap_or("").lines().next().unwrap_or("").chars().take(90).collect(),
                         kind: q.get("kind").and_then(Value::as_object).and_then(|o| o.keys().next().cloned()).unwrap_or_default(),
-                        image: q.pointer("/image/file").and_then(Value::as_str).map(str::to_string),
+                        image: super::pool::picture_files(q).first().map(|f| f.to_string()),
                     })
                     .collect()
             })
@@ -158,7 +159,7 @@ impl ShareSource {
                         number: i + 1,
                         stem: q.get("stem").and_then(Value::as_str).unwrap_or("").lines().next().unwrap_or("").chars().take(90).collect(),
                         kind: q.get("kind").and_then(Value::as_object).and_then(|o| o.keys().next().cloned()).unwrap_or_default(),
-                        image: q.pointer("/image/file").and_then(Value::as_str).map(str::to_string),
+                        image: super::pool::picture_files(q).first().map(|f| f.to_string()),
                     })
                     .collect()
             })
@@ -1548,11 +1549,13 @@ impl PublishModel {
             self.step = Step::Failed;
             return;
         };
-        let images = images_in_payload(&source.payload(SCHEMA_NEW))
-            .unwrap_or_default()
-            .into_iter()
-            .map(|ImageUse { position, file, .. }| ImageNote { question: position, file, kept: !prep.options.hide_key || !res.images_removed.contains(&position) })
-            .collect();
+        // One note per question: its pictures (its own and its picture choices') are kept or removed together.
+        let mut images: Vec<ImageNote> = Vec::new();
+        for ImageUse { position, file, .. } in images_in_payload(&source.payload(SCHEMA_NEW)).unwrap_or_default() {
+            if !images.iter().any(|n| n.question == position) {
+                images.push(ImageNote { question: position, file, kept: !prep.options.hide_key || !res.images_removed.contains(&position) });
+            }
+        }
         self.preview = Some(Preview { result: res, view, options: prep.options, target: prep.target, images, blocked });
         self.form.reviewed = false;
         self.fix = None;

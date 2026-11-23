@@ -51,8 +51,14 @@ struct Run {
     charge: i64,
 }
 fn pipeline(w: &W, hide_key: bool) -> Run {
-    let payload = json!({ "schema_version": 1, "bank": { "id": "local", "name": "Capitals", "questions": [mc("What is the capital of France?"), mc("What is the capital of Spain?")], "created": 1, "modified": 1 } }).to_string().into_bytes();
-    let m = json!({ "publish_id": "AAAAAAAAAAAAAAAAAAAAAA", "hide_key": hide_key, "license": "CC-BY-4.0", "visibility": "unlisted", "attestation": { "accepted": true, "text_rev": "2026-10-19" }, "meta": { "title": "Capitals", "subject": "Geo", "tags": ["Maps"] } });
+    pipeline_of(w, hide_key, vec![mc("What is the capital of France?"), mc("What is the capital of Spain?")], json!([]))
+}
+fn pipeline_of(w: &W, hide_key: bool, questions: Vec<Value>, image_ok: Value) -> Run {
+    let payload = json!({ "schema_version": 1, "bank": { "id": "local", "name": "Capitals", "questions": questions, "created": 1, "modified": 1 } }).to_string().into_bytes();
+    let mut m = json!({ "publish_id": "AAAAAAAAAAAAAAAAAAAAAA", "hide_key": hide_key, "license": "CC-BY-4.0", "visibility": "unlisted", "attestation": { "accepted": true, "text_rev": "2026-10-19" }, "meta": { "title": "Capitals", "subject": "Geo", "tags": ["Maps"] } });
+    if hide_key {
+        m["image_ok"] = image_ok;
+    }
     let m = read_meta(m.as_object().unwrap(), true).unwrap();
     let land = Landing { item_id: ITEM.into(), version: 1, visibility: "unlisted".into(), item_kind: None, base_of: None, prev_public_version: 0, prev_public_at: None, prev_hidden: false, prev_license: None };
     let x = PoolCtx::new(&w.c, 5 * DAY_MS);
@@ -171,4 +177,44 @@ fn tags_merge_meta_tags_and_topics_lowercased() {
     let qs = vec![json!({ "topics": ["Rivers", " rivers ", "", 3] }), json!({})];
     let t = tags_of(&["Maps".into(), "RIVERS".into()], &qs);
     assert_eq!(t.into_iter().collect::<Vec<_>>(), vec!["maps", "rivers"]);
+}
+
+/// A stored blob the author uploaded (pending until well after the test's now).
+fn own_blob(w: &W, sha: &str) {
+    w.c.execute("INSERT INTO blobs (sha256, size, content_type, width, height, first_uploaded_at) VALUES (?1, 3, 'image/png', 7, 9, 1)", [sha]).unwrap();
+    w.c.execute("INSERT INTO pending_blobs (sha256, uploader_id, size, until) VALUES (?1, 'me', 3, ?2)", rusqlite::params![sha, 9 * DAY_MS]).unwrap();
+    w.s.put(&format!("blobs/{sha}"), b"png").unwrap();
+}
+/// `mc` whose third choice is a picture, with `text`.
+fn mc_picture(stem: &str, sha: &str, text: &str) -> Value {
+    let mut q = mc(stem);
+    q["kind"]["Mc"]["answers"][2] = json!({ "text": text, "correct": false, "locked": false, "image": { "file": format!("media/{sha}.png"), "width": 7, "height": 9 } });
+    q
+}
+fn blobs_of(w: &W, form: &str) -> Vec<String> {
+    let mut st = w.c.prepare("SELECT sha256 FROM item_blobs WHERE publish_id = 'AAAAAAAAAAAAAAAAAAAAAA' AND form = ?1 ORDER BY sha256").unwrap();
+    st.query_map([form], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+}
+
+#[test]
+fn a_choice_picture_is_linked_to_the_publish_like_a_question_image() {
+    let sha = "f".repeat(64);
+    // Ticked: both forms serve it, so an importer of either can fetch it.
+    let w = world();
+    own_blob(&w, &sha);
+    let r = pipeline_of(&w, true, vec![mc("What is the capital of France?"), mc_picture("Which flag is Spain's?", &sha, "")], json!([1]));
+    assert_eq!((r.plan.shas.clone(), r.plan.stripped_shas.clone(), r.plan.has_images), (vec![sha.clone()], vec![sha.clone()], 1));
+    stage_it(&w, &r).unwrap();
+    assert_eq!((blobs_of(&w, "full"), blobs_of(&w, "stripped")), (vec![sha.clone()], vec![sha.clone()]));
+    // Not ticked: the full form keeps it, the viewers' stripped form does not (the choice keeps its text).
+    let w = world();
+    own_blob(&w, &sha);
+    let r = pipeline_of(&w, true, vec![mc("What is the capital of France?"), mc_picture("Which flag is Spain's?", &sha, "red and yellow")], json!([]));
+    assert_eq!((r.plan.shas.clone(), r.plan.stripped_shas.clone(), r.plan.has_images), (vec![sha.clone()], vec![], 0));
+    stage_it(&w, &r).unwrap();
+    assert_eq!((blobs_of(&w, "full"), blobs_of(&w, "stripped")), (vec![sha.clone()], vec![]));
+    // A text-only bank links nothing.
+    let w = world();
+    let r = pipeline(&w, true);
+    assert!(r.plan.shas.is_empty() && r.plan.stripped_shas.is_empty() && r.plan.has_images == 0);
 }

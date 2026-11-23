@@ -10,28 +10,65 @@ Output ONLY the JSON object. No markdown fences, no commentary before or after.
   even when it is the last thing on the page. Never drop a complete question, and never describe
   a question in `report.notes` instead of converting it: a handwritten answer is part of its
   question, not a reason to skip it.
+- Printed content at the TOP of the page that continues a question begun on an earlier page
+  (more parts, expressions or matrices, with that question's number and task not printed on
+  this page) is still printed content: convert it as ONE question, first in order, with `label`
+  exactly "continued", its printed text in `stem` (or its printed lettered parts in `parts`),
+  and add a `report.notes` entry. Do not guess its number or its task from an unseen page.
 - Handwriting that supplies an answer (an answer key filled in, a circled choice, a starred
   choice, a worked solution) is the SOURCE'S ANSWER: use it. Handwriting that is only a
   student's scratch work or a demonstration drawing, not an answer to a printed prompt, is not
   question content: ignore it.
+- Separate the PRINTED question from handwritten working before transcribing its math.
+  Keep only the printed equation in `stem`: handwritten common-denominator multipliers,
+  cancellation marks, replacement numerators, and intermediate calculations are NEVER
+  printed exponents, coefficients, fractions or operators. For example, a handwritten
+  multiplier above a printed `x` does not change that `x` into a power. A handwritten
+  multiplier next to a printed `+` does not turn the `+` into a fraction. Preserve the original
+  printed numerators, denominators and operators; put the worked solution only in the answer.
+  If overlaid handwriting makes a printed symbol unreadable, flag it in `report.notes`
+  rather than silently changing the equation.
 - Printed page furniture is not a question: the Name/Date line, class meeting days, the
   title banner ("Quiz 5A – Ch. 4"), "(continued on next page)", page numbers.
-- A paper title goes in `exams[0].name` when the page shows one and the source is a test.
-  If no title is on this page, omit `exams`.
+- Preserve worksheet and section directions even on a continuation page without a title.
+  When directions are printed, put them in `exams[].sections[].instructions` and map each
+  affected question through `positions`. If no paper title is printed, use `bank.name` as
+  the exam name. Do not invent directions from a different page you cannot see.
 
 # Output shape
 ```
 { "format": "queshion/ditto", "formatVersion": "0.1.0",
-  "bank": { "name": "<subject or the page's title>", "questions": [ ... ] },
+  "bank": { "name": "<exact printed title, or subject only when no title is visible>", "questions": [ ... ] },
   "exams": [],
   "report": { "unconverted": [], "notes": [] } }
 ```
 Question ids are `q1`, `q2`, ... in printed order on this page.
+Always set `label` to the question number exactly as printed ("13", "5B-2"). A problem whose whole
+content is a printed picture (the directions above its group say what to do) is still a question:
+give it `"stem": ""`, its `label`, its `figure` box, and map it to its section with `positions` so the
+printed directions apply. An empty stem is allowed ONLY for such a figure problem. If you can see no
+directions for it anywhere, keep the empty stem and the figure and say in `report.notes` that its task
+is not visible; never write a task the page does not print.
+A single figure-only written-response problem is `"type": "short-answer"`, not `multipart`.
+Use `multipart` only when actual separately printed subquestions exist; `parts` must never be empty.
+When the message adds a DOCUMENT CONTEXT block, it lists directions that earlier pages of the SAME
+document printed. Use one only for problems on this page that have no directions of their own above
+them, copy its text exactly, and set `"inheritedFromPage"` on that section to the page it names.
+Directions printed on this page always win. Never invent directions.
 
 # Question types (use `type`)
-- `multiple-choice`: `choices` = `[{"text": "...", "correct": true|false}]` in printed order,
-  without the letter ("a.", "(B)"). Set `correct` ONLY where the source marks the answer. If
+- `multiple-choice`: `choices` = `[{"text": "...", "correct": true|false, "figure": null}]` in
+  printed order, without the letter ("a.", "(B)"). When a choice IS a picture (a graph, chart or
+  diagram printed as option A, B, ...), give that choice a `figure` box around its picture only
+  (not its letter, not the other options) and its printed caption in `text`, or `""` when only the
+  picture is printed; the question's own `figure` stays the picture in the stem, if any. A text
+  choice has `"figure": null`. Set `correct` ONLY where the source marks the answer. If
   none is marked, every choice is `"correct": false`. Never decide the answer yourself.
+  A printed answer-key line such as "Answer: B", "Correct: C", or "1. B" marks the corresponding
+  printed choice. Map its letter to that choice, set that choice's `correct` to true, and leave
+  the other choices false. An answer-key line NEVER changes a multiple-choice question into
+  short-answer: preserve all printed choices and the multiple-choice type. If a key cannot be
+  matched to a choice, keep the choices and type, mark none correct, and explain in `report.notes`.
 - `true-false`: `answer` true/false, only if marked; otherwise omit `answer`.
 - `matching`: `pairs` [{left,right}] and `distractors`.
 - `fill-in-the-blank`: the printed label next to each answer line ("BONDING ELECTRONS:") is part
@@ -64,7 +101,16 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
   Fix and rephrase nothing, including errors in the source. Do not renumber.
 - `stem` is the question text only: no leading number ("3."), no point marks ("[2]"), and not
   the directions printed above a group. Directions printed above a group go in
-  `exams[0].sections[].instructions`.
+  `exams[0].sections[].instructions`, with a `positions` entry linking every affected
+  question to its section. The importer preserves those directions on standalone bank items.
+  When a continuation page contains expressions but its task directions are not visible,
+  preserve the expressions and flag the missing task context in `report.notes`; do not guess
+  the instructions from the title or from an unseen page.
+  Preserve section qualifiers such as "Critical thinking questions" with their mapped tasks.
+  Keep named problem subtitles and qualifiers such as "Extra credit" in the question text;
+  record printed point values in `points` rather than dropping them. A printed note that
+  constrains the task's scope or interpretation belongs in the affected questions' context,
+  even when it appears below the problems.
 - Layout: each printed line is its own line (`\n`). A bulleted list is one line per bullet
   starting with `• `; a numbered list one line per item starting with `1. `, `2. `. A word
   printed in bold is `**word**`.
@@ -76,6 +122,16 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
   If the printed table has no header row, write the body rows only.
 - Chemical formulas and math: subscripts/superscripts as Unicode (H₂O, Mg(NO₂)₂, m²). Real
   equations as `$linear$` (e.g. `$\frac{a}{b}$` written as `$(a)/(b)$`).
+  A printed multiplication sign between numbers (×, or a letter x used as "times", as in
+  13 x (-13)) is `\times` inside math, never the variable `x`.
+  Keep each entire number or expression inside one pair of `$` delimiters, including its
+  sign and whole-number part: a mixed number is `$3 (2)/(7)$`, never `3 $(2)/(7)$`.
+  Preserve the printed grouping of exponents, radicals, fractions and limits; do not simplify.
+  Matrices retain their original rows and columns as editable mathematical matrices. Use
+  matrix notation such as \begin{bmatrix}a&b\\c&d\end{bmatrix} inside the math span, escaping
+  backslashes in JSON. Keep every cell, sign, operator and surrounding grouping exactly;
+  never compute a matrix operation or flatten its rows into a horizontal list.
+  Escape a literal currency dollar as `\\$` in a JSON string, so it cannot open a math span.
 - If the page prints a mark for a question (`[2]`, `(3 pts)`), set `points` to that whole number.
 
 # Figures (very important)
@@ -88,8 +144,19 @@ structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt
   the answer lines below it. `box` holds exactly four numbers written as a JSON array with commas and spaces, like
   `[270, 420, 370, 620]`, never run together; `alt` is a separate key.
 - Never write a figure for typed text, a table, an equation, an answer blank, or handwriting.
-- One figure per question. If a question has two separate pictures, use `multipart` and give each
-  part its own figure.
+  Blank grids, axes and curves provided as student workspaces ARE figures, including an
+  unlabeled curve with tick marks, and so is a blank diagram printed for a part to complete (a sign
+  diagram, number line, tree or chart outline under "(i) Complete the sign diagram below"): box it
+  on that part. Keep supplied plotted curves; colored ink alone does not
+  mean handwriting. Distinguish printed drawings from handwritten additions by their form.
+- One figure attachment per question or part. A single supplied diagram containing several panels belongs
+  in one box, with every panel and its labels included. In a multipart question, a picture shared by
+  the whole question goes on the parent `figure`; a picture printed for one part goes on that part's
+  `figure`, and when several parts each print their own picture (a triangle for (a), another for
+  (b)), give EVERY such part its own `figure` box. Never omit a part's picture, never duplicate one
+  on the parent, and never join boxes across intervening text. A question with both a shared
+  picture and part pictures cannot be stored: preserve the printed text and report the pictures
+  for review.
 - `alt`: a short neutral description of what is drawn.
 - Do NOT write `[picture ...]` placeholders in stems.
 
@@ -97,7 +164,13 @@ structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt
 When the page is clearly a test (has a title, name line, numbered questions), add
 `exams`: `[{"name": "<title as printed>", "sections": [{"title": "", "instructions": "<directions printed under the title>"}], "positions": [{"question": "q1", "section": 0}, ...]}]`
 with one position per converted question, in order. Headings printed as "Part A" etc. are
-sections: `title` exactly as printed. Otherwise `exams` is `[]`.
+sections: `title` exactly as printed. A worksheet with printed directions also needs this
+section mapping even without a title or name line; use `bank.name` as its exam name. Otherwise
+`exams` is `[]`.
+Preserve a printed instructional section heading even when there are no separate instructions:
+map its questions to a section with that literal `title` and `instructions: ""`. This includes
+unnumbered worksheet exercises under a printed subject heading; do not shorten the heading or
+replace it with an inferred subject name. Such a heading supplies context, never a guessed task.
 
 # Report
 `report.unconverted`: every question you left out and why. `report.notes`: anything uncertain
@@ -106,7 +179,7 @@ sections: `title` exactly as printed. Otherwise `exams` is `[]`.
 # Examples
 
 Page shows "1. Which gas do plants absorb?" with choices a. O₂  b. CO₂ (circled)  c. N₂:
-{"id":"q1","type":"multiple-choice","stem":"Which gas do plants absorb?","choices":[{"text":"O₂","correct":false},{"text":"CO₂","correct":true},{"text":"N₂","correct":false}]}
+{"id":"q1","type":"multiple-choice","stem":"Which gas do plants absorb?","choices":[{"text":"O₂","correct":false,"figure":null},{"text":"CO₂","correct":true,"figure":null},{"text":"N₂","correct":false,"figure":null}]}
 
 Page shows "2. Name each compound." with a table: Formula | Ionic or Covalent? | Name, rows
 KI (Ionic, potassium iodide) and SO₃ (Covalent, sulfur trioxide), answers handwritten:

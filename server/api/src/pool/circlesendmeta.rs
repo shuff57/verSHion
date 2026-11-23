@@ -304,11 +304,11 @@ pub fn diff(prev: Option<&Index>, next_qids: &[String], next_h: &[String]) -> (i
 }
 
 /// One form of a version's questions a member may be served (the full form, and for a bank that hides its keys the stripped form its
-/// viewers read), with its key-free match hashes and each question's image.
+/// viewers read), with its key-free match hashes and each question's pictures (its image and its picture choices').
 pub struct ScanForm {
     pub qs: Vec<Json>,
     pub mh: Vec<String>,
-    pub img_at: Vec<Option<String>>,
+    pub img_at: Vec<Vec<String>>,
 }
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Scan {
@@ -323,16 +323,9 @@ pub struct Scan {
     pub chits: Vec<String>,
 }
 
-/// Each question's image hash (`media/<sha>.<ext>`), or None.
-pub fn images_at(qs: &[Json]) -> Vec<Option<String>> {
-    qs.iter()
-        .map(|q| {
-            let f = q.get("image").and_then(|i| i.get("file")).and_then(Json::as_str)?;
-            let rest = f.strip_prefix("media/")?;
-            let (sha, ext) = rest.split_once('.')?;
-            (super::sqlfrag::is_sha(sha) && matches!(ext, "png" | "jpg" | "gif" | "webp")).then(|| sha.to_string())
-        })
-        .collect()
+/// Each question's picture hashes (`media/<sha>.<ext>`): its image, then its picture choices' (`pictures::shas_j`); empty for none.
+pub fn images_at(qs: &[Json]) -> Vec<Vec<String>> {
+    qs.iter().map(super::pictures::shas_j).collect()
 }
 
 fn dedup<T: Clone + Eq + std::hash::Hash>(xs: impl IntoIterator<Item = T>) -> Vec<T> {
@@ -366,7 +359,7 @@ pub fn privacy_scan(x: &PoolCtx, fp: &Fingerprinter, forms: &[ScanForm], sender:
                 let pt = stem_tokens(p.get("stem").unwrap_or(&Json::Null));
                 ss.push(StemSketch { bands: stem_bands(&pt), tokens: pt });
             }
-            im.push(fm.img_at.get(i).cloned().flatten());
+            im.extend(fm.img_at.get(i).into_iter().flatten().cloned().map(Some));
         }
         keys_at.push(dedup(ks));
         stems.push(ss);

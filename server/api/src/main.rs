@@ -163,8 +163,12 @@ async fn main() {
     let mut conn = db::open(&cfg.db).expect("open the database");
     let applied = db::migrate(&mut conn, &cfg.migrations).expect("migrate");
     tracing::info!(applied = applied.len(), "migrations");
-    if cfg.openrouter.is_none() {
-        tracing::warn!("the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set: the AI relay answers 503 ai_not_configured");
+    if cfg.upstream.is_none() {
+        // A mismatched AI_UPSTREAM is named outright; otherwise list what to set.
+        match cfg.upstream_note {
+            Some(note) => tracing::warn!("the AI relay answers 503 ai_not_configured: {note}"),
+            None => tracing::warn!("the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set: the AI relay answers 503 ai_not_configured"),
+        }
     }
     // Only worth a line when buying is on: with BILLING_ENABLED unset the webhook route is off anyway, and the
     // warning on every start read like a fault on a server where purchases are deliberately closed.
@@ -207,7 +211,7 @@ async fn main() {
     let state = Arc::new(AiState {
         conn: Mutex::new(conn),
         limits: cfg.limits,
-        openrouter: cfg.openrouter,
+        upstream: cfg.upstream,
         transport: HttpTransport::new(),
         auth: ai_auth,
         relay_key: cfg.relay_key,
@@ -283,7 +287,7 @@ mod tests {
         let state = Arc::new(AiState {
             conn: Mutex::new(conn),
             limits: cfg.limits,
-            openrouter: cfg.openrouter,
+            upstream: cfg.upstream,
             transport: HttpTransport::new(),
             auth: Box::new(NoAuth),
             relay_key: cfg.relay_key,
@@ -343,7 +347,7 @@ mod tests {
         let state = Arc::new(AiState {
             conn: Mutex::new(conn),
             limits: cfg.limits,
-            openrouter: None,
+            upstream: None,
             transport: HttpTransport::new(),
             auth: Box::new(NoAuth),
             relay_key: None,

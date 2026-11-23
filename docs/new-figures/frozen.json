@@ -1,0 +1,68 @@
+{
+ "frozen_at": "2026-11-12T18:21:03+00:00",
+ "map_sha256": "a379da321b6b83d3ea42b92b6ab906c3e71050b04185879aa3a52c71244d1379",
+ "not_doing_sha256": "b8993168e1827770c6353a4a763d62b263ee3209b2af143328ca3ae8a0a94d8d",
+ "missing_figures": [
+  "new/complex-plane",
+  "new/conic-sections",
+  "new/derivative-graphs",
+  "new/limits-discontinuities",
+  "new/polar-parametric",
+  "new/riemann-sums",
+  "new/sequences-series",
+  "new/slope-fields",
+  "new/tangent-secant-lines"
+ ],
+ "figures": {
+  "conic-sections": {
+   "page": "new/conic-sections",
+   "text_sha256": "2ec62862035428f6f9f120cbdcfbceff84d6de9f783581f1749dcf6d16334a67",
+   "shape": "b9b0540890ea6532320bf73b944b9d7a82d210a1440e8a36ed4d3ff796898bc6"
+  },
+  "tangent-secant-lines": {
+   "page": "new/tangent-secant-lines",
+   "text_sha256": "87647786f0e5becf36d7db498c7bb4a6883499e470d756455c9b4ff7b22ec3ce",
+   "shape": "b685f894e2f99915914034087a6b4ab27afd0414c9b421b7f4d30068c22f31d1"
+  },
+  "riemann-sums": {
+   "page": "new/riemann-sums",
+   "text_sha256": "b7e1473890eb32b0fc3b7a3bae5a3763a5def2a70a6727ad0b3a2d01712e7c47",
+   "shape": "ee550b2fc6778d5bbe1caa02ed55fbfc95bd38b677259e06c758669d0ccbe105"
+  },
+  "derivative-graphs": {
+   "page": "new/derivative-graphs",
+   "text_sha256": "694d6f07347368309a6311d1f7414f47b27b37f096619298b5d09c9e3fdf9cdc",
+   "shape": "960f6a34bd2d7ee9bc6f919c75afe2bf6d179c30159a31a4456a4f8a09cf1852"
+  },
+  "limits-discontinuities": {
+   "page": "new/limits-discontinuities",
+   "text_sha256": "5bd2597756690b987508263231306f45d99941c87d87ec9ee6de53efdda45dbe",
+   "shape": "42bce9745ecc470db18deac4fa0f5d4e1b29ea99aa7e521ead8cab712d7e6635"
+  },
+  "sequences-series": {
+   "page": "new/sequences-series",
+   "text_sha256": "3fb30c14f5ea79d1c3d3164f7a09969e6d3a7de32f5bd1f8a325611c826d19e9",
+   "shape": "6695345e70701a7a672fa5d447af5c48ba8166d501610cce2c041acb2a1976ba"
+  },
+  "complex-plane": {
+   "page": "new/complex-plane",
+   "text_sha256": "0319241da1aa660ac85e190cfe0d1a6c4c11b658a0da2358801099ff6952f186",
+   "shape": "430f19ab5b1234791e00a2f2a36c7077db940478396e72764f86aac192e28f9f"
+  },
+  "polar-parametric": {
+   "page": "new/polar-parametric",
+   "text_sha256": "5b9622f426a3c74a0e00d71a74be07f88816b94896fc09adfd9dbc59084ca33f",
+   "shape": "0a2458110b3ca9d995e869149a3fd262bf78a7a70e2349b29e14120dfd1caabf"
+  },
+  "slope-fields": {
+   "page": "new/slope-fields",
+   "text_sha256": "f6bed700dfa65257ccadfed45b2695c18b16a8f93752dc02b244f946e8015535",
+   "shape": "3f87ef51a1bbc68175e13255e79897a948d89c9b6f3f16c3c51b1ab88b990f09"
+  },
+  "coordinate-grid": {
+   "page": "new/coordinate-grid-limits",
+   "text_sha256": "9ec6784e2120f6e9fd13419acc77ae75e629f5da4a26564a01851c867c6d44e7",
+   "shape": "b3be26456a43c01961391a70765d9c1f8f0dc0ffab1f0e4d57191a2499658956"
+  }
+ }
+}

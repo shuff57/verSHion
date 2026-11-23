@@ -2437,3 +2437,37 @@ fn a_group_called_errors_or_sd_is_still_a_group() {
     assert!(parse("Treatment, Height, \u{b1} SD\nNone, 12.4, 1.1").unwrap().has_err);
     assert!(parse("Treatment, Height, SEM\nNone, 12.4, 1.1").unwrap().has_err);
 }
+
+#[test]
+fn category_ticks_add_one_short_mark_per_category_on_either_orientation() {
+    // Holdout v3, MSU statistics: the printed bar graph marks each category under the axis.
+    for orient in ["Vertical", "Horizontal"] {
+        let lines = |ticks: &str| render(&with(&[("orient", orient), ("cat_ticks", ticks)])).matches("<line").count();
+        assert_eq!(lines("true") - lines("false"), 4, "{orient}: the default data has four categories");
+    }
+    assert_eq!(render(&defaults()), render(&with(&[("cat_ticks", "false")])), "off by default: old charts are unchanged");
+}
+
+#[test]
+fn line_bars_are_thin_and_the_value_axis_can_carry_an_arrowhead() {
+    // Holdout v5, AQA "Houses sold": a vertical line graph with an arrowed value axis.
+    let widths = |gap: &str| {
+        let svg = render(&with(&[("gap", gap), ("values", "false")]));
+        let xml = roxmltree::Document::parse(&svg).unwrap();
+        xml.descendants().filter(|n| n.has_tag_name("rect")).filter_map(|n| n.attribute("width")?.parse::<f64>().ok()).filter(|w| *w > 0.5 && *w < 400.0).fold(f64::INFINITY, f64::min)
+    };
+    assert!(widths("Lines") * 3.0 < widths("Wide"), "line bars are much thinner than wide bars");
+    let polys = |p: &[(&str, &str)]| render(&with(p)).matches("<polygon").count();
+    for orient in ["Vertical", "Horizontal"] {
+        assert_eq!(polys(&[("orient", orient), ("val_arrow", "true")]) - polys(&[("orient", orient), ("val_arrow", "false")]), 1, "{orient}: one arrowhead");
+    }
+    assert_eq!(render(&defaults()), render(&with(&[("val_arrow", "false")])), "off by default: old charts are unchanged");
+}
+
+#[test]
+fn category_names_can_be_turned_on_request() {
+    // Holdout v8, MATHCOUNTS "Quiz Scores": scores 0-21 printed turned under the bars.
+    let turned = |up: &str| render(&with(&[("cat_names_up", up)])).matches("rotate(-90)").count();
+    assert_eq!(turned("true") - turned("false"), 4, "the default data's four names turn");
+    assert_eq!(render(&defaults()), render(&with(&[("cat_names_up", "false")])), "off by default: old charts are unchanged");
+}

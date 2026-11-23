@@ -9,7 +9,7 @@ pub struct Usage<'a> {
     pub kind: &'a str, // "chat" | "import_page"
     pub in_tokens: f64,
     pub out_tokens: f64,
-    /// US dollars the call cost (OpenRouter's `usage.cost`, or a fallback turn's neurons at $0.000011).
+    /// US dollars the call cost, as the upstream bills it (OpenRouter `usage.cost`; CheaperInference `billing.billed_cost_usd`). The `neurons` column is the retired Workers AI unit and is always written as 0.
     pub cost_usd: f64,
     /// The credit session the call ran in, which links a cost to its service.
     pub session: Option<&'a str>,
@@ -190,6 +190,15 @@ impl<'a> AiStore<'a> {
         )?;
         tx.commit()?;
         Ok(inserted == 1)
+    }
+
+    /// A service creation retried with the same operation id reuses its existing session.
+    /// Only pricing/session metadata is read; prompts and model replies are never persisted.
+    pub fn operation_session(&self, id: &str, principal: &str) -> rusqlite::Result<Option<serde_json::Value>> {
+        self.conn.query_row(
+            "SELECT service,pages,credits,paid_credits,calls_allowed,expires_at FROM ai_sessions WHERE id=?1 AND principal=?2",
+            params![id,principal], |r| Ok(serde_json::json!({"service":r.get::<_,String>(0)?,"pages":r.get::<_,i64>(1)?,"credits":r.get::<_,i64>(2)?,"paid":r.get::<_,i64>(3)?,"calls":r.get::<_,i64>(4)?,"expires_at":r.get::<_,i64>(5)?}))
+        ).optional()
     }
 
     /// Takes one model call from the session's budget; false when it is not this principal's, expired or used up.

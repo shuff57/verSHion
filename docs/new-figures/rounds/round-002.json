@@ -1,0 +1,37 @@
+{
+ "round": 2,
+ "figure": "limits-discontinuities",
+ "capability": "cap-01",
+ "hypothesis": "New figure limits-discontinuities: all 34 checklist entries built and accepted on the sixth independent check",
+ "started_at": "2026-11-14T17:45:06",
+ "git": "514bc34",
+ "before": {
+  "figure": 0.0,
+  "pooled": 12.9
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "probe.json is older than 2 input(s) (e.g. ours.json); re-run probe.py"
+ ],
+ "closed": "2026-11-14T17:45:07",
+ "after": {
+  "figure": 100.0,
+  "pooled": 22.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"pieces\": \"y = -x - 1, x < -2\\ny = x^2/2 - 1, -2 <= x <= 2\\ny = 3, x > 2\", \"dots\": \"\", \"ask_at\": \"2\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion-parity2/.figures-parity/new-figures-renders/limits-discontinuities/4b8c11010c943fda.png"
+   }
+  ]
+ },
+ "checker": "accept on the sixth independent check (NAS, b845ce8): all 34 entries pass; 104 new ordinary functions on three windows, 13 epsilon-delta cases, 5 point graphs, 30 spellings: nothing false written as established; 7,972 renders under 0.19 s; known issues: 6 of 832 answers cannot determine, some spellings refused with a note, Large label placement",
+ "result": "miss",
+ "evidence": "limits suite 124 passed, 0 failed",
+ "next": "derivative-graphs, tangent-secant-lines, riemann-sums, sequences-series, complex-plane"
+}

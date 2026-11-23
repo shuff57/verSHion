@@ -250,37 +250,27 @@ fn start(jobs: Vec<Job>, cfg: AiCfg, ctx: &egui::Context) {
     });
     let ctx = ctx.clone();
     let prompt = prompt();
-    #[cfg(not(target_arch = "wasm32"))]
-    std::thread::spawn(move || {
-        let ids: Vec<_> = jobs.iter().map(|j| j.page_id.clone()).collect();
-        if let Err(e) = crate::ai::begin_service(&cfg, "handwriting", jobs.len()) {
-            let _ = tx.send(Msg::Refused(ids, e));
-            ctx.request_repaint();
-            return;
-        }
-        for j in jobs {
-            let r = crate::ai::transcribe_checked(&j.bytes, &j.mime, &cfg, &prompt).and_then(|raw| parse_reply(&raw));
-            let _ = tx.send(Msg::Read(j.page_id, r));
-            ctx.request_repaint();
-        }
-    });
-    #[cfg(target_arch = "wasm32")]
-    wasm_bindgen_futures::spawn_local(async move {
-        let ids: Vec<_> = jobs.iter().map(|j| j.page_id.clone()).collect();
-        if let Err(e) = crate::ai::begin_service_async(&cfg, "handwriting", jobs.len()).await {
-            let _ = tx.send(Msg::Refused(ids, e));
-            ctx.request_repaint();
-            return;
-        }
-        for j in jobs {
-            let r = match crate::ai::transcribe_checked_async(&j.bytes, &j.mime, &cfg, &prompt).await {
-                Ok(raw) => parse_reply(&raw),
-                Err(e) => Err(e),
+    let work = async move {
+        // The hosted service caps a handwriting session at 20 pages; class sets can
+        // contain 40. Both builds use the same batches and the same per-page price.
+        for start in (0..jobs.len()).step_by(20) {
+            let chunk=&jobs[start..(start+20).min(jobs.len())];
+            let started=match crate::ai::begin_service_async(&cfg,"handwriting",chunk.len()).await {
+                Ok(s)=>s,
+                Err(e)=> { let ids=jobs[start..].iter().map(|j|j.page_id.clone()).collect(); let _=tx.send(Msg::Refused(ids,e)); ctx.request_repaint(); return; }
             };
-            let _ = tx.send(Msg::Read(j.page_id, r));
-            ctx.request_repaint();
+            for j in chunk {
+                let r=match crate::ai::transcribe_checked_async(&j.bytes,&j.mime,&started.cfg,&prompt).await {
+                    Ok(raw)=>parse_reply(&raw), Err(e)=>Err(e),
+                };
+                let _=tx.send(Msg::Read(j.page_id.clone(),r)); ctx.request_repaint();
+            }
         }
-    });
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    std::thread::spawn(move || crate::ai::block_on(work));
+    #[cfg(target_arch = "wasm32")]
+    wasm_bindgen_futures::spawn_local(work);
 }
 
 fn plural(n: usize, w: &str) -> String {
@@ -783,7 +773,7 @@ mod tests {
             r#"{"text": "1. B\n2. x = 4", "uncertain": [{"word": "B", "guess": "8", "confidence": 0.3}]}"#.to_string(),
             r#"{"text": "", "uncertain": []}"#.to_string(),
         ]);
-        let cfg = AiCfg { provider: "ollama".into(), base, model: "test".into() };
+        let cfg = AiCfg { provider: "ollama".into(), base, model: "test".into(), ..AiCfg::default() };
         let mem = Mem::default();
         let s = staged(&["ana-1.png", "ana-2.png"]);
         let (subs, jobs) = build_submissions(&mem, "e1", &plan("Ana", false, &s), &s).unwrap();

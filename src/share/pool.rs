@@ -1704,7 +1704,36 @@ pub(super) fn media_sha(file: &str) -> Option<String> {
     (is_sha256(stem) && matches!(ext, "png" | "jpg" | "gif" | "webp")).then(|| stem.to_string())
 }
 
-/// The pictures of a payload (questions' `image.file`; the Worker reads nothing else), by question.
+/// The picture files a raw question names: its own `image.file` first, then every picture choice's
+/// (`kind.Mc.answers[i].image.file`, and those of a Multipart's Mc parts), in order, each once. A choice picture
+/// takes the same path through sharing as the question's own: uploaded, checked and served alike.
+pub fn picture_files(q: &Value) -> Vec<&str> {
+    let mut out: Vec<&str> = Vec::new();
+    for f in q.pointer("/image/file").and_then(Value::as_str).into_iter().chain(choice_picture_files(q)) {
+        if !out.contains(&f) {
+            out.push(f);
+        }
+    }
+    out
+}
+
+/// The answers of an Mc `kind` value (`{"Mc": {"answers": [...]}}`), else none.
+fn mc_answers(kind: Option<&Value>) -> &[Value] {
+    kind.and_then(|k| k.pointer("/Mc/answers")).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// The picture files of a raw question's choices only (see [`picture_files`]), in order, repeats kept.
+pub fn choice_picture_files(q: &Value) -> Vec<&str> {
+    let parts = q.pointer("/kind/Multipart/parts").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    mc_answers(q.get("kind"))
+        .iter()
+        .chain(parts.iter().flat_map(|p| mc_answers(p.get("kind"))))
+        .filter_map(|a| a.pointer("/image/file").and_then(Value::as_str))
+        .collect()
+}
+
+/// The pictures of a payload, by question: each question's own `image.file` and its picture choices' (the
+/// server checks and stores both alike).
 pub fn images_in_payload(payload: &[u8]) -> Result<Vec<ImageUse>, LocalProblem> {
     let v: Value = serde_json::from_slice(payload).map_err(|_| LocalProblem::PayloadNotJson)?;
     let questions: Vec<&Value> = match (v.pointer("/bank/questions").and_then(Value::as_array), v.get("question")) {
@@ -1714,7 +1743,7 @@ pub fn images_in_payload(payload: &[u8]) -> Result<Vec<ImageUse>, LocalProblem> 
     };
     let mut out = Vec::new();
     for (position, q) in questions.into_iter().enumerate() {
-        if let Some(file) = q.pointer("/image/file").and_then(Value::as_str) {
+        for file in picture_files(q) {
             let sha256 = media_sha(file).ok_or_else(|| LocalProblem::BadMediaName { file: file.to_string() })?;
             out.push(ImageUse { position, file: file.to_string(), sha256 });
         }
@@ -2689,6 +2718,8 @@ pub struct StudentChoice {
     pub locked: bool,
     /// `Some` only in the [`Served::Full`] form.
     pub correct: Option<bool>,
+    /// A picture choice: students see its picture (and `text`, which may be empty).
+    pub has_image: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2801,7 +2832,12 @@ fn answers_of(v: &Value, full: bool, warn: &mut dyn FnMut(&'static str)) -> Vec<
                     if !full && correct {
                         warn("correct choice");
                     }
-                    StudentChoice { text: str_of(x, "text").unwrap_or_default(), locked: x.get("locked").and_then(Value::as_bool).unwrap_or(false), correct: full.then_some(correct) }
+                    StudentChoice {
+                        text: str_of(x, "text").unwrap_or_default(),
+                        locked: x.get("locked").and_then(Value::as_bool).unwrap_or(false),
+                        correct: full.then_some(correct),
+                        has_image: x.get("image").is_some_and(|i| !i.is_null()),
+                    }
                 })
                 .collect()
         })

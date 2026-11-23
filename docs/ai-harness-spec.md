@@ -1,11 +1,68 @@
 # AI harness spec — doc → test bank, figures by spec
 
+## Shared desktop/web engine (2026-11-15)
+
+The current app uses one async conversion/fitting, handwriting and answer-checking workflow on both
+native and WASM. Native workers drive it with `pollster`; the browser awaits `fetch`. Shared wire types,
+output schemas and the bounded schema validator live in `server/ai-core`. Figure generation has the same
+async local tool loop plus blocking wrappers for existing headless tools.
+
+Each `begin_service[_async]` returns `Started`; **all later calls must use `started.cfg`**. It owns the
+operation's endpoint, credential source, session and cancellation state. There is no global service session.
+A Convert action opens one import session for its selected pages (up to 20 on the hosted service), reused
+by transcription, repairs and figure fitting. Independent answer checks and handwriting reads own separate
+sessions. Cancelling stops subsequent requests and discards late results; an HTTP request already accepted
+by an upstream may still finish and incur provider cost. Speculative duplicate model calls are disabled.
+
+`POST /ai/service` accepts an optional random 32-lowercase-hex `operation` id. The Rust server derives an
+account-scoped session id and reuses it on retries. Reusing it with a different service/page count or after
+expiry returns 409; it cannot charge again. The mapping uses existing session rows, so account erasure and
+90-day pruning need no new tables. Legacy requests and their response shapes remain supported.
+
+A client sending `protocol_version: 1` receives `protocol_version` and service `capabilities` containing
+`structured_outputs`, `tools`, and `idempotent_service`. An older Worker returns no capabilities, causing
+the client to use its existing JSON protocol. It remains deployable during the Rust-server cutover.
+
+Settings offer verSHion AI (account credits), own-key providers, and local Ollama. Existing provider/model
+settings are retained. Empty settings consistently resolve to local Ollama in UI and headless paths.
+`ai_output_mode` selects compatible JSON (default), `schema`, or a forced result `tool`; `ai_native_tools`
+enables native figure function calls. Browser keys remain in memory for the tab lifetime, and BYOK keys
+are never automatically forwarded to the hosted relay.
+
+Schema mode sends strict `response_format: json_schema` (or Ollama's native schema format), and result-tool
+mode forces `submit_result`. The app validates strict results before importing. OpenRouter requests require
+parameter support and retain the existing no-data-collection preference. JSON compatibility mode retains
+the established tolerant importers. Unsupported strict options fail instead of silently downgrading on a
+direct provider; older hosted deployments explicitly negotiate compatibility before the operation begins.
+
+The Rust relay enables the new formats only with `AI_STRUCTURED_OUTPUTS=1` / `AI_NATIVE_TOOLS=1`; both are
+off by default and must match the configured model's actual support. It forwards bounded schema options,
+allowlisted function definitions, matching tool results and opaque `reasoning_details` for tool turns.
+It still owns model selection, privacy, token limits, quotas and prices. Schema and tool turns cannot
+silently fall back to a different model. Tool-only assistant replies count as answered calls and record cost.
+Local figure tools validate arguments and run only registry lookups and rendering; they cannot run shell code.
+
+Roll out the backward-compatible Rust API first, then native/web clients. Exercise the selected model in
+staging before enabling either feature flag. Reset the flags and select compatible JSON to roll back without
+changing banks or credentials. Durable import jobs and retiring the Worker remain part of deployment cutover.
+
+The sections below describe the historical Worker harness and its original decisions.
+
 Status: first slice specified 2026-10-29, after the live probe (`docs/handoff-ai-worker-harness.md`).
 Owner decisions: account `bd92…9055` (Shuff57), storage **D1 + R2**, figures **`FigureSpec` only**.
 
 ---
 
-> **2026-10-30 update: OpenRouter first, Workers AI as the fallback.** Secret `OPENROUTER_API_KEY`, optional
+> **2026-11-16 note: which server this describes.** The block below is the **Cloudflare Worker** (`server/worker`).
+> The Rust API (`server/api`), which replaces it at cutover, has no Workers AI: its default upstream is
+> CheaperInference (`CHEAPERINFERENCE_API_KEY`, model `deepseek-v4.1-flash-1017`, reasoning off, set
+> `AI_UPSTREAM=openrouter` for OpenRouter), and its fallback is a second model on the same provider
+> (`*_FALLBACK_MODEL`; one try on the primary, then up to two on the fallback). `/ai/health` names the provider
+> actually serving. A key for the provider `AI_UPSTREAM` does not select is reported at startup, and the relay
+> answers 503 `ai_not_configured`. Before the shared engine described above, the relay forwarded only
+> `messages`, a clamped `max_tokens` and `temperature`; no tool or reasoning metadata crossed it.
+>
+> **2026-10-30 update: OpenRouter first, Workers AI as the fallback (Worker).** Secret `OPENROUTER_API_KEY`, optional
 > `OPENROUTER_MODEL` (default `google/gemma-4-26b-a4b-it`), reasoning off, `provider.data_collection: "deny"`
 > unless `OPENROUTER_PRIVACY=0`. A failed, empty or timed-out OpenRouter call goes to the `AI` binding
 > (`AI_MODEL`, `AI_THINKING` as before); with no binding it is tried once more, then 502. Each turn's cost is
@@ -302,6 +359,153 @@ against a live model yet. A real deployment (rather than the dev tunnel) is the 
   and migrations `0116`/`0117` are not applied to any remote database.
 
 ## 8. Acceptance
+
+### Worksheet figure failure reasons
+
+New worksheet inference runs and independent source audits target **98%**. Earlier
+frozen rounds keep their recorded 95% gates; missing or uncertain items remain in
+the denominator at either threshold.
+
+An import that keeps a source bitmap must explain why it did not attach an editable redraw.
+The import preview retains every conversion note in the source details; a transient toast
+is not the only place to read the reasons. A failed comparison shows the reviewer's actual
+problem list, rather than the maker's description of its drawing or compromise.
+
+`FigureImportTrace.failure` records a reason kind, detail, candidate generator ID, whether
+that ID is registered in Figures, and the reviewer's concrete problems. Source-reading or
+scope holds, generation/tool/service errors, unavailable comparisons, rejected comparisons,
+storage errors and unverified outputs are distinct outcomes. Printed item labels remain in
+the displayed notes; document page offsets must not renumber a failure.
+
+The harness reports `figure_failures` by source question number, including retained crops
+and errors from every recorded attempt. It can recover comparison reasons from older
+traces without new inference. These diagnostic fields do not change the acceptance gates.
+A declined request or a rejected render does **not** prove that Figures lacks a type or
+feature. Confirm a catalogue or parameter limitation against the registry/schema, and
+distinguish it from a supported option the model did not use. Independent source-fidelity
+failures of model-approved redraws remain in the separate council audit.
+
+The source-description reader reports format/schema/structural-contract errors separately
+from unresolved visual evidence, bad image input and failed requests. Text-length failures
+name the field, actual character count and bound without echoing the source text. Explanatory
+topology reasons allow up to 512 characters; required status and unknown-join checks remain.
+
+Source cropping follows dark ink connected to the proposed box perimeter, including
+single-pixel axis shafts and diagonal strokes, within the existing 2.5% page margin.
+It adds only a few clean paper pixels and does not jump a paper gap into nearby text.
+This is a crop repair, not independent certification that the proposed source scope is complete.
+
+Eligible questions without task mappings can receive one separate current-page source-only
+task read, including bare expressions and prose. It may add only literal printed directions
+and application-key mappings; existing mappings and question/answer/figure payloads stay
+protected. Explicit absent tasks can proceed to same-document continuation review, while
+uncertain or failed current-page readings block inheritance for their targeted items and
+produce a review warning. Exact qualifiers remain part of the task. This one request is
+separate from the existing bounded continuation and figure-observer calls.
+
+Source-scope evidence distinguishes a known own external question marker from diagram
+givens. A marker fragment alone is not clipped diagram ink; unknown ownership and actual
+clipped labels/arrows remain strict. A clipped-given proposal that repeats current bounds
+can reconsider them in the existing second proposal slot, shared with format recovery.
+Changed crops must still be shown again and confirmed. Negative model decisions are
+preserved, not filtered or automatically promoted.
+
+An unresolved source reading can use the existing second-call allowance with a fresh
+instruction that excludes the first reading's claims and inventory IDs. The full source
+stays first; optional upper/lower panels contain overlapping pixel-preserving corner
+views. Their rectangles, integer scales, order, hashes and bounded fallback are traced.
+No extra model call, fabricated ink or default topology is supplied, and genuine
+uncertainty still retains the source crop for review.
+
+Native grid/scatter previews can report their own emitted vector geometry to the maker:
+grid/axis extents and endpoint choices, or finite-axis clearances and authored marker groups.
+The report is bound to the preview image and is candidate-only feedback. It does not
+certify raster visibility, infer source data or enter the independent image judge's prompt.
+Source fidelity, the acceptance threshold and independent audit requirements are unchanged.
+
+Source observation v4 records nullable Cartesian plot assertions and an optional attention
+box explicitly (required nullable fields, no parser-inserted defaults). Node position prose
+allows 256 characters. A valid attention box can give the existing second read one bounded,
+integer-repeated focus image beside the unchanged full source; invalid/null attention retains
+the quadrant/full-only fallback. It never supplies a join decision or adds model calls.
+Plain finite axis ends, including a first-quadrant plot's shared origin corner, are
+recorded as lines. The ambiguous legacy source-end value "none" is not accepted by the
+new observation schema; old assertions using it are unsupported by the application
+comparison, never silently converted into a source fact.
+
+Native figure sessions receive native function-call instructions rather than conflicting
+JSON-command examples. A malformed native reply can receive at most two repair requests
+inside the existing turn limit; the reply and error stay in the trace. No content-only
+JSON is executed as a substitute for a native tool call, and transport/auth errors are
+not protocol repairs. A failed attempt's retained preview diagnostic without a final
+spec/PNG is reported as unavailable binding evidence, not as a proven hash mismatch.
+
+For native plot previews, applicable source assertions can be compared conservatively with
+the emitted candidate geometry. Known contradictions are shown to the maker and block a
+conflicting final, including a turn-limit fallback, before any image judge runs. The check is
+bound to the final PNG and normalized spec; all attempts retain it without fabricating a
+judge verdict. Source assertions remain unverified. Missing, unsupported, subpixel or
+raster-ambiguous evidence is reported explicitly and cannot certify a match. Independent
+source review and the unchanged 98% benchmark remain necessary.
+
+The coordinate-grid tool has independent axis extensions, periodic emphasized gridlines,
+and dot radius/outline controls. Defaults preserve previous drawings. These controls change
+only requested strokes/markers; they do not alter data, add lattice lines or solve a question.
+Unsafe extension canvases return a render error rather than a silently fitted drawing.
+
+For source copies, coordinate-grid's effective answer-toggle default is off when
+omitted, null or invalid. Its source-specific schema describes that default; an
+explicit boolean remains the caller's choice. Preview, final and fallback use the
+same normalized parameters. Other generation contexts and the Figures tab retain
+their existing defaults.
+
+Direction-field preview feedback can describe clipping of the candidate's actual
+emitted marks against its own viewport. Counts and bounded samples are advisory
+vector geometry, separate from stroke-envelope uncertainty and source fidelity.
+They do not enlarge a window or reject a source by themselves. Maker and judge
+instructions preserve whole supplied marks at all four borders; partial field
+segments are not treated as cosmetic axis-tail styling.
+
+An explicit direction-field stroke clipping margin can retain complete outer marks
+without changing the axes or sampling rows. Its default is zero and preserves old
+drawings. The maker must choose it from visible source evidence; it is never fitted
+automatically. Widening an axis range still changes the implicit sampling lattice.
+Clipping feedback also gives a conservative total/additional SVG-pixel margin for
+the candidate's own emitted centerlines and round-cap envelopes. This is actionable
+candidate geometry, not a source measurement or automatic parameter correction.
+
+Scope review can append a separate application coordinate guide with normalized
+page rulers. The clean original and crop sheet remain unchanged; the guide adds
+no suggested bounds or source facts and is never passed to a figure maker,
+observer or judge. It does not add review calls or waive negative confirmations.
+The trace distinguishes this guide's page rectangle from nominal crop bounds and
+records derivation limits rather than inventing effective extraction rectangles.
+
+Polar-grid accepts explicit cubic source paths as well as sampled polylines.
+Controls and endpoints stay authored in graph units; no curve is inferred,
+automatically fitted or closed. Empty cubic paths preserve existing drawings.
+Pure polar grid guides are excluded from structural-solid inventories; genuinely
+unreadable supplied geometry and non-guide rays still require source review.
+
+Geometry feedback inventories authored stroke patterns and conditional endpoint
+proximities. A thin gray solid line does not stand in for a dashed source edge, and
+a branch near a side is not automatically joined to it. These reports do not snap
+nodes, infer hidden edges or certify a source match. Shared source junctions must
+be represented with shared nodes or explicit line ports.
+
+Native render/final calls require an object-valued `params`, with a precise type
+error for stringified outer objects. Nested drawing objects avoid repeated JSON
+escaping. Invalid calls remain unexecuted and retain the same bounded repairs.
+Failed imports retain attempt errors alongside the selected comparison rejection,
+so later provider cut-offs or protocol errors do not disappear from the reason.
+
+Figure comparison keeps the complete candidate and source as images 1 and 2. When bounded
+detail images can be made, images 3 and 4 show only integer-repeated original pixels from
+each image's left and bottom edges. The trace records original dimensions, source/output
+rectangles, scale and hashes. Optional panels fall back to the full pair for invalid,
+unsupported or oversized input; no observer text is given to the reviewer. This adds image
+inputs, not another review request. Strict source givens remain the gate; small font,
+arrowhead and unlabelled axis-tail styling alone does not change a numeric range.
 
 1. `POST /ai/chat/completions` with the figure agent's system prompt returns one JSON object per
    turn, 10/10 runs (the probe's `response_format` reliability, re-checked in CI).

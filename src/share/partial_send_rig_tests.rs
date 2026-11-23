@@ -87,7 +87,7 @@ fn question(id: &str, stem: &str, right: &str, wrong: &str, at: i64) -> Question
     Question {
         id: id.to_string(),
         stem: stem.to_string(),
-        kind: Kind::Mc { answers: vec![Answer { text: right.to_string(), correct: true, locked: false }, Answer { text: wrong.to_string(), correct: false, locked: false }] },
+        kind: Kind::Mc { answers: vec![Answer { text: right.to_string(), correct: true, locked: false, image: None, figure: None }, Answer { text: wrong.to_string(), correct: false, locked: false, image: None, figure: None }] },
         points: Some(1.0),
         difficulty: None,
         topics: Vec::new(),

@@ -1,0 +1,22 @@
+{
+  "par-a": [
+    {
+      "figure": 0,
+      "parameter": "equations",
+      "from": "",
+      "to": "y = 3x + 3; y = 3x - 3",
+      "reason": "Printed graph contains two parallel lines; local pixel line fit gives slope approximately 3 and intercepts +3/-3. They are question givens."
+    }
+  ],
+  "e2-rearranging": [
+    {"path":["blocks",7,"tabs",3,"pos"],"from":438.0,"to":488.0,"reason":"The fourth answer-line tab stop fell behind its text and rendered no blank for the y-intercept."}
+  ],
+  "par-b": [
+    {"path":["blocks",1,"rows",1,"height"],"from":166.93036,"to":176.0,"reason":"Reserve space for the second graph row's headings."},
+    {"path":["blocks",1,"rows",1,"cells",0,"blocks",0,"line"],"from":7.2,"to":14.0,"reason":"An exact 7.2 pt line clipped an 11 pt heading against the row border."},
+    {"path":["blocks",1,"rows",1,"cells",0,"blocks",0,"before"],"from":0.0,"to":4.0,"reason":"Clear the row divider."},
+    {"path":["blocks",1,"rows",1,"cells",0,"blocks",0,"after"],"from":0.0,"to":4.0,"reason":"Separate the heading and graph."},
+    {"path":["blocks",1,"rows",1,"cells",1,"blocks",0,"before"],"from":0.0,"to":4.0,"reason":"Clear the row divider."},
+    {"path":["blocks",1,"rows",1,"cells",1,"blocks",0,"after"],"from":6.3213677,"to":4.0,"reason":"Keep the heading and graph within the row."}
+  ]
+}

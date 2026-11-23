@@ -115,11 +115,6 @@ pub fn precheck(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, read
     Ok(Pre::Go(PreGo { sm, request_sha, merged_from }))
 }
 
-fn media_sha(v: &Value) -> Option<String> {
-    let f = v.get("image")?.get("file")?.as_str()?;
-    let (sha, ext) = f.strip_prefix("media/")?.split_once('.')?;
-    (super::sqlfrag::is_sha(sha) && matches!(ext, "png" | "jpg" | "gif" | "webp")).then(|| sha.to_string())
-}
 fn to_json(v: &Value) -> Json {
     Json::parse(v.to_string().as_bytes()).unwrap_or(Json::Null)
 }
@@ -238,7 +233,8 @@ pub fn send_once(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, pre
     }
 
     // Images: verified, and the sender's (pending, in one of their publishes) or already in this bank's kept versions.
-    let img_at: Vec<Option<String>> = qs_ref.iter().map(media_sha).collect();
+    // (A question's pictures: its image and its picture choices'.)
+    let img_at: Vec<Vec<String>> = qs_ref.iter().map(super::pictures::shas).collect();
     let shas: Vec<String> = dedup(img_at.iter().flatten().cloned());
     let mut blob_info: HashMap<String, BlobInfo> = HashMap::new();
     if !shas.is_empty() {
@@ -258,7 +254,7 @@ pub fn send_once(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, pre
             blob_info.insert(k, v);
         }
         drop(st);
-        let missing: Vec<usize> = img_at.iter().enumerate().filter(|(_, s)| s.as_ref().is_some_and(|s| !blob_info.contains_key(s))).map(|(i, _)| i).take(100).collect();
+        let missing: Vec<usize> = img_at.iter().enumerate().filter(|(_, s)| s.iter().any(|s| !blob_info.contains_key(s))).map(|(i, _)| i).take(100).collect();
         if !missing.is_empty() {
             return Err(PoolError::new(422, "blob_missing").with("positions", json!(missing)).into());
         }
@@ -278,7 +274,7 @@ pub fn send_once(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, pre
         for s in &shas {
             if !blocked.contains(s) && blob_info[s].privacy_purged_at.is_none() && env.store.len(&format!("blobs/{s}")).ok().flatten().is_none() {
                 x.conn.execute("UPDATE blobs SET missing_at = COALESCE(missing_at, ?2) WHERE sha256 = ?1", params![s, now])?;
-                let pos: Vec<usize> = img_at.iter().enumerate().filter(|(_, v)| v.as_ref() == Some(s)).map(|(i, _)| i).take(100).collect();
+                let pos: Vec<usize> = img_at.iter().enumerate().filter(|(_, v)| v.contains(s)).map(|(i, _)| i).take(100).collect();
                 return Err(PoolError::new(422, "blob_missing").with("reason", json!("reupload")).with("positions", json!(pos)).into());
             }
         }
@@ -362,16 +358,16 @@ pub fn send_once(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, pre
         rb.insert("modified".into(), json!(day));
         rb.remove("origin");
         rb.remove("published");
-        for (i, q) in rb.get_mut("questions").and_then(Value::as_array_mut).unwrap().iter_mut().enumerate() {
-            let q = q.as_object_mut().unwrap();
+        for (i, qv) in rb.get_mut("questions").and_then(Value::as_array_mut).unwrap().iter_mut().enumerate() {
+            let q = qv.as_object_mut().unwrap();
             q.insert("id".into(), json!(qids[i]));
             q.insert("created".into(), json!(day));
             q.insert("modified".into(), json!(day));
             q.remove("origin");
             q.remove("published");
-            if let (Some(s), true) = (&img_at[i], q.get("image").is_some_and(|v| !v.is_null() && v.as_bool() != Some(false))) {
-                let b = &blob_info[s];
-                q.insert("image".into(), json!({ "file": format!("media/{s}.{}", ext_of(&b.content_type)), "width": b.width, "height": b.height }));
+            // Every picture of the question (its image and its picture choices') from the verified blob.
+            if !img_at[i].is_empty() {
+                super::pictures::rewrite(qv, &|s| blob_info.get(s).map(|b| (ext_of(&b.content_type), b.width, b.height)));
             }
         }
     }
@@ -414,7 +410,7 @@ pub fn send_once(env: &SendEnv, me: &str, cid: &str, path_bid: Option<&str>, pre
         return Err(invalid_payload("invalid", "").into());
     }
     let contents = env.core.content_hashes(&full_qs).map_err(|_| server_error())?;
-    let has_images = full_qs.iter().any(|q| q.get("image").is_some_and(|i| !i.is_null())) as i64;
+    let has_images = full_qs.iter().any(|q| q.get("image").is_some_and(|i| !i.is_null()) || !super::pictures::shas(q).is_empty()) as i64;
     // The student-data check on the validated form, and on the stripped form a bank that hides its keys serves its viewers.
     let mut forms = vec![ScanForm { qs: full_qs.iter().map(to_json).collect(), mh: prep.match_hashes.clone(), img_at: img_at.clone() }];
     forms.extend(viewer_form);

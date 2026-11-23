@@ -77,6 +77,11 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "volume-reading" => VOLUME_READING,
         // math
         "coordinate-grid" => COORDINATE_GRID,
+        "riemann-sums" => RIEMANN_SUMS,
+        "derivative-graphs" => DERIVATIVE_GRAPHS,
+        "geometry-diagram" => GEOMETRY_DIAGRAM,
+        "polar-grid" => POLAR_GRID,
+        "direction-field" => DIRECTION_FIELD,
         "composite-shape" => COMPOSITE_SHAPE,
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
@@ -85,10 +90,12 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
+        "complex-plane" => COMPLEX_PLANE,
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
         "slope-triangle" => SLOPE_TRIANGLE,
+        "sequences-series" => SEQUENCES_SERIES,
         "protractor" => PROTRACTOR,
         "base-ten-blocks" => BASE_TEN_BLOCKS,
         "solid-net" => SOLID_NET,
@@ -207,9 +214,60 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "scatterplot" => SCATTERPLOT,
         "mapping-diagram" => MAPPING_DIAGRAM,
         "ruler-reading" => RULER_READING,
+        "conic-sections" => CONIC_SECTIONS,
+        "limits-discontinuities" => LIMITS_DISCONTINUITIES,
+        "tangent-secant-lines" => TANGENT_SECANT_LINES,
+        "polar-parametric" => POLAR_PARAMETRIC,
+        "slope-fields" => SLOPE_FIELDS,
         _ => &[],
     }
 }
+
+const CONIC_SECTIONS: &[Faq] = &[
+    Faq {
+        q: "Can I type the equation instead of the values?",
+        a: "Yes. Type it in standard form, such as (x - 2)^2/9 + (y + 1)^2/4 = 1, or in general form, such as 4x^2 + 9y^2 - 16x + 18y - 11 = 0. The figure completes the square, names the conic, draws it with its parts and fills in the value boxes. Changing a value or dragging the figure rewrites the typed equation in the form it was typed in.",
+    },
+    Faq {
+        q: "How are the foci and vertices worked out?",
+        a: "From c: for an ellipse c^2 = a^2 - b^2, for a hyperbola c^2 = a^2 + b^2, and a parabola's focus is p from its vertex. Fractions and square roots stay exact, so a = 3, b = 2 centred at (2, -1) gives foci (2 - √5, -1) and (2 + √5, -1). Choose Decimals to round them instead. List a, b, c shows the working beside the figure.",
+    },
+    Faq {
+        q: "Why does it refuse my equation?",
+        a: "Some equations are not a conic this figure can draw: an xy term turns the conic off the grid's axes, a negative right-hand side after completing the square has no points, a zero one is a single point or two crossing lines, and a missing square is a line. The panel says which, and nothing is drawn until it is fixed. An ellipse with a = b is drawn as the circle it is.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers, or export Student + key. The student copy leaves the parts unlabelled and puts a blank line where the equation was; it can also leave the curve off so students sketch it from the marked points. The key line under the figure gives the equation, centre, vertices, foci and eccentricity.",
+    },
+    Faq {
+        q: "What can I drag on the figure?",
+        a: "The centre (or a parabola's vertex) moves the conic, a vertex changes a, a co-vertex changes b, a parabola's focus changes p, and P slides along the curve with its focal radii and their lengths following it. Points snap to the grid. Any label can be dragged to a clearer spot.",
+    },
+];
+
+const LIMITS_DISCONTINUITIES: &[Faq] = &[
+    Faq {
+        q: "How do I type a piecewise function?",
+        a: "One piece a line: the formula, a comma, then its domain, such as y = x + 2, x < 1 and y = 4 - x, x >= 1. A < or > end gets an open circle and a <= or >= end a closed one; x \u{2260} 2 (or x != 2) leaves a hole. Each piece is drawn by the coordinate grid's own plotter, so poles and holes in a formula such as (x^2 - 4)/(x - 2) are found too.",
+    },
+    Faq {
+        q: "Can I draw a graph from points instead of a formula?",
+        a: "Yes. Type the points on one line, such as (-5, 1) (-3, 2) (0, 1): they are joined by a smooth curve that never bulges past them, turning flat at a point where it changes direction. Write open or closed before the first point or after the last for a circle there. A point on its own goes in Single points.",
+    },
+    Faq {
+        q: "How are the limits in the key worked out?",
+        a: "From the pieces: a one-sided limit follows the piece on that side in toward a (its value there, or where its values settle, or \u{221e} or \u{2212}\u{221e} where they grow without bound). The limit exists when the two sides agree; f(a) is the closed circle or single point at a. Values stay exact: fractions, roots and multiples of \u{3c0}.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers, or export Student + key. Every answer becomes a line to write on, and the kind labels and the asymptotes' equations are left off unless you choose to keep them.",
+    },
+    Faq {
+        q: "What can I do on the figure itself?",
+        a: "Click an endpoint circle to switch it between open and closed (the < or <= in its piece is changed for you), drag a single point up or down to change f(a), and drag a marker along the x-axis to move x = a.",
+    },
+];
 
 // ----- physics -----
 
@@ -1301,6 +1359,79 @@ const VOLUME_READING: &[Faq] = &[
 
 // ----- math -----
 
+const TANGENT_SECANT_LINES: &[Faq] = &[
+    Faq {
+        q: "What is the difference between a secant line and a tangent line?",
+        a: "A secant line cuts the curve at two points, P at x = a and Q at x = a + h; its slope [f(a + h) − f(a)]/h is the average rate of change between them. The tangent line touches the curve at P alone and has the slope of the curve there, f′(a), the instantaneous rate of change.",
+    },
+    Faq {
+        q: "How do I show the secants approaching the tangent?",
+        a: "Type several values under More secants, for h =, such as 1, 0.5, 0.1, and tick Table of secant slopes. Each secant is drawn in its own colour and the table lists its slope, ending with h → 0, the tangent's slope. Dragging Q towards P on the figure does the same live.",
+    },
+    Faq {
+        q: "Why is a slope written as a decimal with ≈?",
+        a: "Slopes are written exactly (fractions, roots, π and e) where the numbers allow, as with x² or sin x at π/3. Where the figure cannot work a value out exactly, as with logarithms (the secant of ln x from 1 to 2 has slope ln 2, which it does not write in that form) or cube roots, the value is rounded to the decimal places chosen and written with ≈. Choose Numbers: Decimals to round everything.",
+    },
+    Faq {
+        q: "Why is there no tangent at some points?",
+        a: "A tangent needs the curve to be smooth there. At a corner such as |x| at 0 the slopes from the left and right differ, at a cusp they grow without bound, and at the end of a domain such as √x at 0 there is only one side; the panel says which. Where the slope grows without bound on both sides alike, as for the cube root at 0, the tangent is the vertical line x = a.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. Blank lines for the slopes and equations keeps the lines and leaves the slopes, equations and the slope triangle's rise for students; Curve and P only leaves just the curve and the point, for students to draw the tangent themselves. Student + key exports both copies, and Answer key line under the graph sums up the answers on the key.",
+    },
+];
+
+const RIEMANN_SUMS: &[Faq] = &[
+    Faq {
+        q: "Which sums can the figure draw?",
+        a: "Left, right and midpoint sums use the value of f at the left end, right end or middle of each strip; the trapezoid sum joins the values at the two ends; the upper and lower sums make each strip as tall as the greatest or least value of f anywhere on the strip, which can be inside the strip rather than at an end (for 3x − x² on [0, 3] with 3 strips the middle strip's greatest value is 9/4, at x = 3/2). A table of x and f(x) values makes strips of different widths, as on AP questions.",
+    },
+    Faq {
+        q: "How is the exact value worked out?",
+        a: "A polynomial with whole-number or fractional coefficients is integrated exactly, with bounds such as 1/2 or π/2, so ∫ from 0 to 2 of x² + 1 is 14/3. Any other function is integrated numerically to about 15 digits, and the value is written exactly only when it is a fraction, a multiple of π, a value with a square root, a logarithm or e, such as 1 − √2/2, 2 ln 2 or e − 1; otherwise it is rounded and written with ≈.",
+    },
+    Faq {
+        q: "What does signed area mean?",
+        a: "The integral counts area below the x-axis as negative. With Signed area on, the part below the axis is shaded in a second colour (or hatched the other way) and the exact value is written as the area above minus the area below, so ∫ from 0 to 2π of sin x is 2 − 2 = 0.",
+    },
+    Faq {
+        q: "How do I slice the area between two curves horizontally?",
+        a: "Choose Between f(x) and g(x), then Horizontal strips. Each strip runs across the region at its height, as wide as the region is there, so the sum approximates the integral in y of the right curve minus the left one, written ∫ (x_R − x_L) dy. Choose Where f and g cross to use the crossings as the bounds.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its key?",
+        a: "Switch on the lines you want written (Δx, the sum, the integral, its exact value, the error), then turn off Show answers: each value becomes a blank line. The student copy can instead leave the strips off for students to draw, or put a blank on each strip for its height. Turn on the answer key line to give the sum, the exact integral and the error on the key; Student + key exports both.",
+    },
+];
+
+const DERIVATIVE_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "How do I read f\u{2032} from the graph of f?",
+        a: "Where f rises, f\u{2032} is above the x-axis; where f falls, it is below. A peak or valley of f (a local maximum or minimum) is a zero of f\u{2032}, which the dashed guides join. Drag the tracer: its tangent on f has the slope the dot on f\u{2032} shows.",
+    },
+    Faq {
+        q: "What is a critical point?",
+        a: "A point inside the domain of f where f\u{2032} is 0 or does not exist (a corner or a cusp). It is a local maximum where f\u{2032} changes from + to \u{2212}, a local minimum where it changes from \u{2212} to +, and neither where f\u{2032} keeps its sign (as x\u{b3} at 0). The sign chart shows which.",
+    },
+    Faq {
+        q: "Where are the inflection points?",
+        a: "Where f changes concavity: f\u{2033} changes sign there, and f\u{2032} has a local maximum or minimum. Mark the inflection points to see all three lined up, with Draw f\u{2033} on.",
+    },
+    Faq {
+        q: "How do I make an AP \u{201c}graph of f\u{2032}\u{201d} question?",
+        a: "Choose Start from f\u{2032}(x) and type its pieces with their domains, such as -x - 2, -4 <= x <= -2; -sqrt(4 - x^2), -2 < x <= 2; x - 2, x > 2. Give a point f passes through: the key draws f through it, worked out from the areas under f\u{2032}; the student copy leaves f's axes blank with that point.",
+    },
+    Faq {
+        q: "How do I type a piecewise function?",
+        a: "One piece for each part, with its domain after a comma, the pieces split by semicolons: x^2, x < 1; 2 - x, x >= 1. Where the pieces meet at a corner, f\u{2032} has no value: it is drawn with open circles there and counted as a critical point.",
+    },
+    Faq {
+        q: "What do the student copies leave out?",
+        a: "Turn Show answers off (or use Student + key). Graphs, no marks keeps the graphs and leaves off every mark; Sketch f\u{2032} from f leaves blank axes under f; Sketch f from f\u{2032} leaves blank axes for f. Sign charts are left blank for students to fill in. The key can list every answer under the graphs.",
+    },
+];
+
 const COORDINATE_GRID: &[Faq] = &[
     Faq {
         q: "How do I get an empty coordinate plane?",
@@ -1751,6 +1882,75 @@ const RULER_READING: &[Faq] = &[
     Faq {
         q: "How should fractional inch readings be written?",
         a: "In simplest form: 2/4 in is 1/2 in and 6/8 in is 3/4 in. Finer rulers go down to eighths or sixteenths of an inch.",
+    },
+];
+
+const GEOMETRY_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What do the tick marks on two sides mean?",
+        a: "Sides with the same number of tick marks are congruent. One tick on two sides means those two are equal; a side with two ticks matches only other two-tick sides.",
+    },
+    Faq {
+        q: "What do the arcs inside an angle mean?",
+        a: "Angles with the same number of arcs are congruent. A small square in the corner instead of an arc marks a right angle, 90 degrees.",
+    },
+    Faq {
+        q: "Why are some edges of a solid dashed?",
+        a: "Dashed edges are hidden: they are on the back of the solid and could not be seen from the front. They still count when you work out the number of edges or a length.",
+    },
+    Faq {
+        q: "What does an arrowhead at the end of a line mean?",
+        a: "The line keeps going in that direction. A line with arrows at both ends is a full line; a ray has one endpoint and one arrow.",
+    },
+    Faq {
+        q: "Is the diagram drawn to scale?",
+        a: "Not unless the question says so. Use the labelled measures and marks, not a ruler on the picture.",
+    },
+];
+
+const POLAR_GRID: &[Faq] = &[
+    Faq {
+        q: "How do you read a point on a polar grid?",
+        a: "A point (r, theta) is r units out from the centre along the ray at angle theta, measured counterclockwise from the ray marked 0.",
+    },
+    Faq {
+        q: "What does a negative r mean?",
+        a: "Go r units in the opposite direction: (-2, pi/4) is the same point as (2, 5pi/4).",
+    },
+    Faq {
+        q: "How many petals does a rose curve have?",
+        a: "For r = a cos(n theta) or r = a sin(n theta), there are n petals when n is odd and 2n petals when n is even.",
+    },
+    Faq {
+        q: "How do you tell a limacon with an inner loop from a cardioid?",
+        a: "For r = a + b cos theta: when |a| < |b| there is an inner loop, when |a| = |b| it is a cardioid, and when |a| > |b| it is dimpled or convex.",
+    },
+    Faq {
+        q: "How do you check a polar graph for symmetry?",
+        a: "Replacing theta with -theta tests the polar axis, replacing theta with pi - theta tests the line theta = pi/2, and replacing r with -r tests the pole.",
+    },
+];
+
+const DIRECTION_FIELD: &[Faq] = &[
+    Faq {
+        q: "What does each small segment in a direction field show?",
+        a: "Its slope is the value of dy/dx at that point. A solution curve passing through the point has that slope there.",
+    },
+    Faq {
+        q: "How do you sketch a solution curve on a direction field?",
+        a: "Start at the initial point and follow the segments, keeping the curve parallel to the nearby slopes without crossing them.",
+    },
+    Faq {
+        q: "Why are all the segments in a column the same when dy/dx depends only on x?",
+        a: "Then the slope is the same at every height for a given x, so solution curves are vertical shifts of one another.",
+    },
+    Faq {
+        q: "What do horizontal segments mean?",
+        a: "The slope is zero there. Along a whole row of horizontal segments, y is constant, which is an equilibrium solution.",
+    },
+    Faq {
+        q: "Does a direction field give the exact solution?",
+        a: "No. It shows the shape of the solutions; the particular solution still comes from solving the equation with the initial condition.",
     },
 ];
 
@@ -4618,5 +4818,51 @@ const OSMOSIS: &[Faq] = &[
     Faq {
         q: "How are the particles and the water level drawn?",
         a: "Each solute is drawn as particles in proportion to its concentration, as crowded as the number says; the key states how much one particle stands for (0.25 %, 0.05 M or 50 mM). Water appears as small discs filling the room the solutes leave. When water moves, the solute particles stay, so a cell that loses water has its solute more crowded. In the beaker and U-tube the level rises on the more concentrated side by an amount that grows with the difference. Shuffle particles picks a new layout without changing the science.",
+    },
+];
+
+const SEQUENCES_SERIES: &[Faq] = &[
+    Faq {q:"Can I drag the graph?",a:"In arithmetic and geometric mode, drag the first term for its value, the second for the difference or ratio, and the last horizontally for the term count."},
+    Faq {q:"How do I enter a recurrence?",a:"Use a_(n-1) for the previous term. A first-order recurrence uses only First term. If the formula also uses a_(n-2), enter Second initial term. The forms a_{n-1}, a(n-1), and Unicode subscripts are also accepted. Indices may begin at zero or one."},
+    Faq {q:"Which limits can the key establish?",a:"Arithmetic and geometric limits, rational functions of n, supported standard limits, and first-order linear recurrence fixed points are derived from their expressions. Other cases say cannot determine; plotted terms alone are never used to guess a limit."},
+    Faq {q:"How do student tasks work?",a:"Choose Find formula, Missing terms, or Continue, then turn Show answers off. Requested sums are removed from partial-sum points, labels and lists. Missing terms are marked asked on the key."},
+    Faq {q:"Can I sum more terms than I draw?",a:"Turn on Sum first N terms and set N up to 1000. Write sigma notation shows the corresponding bounds and expression. Long exact results are marked approximate and a geometric sum keeps a compact exact form; student copies leave the requested answer blank."},
+];
+
+const COMPLEX_PLANE: &[Faq] = &[
+ Faq {q:"How do I enter complex numbers?",a:"Type the real and imaginary coefficients separately, using fractions or sqrt where needed. More numbers accepts one name, real, imaginary row per line. Polar input accepts a modulus and an angle, in the selected unit."},
+ Faq {q:"What does the construction show?",a:"Choose conjugate, sum, difference, product, quotient, roots or powers. The sum uses a parallelogram. Products rotate by the second argument and stretch by its modulus. Roots lie on a circle; Join roots adds their regular polygon."},
+ Faq {q:"How do I make a student copy?",a:"Select Coordinates, Modulus and argument, or Construction, then turn Show answers off. Student + key exports the matching pair. Print gives neutral greys."},
+ Faq {q:"Why are some values approximate?",a:"Exact rational results and directly derived special arguments are written with equals. Other calculated values use the approximation sign. The principal argument is in (−π, π]; zero has no argument. Notes explain invalid values and items outside the axis window."},
+];
+
+const POLAR_PARAMETRIC: &[Faq] = &[
+    Faq { q: "How do I type a curve?", a: "One curve a line: r = 3sin(2theta) for a polar curve (type theta or \u{3b8}), or x = 3cos(t), y = 2sin(t) for a parametric one. A range after a comma, such as r = sin(theta/2), 0 <= theta <= 4pi, overrides the figure's \u{3b8} or t range. Up to four curves, each solid, dashed or dotted." },
+    Faq { q: "How are negative r and large angles drawn?", a: "A point (r, \u{3b8}) is drawn at x = r cos \u{3b8}, y = r sin \u{3b8}, so a negative r lands on the opposite ray and \u{3b8} beyond 2\u{3c0} turns round again. Where r is undefined the curve stops at the edge of its domain, and where r grows without bound it is broken, never joined across." },
+    Faq { q: "How is the shaded area worked out?", a: "As \u{bd}\u{222b}r\u{b2} d\u{3b8} between the two angles (inside one curve and outside another: \u{bd}\u{222b}(R\u{b2} \u{2212} r\u{b2}) d\u{3b8} where the first is outside the second). It is written exactly, such as 9\u{3c0}/8, when it is worked out exactly from the typed curve and angles, otherwise to the decimal places chosen with \u{2248}. A region swept twice is refused with a note." },
+    Faq { q: "How is the slope of the tangent found?", a: "For r = f(\u{3b8}), dy/dx = (r\u{2032} sin \u{3b8} + r cos \u{3b8})/(r\u{2032} cos \u{3b8} \u{2212} r sin \u{3b8}); for a parametric curve, (dy/dt)/(dx/dt). When dx/d\u{3b8} is 0 and dy/d\u{3b8} is not, the tangent is vertical and dy/dx does not exist; when both are 0 the formula gives 0/0 and a note says so." },
+    Faq { q: "How do I make a student copy?", a: "Turn off Show answers and choose the copy: points only on a blank grid to sketch the curve, blank lines for the equations, or the points' coordinates blank. The area, slope and r become blank lines; Student + key exports both, and the answer key line sums up the equations, points and area." },
+];
+
+const SLOPE_FIELDS: &[Faq] = &[
+    Faq {
+        q: "What does the slope field show?",
+        a: "At each grid point it draws a short segment with the slope dy/dx = f(x, y) there, all of the same length. A solution curve follows the segments: through each starting point it is worked out accurately (an adaptive Runge\u{2013}Kutta method) and drawn both ways, or forward only. Where dy/dx is undefined at a grid point, as for 1/(x \u{2212} y) on the line y = x or ln(y) for y \u{2264} 0, no segment is drawn and the editor says where.",
+    },
+    Faq {
+        q: "Why does a solution curve stop before the edge?",
+        a: "A curve is never drawn through a point where dy/dx is undefined or across a blow-up. It stops where the solution reaches such a point (y\u{2032} = y/x at x = 0), where its slope grows without bound (the circles of y\u{2032} = \u{2212}x/y at y = 0), or where it leaves the window for good (y\u{2032} = y\u{b2} from (0, 1) before x = 1). The editor says where and why.",
+    },
+    Faq {
+        q: "How does Euler's method work here?",
+        a: "Tick Euler's method: from the first starting point it takes n steps of size h, each along the slope at the start of the step, y\u{2099}\u{208a}\u{2081} = y\u{2099} + h\u{b7}f(x\u{2099}, y\u{2099}), drawn as joined segments with a table of x and y. The values are exact (fractions, or decimals where a decimal was typed) while they are exact rationals, otherwise rounded with \u{2248}. Compare with the solution draws the solution curve and adds its values at each x to the table.",
+    },
+    Faq {
+        q: "How are the equilibrium solutions found?",
+        a: "An equilibrium solution is a horizontal line y = c on which dy/dx = 0 for every x. The figure finds the roots of f along a line across the window and keeps those where f is 0 at every x tried; a value is written exactly only when exact arithmetic shows f(x, c) = 0. The list is said to be every one in the window only when f is a polynomial in y whose roots can be counted (Sturm's theorem); otherwise it says there may be others.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers and choose the copy: the field and the starting points to sketch the solutions on; dots at the grid points for students to draw the segments (the AP \u{2018}sketch at the nine points\u{2019}); a blank line for the equation; or four equations A to D to match the field to, with the right one boxed on the key. Student + key exports both copies; Answer key line under the graph sums up Euler's values, the solution and the equilibria.",
     },
 ];

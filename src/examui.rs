@@ -4512,6 +4512,59 @@ fn styled_choice(style: model::PaperStyle, ci: usize, text: &str) -> String {
     style.choice_label(&format!("{}. {}", letter(ci), text))
 }
 
+/// Tallest a choice's picture prints (1.5 inches, half a question picture's 3), so four picture
+/// choices fit on a page with their question.
+pub(crate) const CHOICE_PICTURE_MAX_H_PT: f64 = 108.0;
+
+/// One answer choice on the paper. A text choice prints as before ([`popt`] of its label); a
+/// picture choice prints its letter with the picture beside it, under the choice's text when it
+/// has some, so a choice that is only a picture still has its letter.
+#[allow(clippy::too_many_arguments)]
+fn paper_choice(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, style: model::PaperStyle, ci: usize, a: &model::Answer, bp: f32) {
+    let Some(img) = &a.image else {
+        popt(ui, styled_choice(style, ci, &a.text), bp);
+        return;
+    };
+    // the label alone ("A.", "a.", "A"), in a column as wide as the widest letter's ("W.") plus
+    // the gap a text choice has after it, so the pictures of A-D line up
+    let label = styled_choice(style, ci, "").trim_end().to_string();
+    let font = FontId::new(bp, theme::serif_family());
+    let width = |s: String| ui.painter().layout_no_wrap(s, font.clone(), PAPER_INK).size().x;
+    let lw = width(label.clone()).max(width(styled_choice(style, 22, "").trim_end().to_string())) + bp * 0.45;
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+        let (lr, _) = ui.allocate_exact_size(Vec2::new(lw, bp * 1.45), Sense::hover());
+        // (the row's first line: the letter sits where a text choice's letter does)
+        ui.painter().text(Pos2::new(lr.left(), lr.top() + bp * 0.2), Align2::LEFT_TOP, &label, font, PAPER_INK);
+        ui.vertical(|ui| {
+            if !a.text.trim().is_empty() {
+                popt(ui, a.text.clone(), bp);
+            } else {
+                // a picture's top lines up with the letter's cap height
+                ui.add_space(bp * 0.25);
+            }
+            draw_choice_image(app, ui, ctx, img, bp);
+        });
+    });
+}
+
+/// A choice's picture at its printed size in the space beside its letter: as a question picture
+/// ([`crate::layout::picture_size_pt`]), but at most [`CHOICE_PICTURE_MAX_H_PT`] tall.
+fn draw_choice_image(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, img: &model::ImageRef, bp: f32) {
+    match app.image_texture(ctx, &img.file) {
+        Some(tex) => {
+            let [tw, th] = tex.size();
+            let (w_px, h_px) = if img.width > 0 && img.height > 0 { (img.width, img.height) } else { (tw as u32, th as u32) };
+            let (w, h) = crate::layout::picture_size_pt(w_px, h_px, (ui.available_width() / PT) as f64);
+            let k = (CHOICE_PICTURE_MAX_H_PT / h.max(1.0)).min(1.0);
+            ui.add(egui::Image::new(&tex).fit_to_exact_size(egui::vec2((w * k) as f32 * PT, (h * k) as f32 * PT)));
+            ui.add_space(4.0 * PT);
+        }
+        // (the picture file is gone from the store: say so where it would print)
+        None => picture_needed_box(ui, bp, Some("picture file missing")),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_item_body(
     app: &mut crate::App,
@@ -4544,14 +4597,16 @@ fn draw_item_body(
                 for row in crate::layout::choice_grid(labels.len(), n) {
                     ui.columns(n as usize, |cs| {
                         for (k, &ci) in row.iter().enumerate() {
-                            popt(&mut cs[k], labels[ci].clone(), bp);
+                            paper_choice(app, &mut cs[k], ctx, style, ci, &answers[ci], bp);
                         }
                     });
                 }
                 return;
             }
-            // Condensed prints the choices across when every one fits its column.
-            let across = style.choices_across() && labels.len() > 1 && !labels.iter().any(|l| needs_rich(l) || l.contains("[picture"));
+            // Condensed prints the choices across when every one fits its column (picture choices
+            // go across only in the item's answer columns, above).
+            let pictures = answers.iter().any(|a| a.image.is_some());
+            let across = style.choices_across() && labels.len() > 1 && !pictures && !labels.iter().any(|l| needs_rich(l) || l.contains("[picture"));
             let cols = if across {
                 let widest = labels.iter().map(|l| l.chars().count()).max().unwrap_or(0) as f32 * bp * 0.5 + 12.0;
                 [labels.len(), 4, 3, 2].into_iter().filter(|&c| c >= 2 && c <= labels.len()).find(|&c| widest <= body_w / c as f32)
@@ -4569,8 +4624,8 @@ fn draw_item_body(
                     }
                 }
                 None => {
-                    for l in labels {
-                        popt(ui, l, bp);
+                    for (ci, a) in answers.iter().enumerate() {
+                        paper_choice(app, ui, ctx, style, ci, a, bp);
                     }
                 }
             }
@@ -4628,7 +4683,7 @@ fn draw_item_body(
                             PartKind::Mc { answers } => {
                                 popt(ui, rest.clone(), bp);
                                 for (ci, a) in answers.iter().enumerate() {
-                                    popt(ui, styled_choice(style, ci, &a.text), bp);
+                                    paper_choice(app, ui, ctx, style, ci, a, bp);
                                 }
                             }
                             PartKind::Tf { .. } => popt(ui, format!("{rest} (True / False)"), bp),
@@ -6502,6 +6557,8 @@ fn shelf_row(
 struct Mapped {
     dq: DocQ,
     img: Option<model::ImageRef>,
+    /// Pictures of the printed choices, in printed order; empty when no choice has one.
+    choice_imgs: Vec<Option<model::ImageRef>>,
     /// Multipart: the stem text cut at each part (piece 0 = stem + part a, piece k = part k),
     /// joined with `\n` it is `dq.text[0]`. Used when the exam sets per-part work space.
     pieces: Vec<String>,
@@ -6536,14 +6593,8 @@ fn map_question(number: u32, q: &model::Question) -> Mapped {
 
 /// [`map_question`] in a paper style (multipart labels follow the style).
 fn map_question_style(number: u32, q: &model::Question, style: model::PaperStyle) -> Mapped {
-    let mut m = map_question_raw_style(number, q, style);
-    // Exports have no typesetter yet: degrade `$latex$` to its Unicode approximation.
-    let plain = |s: &mut String| *s = crate::equation_text::stem_to_plain(s);
-    m.dq.text.iter_mut().for_each(plain);
-    m.pieces.iter_mut().for_each(plain);
-    m.dq.choices.iter_mut().for_each(plain);
-    plain(&mut m.dq.key_text);
-    m
+    // Keep the original inline math for PDF equation layout and editable DOCX OMML.
+    map_question_raw_style(number, q, style)
 }
 
 #[cfg(test)]
@@ -6559,6 +6610,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
     dq.rule_lines = 0;
     let mut ktext: String;
     let mut pieces: Vec<String> = Vec::new();
+    let mut choice_imgs: Vec<Option<model::ImageRef>> = Vec::new();
 
     match &q.kind {
         Kind::Mc { answers } => {
@@ -6568,6 +6620,10 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
                 .enumerate()
                 .map(|(i, a)| format!("{}. {}", letter(i), a.text))
                 .collect();
+            if answers.iter().any(|a| a.image.is_some()) {
+                choice_imgs = answers.iter().map(|a| a.image.clone()).collect();
+                dq.choice_images = choice_imgs.iter().map(|r| r.as_ref().and_then(read_img)).collect();
+            }
             let ks: Vec<usize> = answers
                 .iter()
                 .enumerate()
@@ -6701,7 +6757,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
         dq.correct.clear();
         dq.key_marks.clear();
         dq.key_text = "Key not provided".to_string();
-        return Mapped { dq, img: q.image.clone(), pieces };
+        return Mapped { dq, img: q.image.clone(), choice_imgs, pieces };
     }
     // The teacher's explanation travels inside key_text (prints only on the key).
     if let Some(ex) = &q.explanation {
@@ -6711,7 +6767,7 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
         }
     }
     dq.key_text = ktext;
-    Mapped { dq, img: q.image.clone(), pieces }
+    Mapped { dq, img: q.image.clone(), choice_imgs, pieces }
 }
 
 /// Headless export (QA hook VERSHION_EXPORT): writes `exam.pdf`, `exam.docx` and `key.pdf` for the
@@ -6868,6 +6924,7 @@ fn build_doc(
                 let mut dq = m.dq.clone();
                 if is_key {
                     dq.choices.clear();
+                    dq.choice_images.clear();
                     dq.image = None;
                     dq.rule_lines = 0;
                     dq.text = vec![];
@@ -7035,6 +7092,9 @@ struct SnapQ {
     pub text: Vec<String>,
     pub choices: Vec<String>,
     pub image: Option<SnapImage>,
+    /// Pictures of the printed choices (absent in snapshots without picture choices).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choice_images: Vec<Option<SnapImage>>,
     pub key_text: String,
     pub rule_lines: u8,
     pub points: Option<f64>,
@@ -7064,6 +7124,14 @@ struct SnapImage {
     pub height: u32,
 }
 
+fn snap_image(r: &model::ImageRef) -> SnapImage {
+    SnapImage { file: r.file.clone(), width: r.width, height: r.height }
+}
+
+fn read_snap_image(s: &SnapImage) -> Option<DocImg> {
+    read_img(&model::ImageRef { file: s.file.clone(), width: s.width, height: s.height })
+}
+
 impl SnapDoc {
     #[cfg(test)]
     fn from_parts(
@@ -7091,6 +7159,7 @@ impl SnapDoc {
                         width: r.width,
                         height: r.height,
                     }),
+                    choice_images: if doc.questions[i].choice_images.is_empty() { Vec::new() } else { m.choice_imgs.iter().map(|r| r.as_ref().map(snap_image)).collect() },
                     key_text: doc.questions[i].key_text.clone(),
                     rule_lines: doc.questions[i].rule_lines,
                     points: doc.questions[i].points,
@@ -7149,6 +7218,7 @@ impl SnapDoc {
                         };
                         read_img(&img_ref)
                     }),
+                    choice_images: q.choice_images.iter().map(|s| s.as_ref().and_then(read_snap_image)).collect(),
                     key_text: q.key_text.clone(),
                     rule_lines: q.rule_lines,
                     points: q.points,
@@ -7454,7 +7524,22 @@ fn export_preview(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, key: 
             (pv, files)
         }
     };
-    let texs = files.iter().map(|f| app.image_texture(ctx, f).map(|t| t.id())).collect();
+    let mut texs: Vec<Option<egui::TextureId>> = files.iter().map(|f| app.image_texture(ctx, f).map(|t| t.id())).collect();
+    texs.resize(pv.images.len(), None);
+    // Equation XObjects follow the question pictures, with the same indices as the PDF.
+    for (k, bytes) in pv.equation_images.iter().enumerate() {
+        let Some(bytes) = bytes else { continue };
+        let id = egui::Id::new(("qs_export_equation", fnv1a(bytes)));
+        let cached: Option<egui::TextureHandle> = ctx.data(|d| d.get_temp(id));
+        let tex = cached.or_else(|| {
+            let rgba = image::load_from_memory(bytes).ok()?.to_rgba8();
+            let image = egui::ColorImage::from_rgba_unmultiplied([rgba.width() as usize, rgba.height() as usize], rgba.as_raw());
+            let tex = ctx.load_texture(format!("qs_export_equation_{id:?}"), image, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
+            Some(tex)
+        });
+        texs[k] = tex.map(|t| t.id());
+    }
     Some((pv, texs))
 }
 
@@ -7488,6 +7573,9 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
     for f in &files {
         sig = sig.rotate_left(5) ^ fnv1a(f.as_bytes());
     }
+    for bytes in pv.equation_images.iter().flatten() {
+        sig = sig.rotate_left(5) ^ fnv1a(bytes);
+    }
     let key = egui::Id::new(("qs_thumb_tex", exam_id));
     if let Some((s, tex)) = ctx.data(|d| d.get_temp::<(u64, Option<egui::TextureHandle>)>(key))
         && s == sig
@@ -7495,7 +7583,7 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
         return tex;
     }
     let _ = app;
-    let (svg, placed) = page_svg(pv.page_w, pv.page_h, ops, &pv.fallback);
+    let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, ops, &pv.fallback, &pv.equation_images);
     // QA hook: VERSHION_THUMB_SVG=<file> writes the thumbnail's SVG (and the page ops beside it).
     if let Ok(path) = crate::env_var("VERSHION_THUMB_SVG") {
         let _ = std::fs::write(&path, &svg);
@@ -7505,8 +7593,10 @@ fn page_thumb_texture(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, p
     let tex = crate::figures::to_rgba(&svg, scale).ok().map(|(w, h, mut px)| {
         // pictures: decoded and downscaled into their boxes (smooth, not nearest-pixel)
         for (k, [x, y, bw, bh]) in placed {
-            let Some(file) = files.get(k).filter(|f| !f.is_empty()) else { continue };
-            let Some(img) = crate::store::read_media(file).and_then(|b| image::load_from_memory(&b).ok()) else { continue };
+            let bytes = pv.equation_images.get(k).and_then(|b| b.clone()).or_else(|| {
+                files.get(k).filter(|f| !f.is_empty()).and_then(|file| crate::store::read_media(file))
+            });
+            let Some(img) = bytes.and_then(|b| image::load_from_memory(&b).ok()) else { continue };
             let (pw, ph) = (((bw as f32) * scale).round().max(1.0) as u32, ((bh as f32) * scale).round().max(1.0) as u32);
             let small = image::imageops::resize(&img.to_rgba8(), pw, ph, image::imageops::FilterType::Triangle);
             let (x0, y0) = ((x as f32 * scale).round() as i64, (y as f32 * scale).round() as i64);
@@ -7544,6 +7634,12 @@ fn xml_text(s: &str) -> String {
 /// too). Pictures are left to the caller: their (image index, [x, y, w, h] in points) come back
 /// beside the SVG (which shows a pale box there).
 pub(crate) fn page_svg(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char]) -> (String, Vec<(usize, [f64; 4])>) {
+    page_svg_with_equations(page_w, page_h, ops, fallback, &[])
+}
+
+/// Equation images have transparent backgrounds: their preview must retain the page/table
+/// backdrop rather than the grey placeholder used for an unresolved question picture.
+fn page_svg_with_equations(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char], equations: &[Option<Vec<u8>>]) -> (String, Vec<(usize, [f64; 4])>) {
     let mut placed = Vec::new();
     let mut out = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{page_w}\" height=\"{page_h}\" viewBox=\"0 0 {page_w} {page_h}\"><rect width=\"{page_w}\" height=\"{page_h}\" fill=\"#fff\"/>"
@@ -7632,7 +7728,9 @@ pub(crate) fn page_svg(page_w: f64, page_h: f64, ops: &[u8], fallback: &[char]) 
                 if let Some(PdfTok::Name(n)) = stack.last() {
                     let k: usize = n.trim_start_matches("Im").parse().unwrap_or(1);
                     let (x, y, w, h) = (cm[4], fy(cm[5] + cm[3]), cm[0], cm[3]);
+                    if equations.get(k.saturating_sub(1)).and_then(Option::as_ref).is_none() {
                     out.push_str(&format!("<rect x=\"{x:.2}\" y=\"{y:.2}\" width=\"{w:.2}\" height=\"{h:.2}\" fill=\"#efefef\"/>"));
+                    }
                     placed.push((k.saturating_sub(1), [x, y, w, h]));
                 }
             }
@@ -8305,7 +8403,7 @@ mod tests {
         Kind::Mc {
             answers: answers
                 .iter()
-                .map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l })
+                .map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l, image: None, figure: None })
                 .collect(),
         }
     }
@@ -8346,7 +8444,7 @@ mod tests {
     }
 
     fn ans(t: &str, c: bool) -> model::Answer {
-        model::Answer { text: t.to_string(), correct: c, locked: false }
+        model::Answer::new(t, c)
     }
 
     fn bank_of(qs: Vec<Question>) -> model::QuestionBank {
@@ -8509,7 +8607,7 @@ mod tests {
                 Part {
                     stem: "2 + 2 = ?".into(),
                     kind: PartKind::Mc {
-                        answers: vec![Answer { text: "4".into(), correct: true, locked: false }],
+                        answers: vec![Answer { text: "4".into(), correct: true, locked: false, image: None, figure: None }],
                     },
                 },
                 Part {
@@ -8549,6 +8647,30 @@ mod tests {
             q("q3", "plain2", Kind::Tf { correct: true }),
         ];
         assert_eq!(doc_numbers(&qs), vec![1, 2, 5]);
+    }
+
+    #[test]
+    fn picture_choices_reach_the_exported_paper_and_its_snapshot_but_not_the_compact_key() {
+        // Holdout v7, NESA: four pie charts as options A-D.
+        let pic = |n: &str| model::ImageRef { file: format!("media/{n}.png"), width: 40, height: 40 };
+        let answers: Vec<model::Answer> = ["a", "b", "c", "d"].iter().enumerate()
+            .map(|(i, n)| model::Answer { image: Some(pic(n)), correct: i == 1, ..Default::default() }).collect();
+        let q = model::Question { id: "pies".into(), stem: "Which spinner?".into(), kind: Kind::Mc { answers }, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 };
+        let m = map_question(1, &q);
+        assert_eq!(m.dq.choice_images.len(), 4, "one slot per printed choice");
+        assert_eq!(m.choice_imgs.iter().map(|r| r.as_ref().unwrap().file.clone()).collect::<Vec<_>>(), ["media/a.png", "media/b.png", "media/c.png", "media/d.png"]);
+        let exam = model::Exam::default();
+        let mapped = vec![m];
+        assert_eq!(build_doc(&exam, &mapped, None, false).questions[0].choice_images.len(), 4);
+        assert!(build_doc(&exam, &mapped, None, true).questions[0].choice_images.is_empty(), "the compact key prints no choices");
+        let snap = SnapDoc::from_parts(&exam, &mapped, None, false, "x.pdf".into());
+        assert_eq!(snap.questions[0].choice_images.iter().flatten().map(|s| s.file.as_str()).collect::<Vec<_>>(), ["media/a.png", "media/b.png", "media/c.png", "media/d.png"]);
+        // Text choices keep the snapshot and the paper exactly as before.
+        let text = model::Question { kind: Kind::Mc { answers: vec![model::Answer::new("x", true), model::Answer::new("y", false)] }, ..q };
+        let m = map_question(1, &text);
+        assert!(m.dq.choice_images.is_empty() && m.choice_imgs.is_empty());
+        let snap = SnapDoc::from_parts(&exam, &[m], None, false, "x.pdf".into());
+        assert!(!serde_json::to_string(&snap).unwrap().contains("choice_images"));
     }
 
     #[test]
@@ -8652,14 +8774,12 @@ mod tests {
     }
 
     #[test]
-    fn math_degrades_to_unicode_in_exports() {
+    fn math_source_survives_export_mapping() {
         let stem = r"Evaluate $\frac{1}{2}+\sqrt{x}$ now.";
         let ans = &[(r"$\frac{1}{2}$", true, false), ("2", false, false)];
         let m = map_question(1, &q("q1", stem, mc(ans)));
-        let joined = format!("{:?} {:?}", m.dq.text, m.dq.choices);
-        assert!(!joined.contains('$'), "dollar signs leaked: {joined}");
-        assert!(!joined.contains("frac") && !joined.contains("sqrt"), "latex leaked: {joined}");
-        assert!(joined.contains('\u{221a}'), "expected a square-root sign: {joined}");
+        assert_eq!(m.dq.text[0], stem);
+        assert!(m.dq.choices[0].contains(r"$\frac{1}{2}$"));
         // And the real renderers accept it.
         let e = exam(vec![item("b", "q1")]);
         let snap = SnapDoc::from_parts(&e, &[m], None, false, "x.pdf".to_string());
@@ -8876,7 +8996,7 @@ mod stem_ui_tests {
         let p = |l: &str, r: &str| model::Pair { left: l.into(), right: r.into() };
         for kind in [
             Kind::Tf { correct: false },
-            Kind::Mc { answers: vec![model::Answer { text: "x".into(), correct: false, locked: false }, model::Answer { text: "y".into(), correct: false, locked: false }] },
+            Kind::Mc { answers: vec![model::Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }, model::Answer { text: "y".into(), correct: false, locked: false, image: None, figure: None }] },
             Kind::Matching { pairs: vec![p("Dog", "Mammal"), p("Frog", "Amphibian")], distractors: vec!["Bird".into()] },
             Kind::Blank { accept: vec![vec![]] },
             Kind::Short { sample: String::new() },
@@ -8962,7 +9082,7 @@ mod examed_tests {
         Question {
             id: id.into(),
             stem: format!("Stem {id}"),
-            kind: Kind::Mc { answers: answers.iter().map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l }).collect() },
+            kind: Kind::Mc { answers: answers.iter().map(|(t, c, l)| Answer { text: t.to_string(), correct: *c, locked: *l, image: None, figure: None }).collect() },
             points: Some(1.0),
             difficulty: None,
             topics: vec![],
@@ -9079,7 +9199,7 @@ mod examed_tests {
                 model::Part { stem: "$f$ is even.".into(), kind: PartKind::Tf { correct: true } },
                 model::Part {
                     stem: "Which is $f'(x)$?".into(),
-                    kind: PartKind::Mc { answers: vec![model::Answer { text: "$2x$".into(), correct: true, locked: false }, model::Answer { text: "$x$".into(), correct: false, locked: false }] },
+                    kind: PartKind::Mc { answers: vec![model::Answer { text: "$2x$".into(), correct: true, locked: false, image: None, figure: None }, model::Answer { text: "$x$".into(), correct: false, locked: false, image: None, figure: None }] },
                 },
             ],
         };
@@ -9104,8 +9224,9 @@ mod examed_tests {
         assert_eq!(ex.items[0].part_work, vec![2, 0, 5]);
         let m = map_placed(&resolve_items(&st, &ex), ex.paper_style);
         assert_eq!(m[0].dq.text.len(), 3, "{:?}", m[0].dq.text);
-        assert!(m[0].dq.text[0].starts_with("Answer the parts") && m[0].dq.text[0].ends_with("a. What is f(3)?"), "{:?}", m[0].dq.text[0]);
-        assert!(m[0].dq.text[1].starts_with("b. f is even.") && m[0].dq.text[2].starts_with("c. Which is f'(x)?"), "{:?}", m[0].dq.text);
+        // Exports keep the inline math source (PDF equation layout, DOCX OMML), so the parts carry it.
+        assert!(m[0].dq.text[0].starts_with("Answer the parts") && m[0].dq.text[0].ends_with("a. What is $f(3)$?"), "{:?}", m[0].dq.text[0]);
+        assert!(m[0].dq.text[1].starts_with("b. $f$ is even.") && m[0].dq.text[2].starts_with("c. Which is $f'(x)$?"), "{:?}", m[0].dq.text);
         assert_eq!(m[0].dq.space_after, vec![2, 0, 5]);
         assert_eq!(m[0].dq.text.join("\n"), plain[0].dq.text[0], "same printed text, cut at the parts");
         // Removing the space again leaves nothing stored.
@@ -10437,7 +10558,7 @@ mod review_tests {
     #[test]
     fn show_all_opens_a_card_in_place() {
         let long = "A milliliter of cow's milk contains 0.026 g of casein protein. ".repeat(9);
-        let mut qs = vec![question("long", &long, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false }] }, Some(12.5), 100)];
+        let mut qs = vec![question("long", &long, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false, image: None, figure: None }] }, Some(12.5), 100)];
         for k in 0..9 {
             qs.push(question(&format!("q{k}"), &"Which of the following elements is the least electronegative of all? ".repeat(1 + k % 3), Kind::Short { sample: "x".into() }, Some(1.0), 90 - k as i64));
         }
@@ -10891,7 +11012,7 @@ mod review_tests {
     #[test]
     fn the_add_button_sits_in_the_header_row_and_overlaps_nothing() {
         let img = || Some(crate::model::ImageRef { file: "media/x.png".into(), width: 10, height: 10 });
-        let keyless = |id: &str, stem: &str| question(id, stem, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false }] }, Some(12.5), 100);
+        let keyless = |id: &str, stem: &str| question(id, stem, Kind::Mc { answers: vec![Answer { text: "a".into(), correct: false, locked: false, image: None, figure: None }] }, Some(12.5), 100);
         let part = |s: &str| model::Part { stem: s.into(), kind: PartKind::Short { sample: "x".into() } };
         let mut a = keyless("long", &"A milliliter of cow's milk contains 0.026 g of casein protein. ".repeat(4));
         a.image = img();
@@ -11264,5 +11385,321 @@ mod review_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod equation_export_preview_tests {
+    use super::*;
+
+    #[test]
+    fn thumbnail_equation_xobjects_keep_question_picture_indices_stable() {
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(12, 8, image::Rgba([200, 0, 0, 255]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        let doc = ExamDoc { body_pt: 11.0, heading_pt: 16.0, margin_mm: 18.0,
+            questions: vec![DocQ { number: 1, text: vec!["Before $[■(1&2@3&4)]$ after.".into()],
+                image: Some(crate::layout::DocImage { bytes: png, width_px: 12, height_px: 8 }), ..Default::default() }], ..Default::default() };
+        let pv = crate::export::preview_pages(&doc).unwrap();
+        assert_eq!(pv.images.len(), 2);
+        assert!(pv.equation_images[0].is_none(), "question image remains /Im1");
+        let eq = pv.equation_images[1].as_ref().expect("equation /Im2 has preview pixels");
+        let rgba = image::load_from_memory(eq).unwrap().to_rgba8();
+        assert_eq!((rgba.width(), rgba.height()), pv.images[1]);
+        assert!(rgba.pixels().any(|p| p[3] > 0), "equation preview has visible ink");
+        let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, &pv.pages[0], &pv.fallback, &pv.equation_images);
+        assert!(svg.contains("Before") && svg.contains("after."));
+        assert_eq!(svg.matches("#efefef").count(), 1, "only the question picture gets a placeholder; transparent equations retain the page backdrop");
+        assert!(placed.iter().any(|(idx, _)| *idx == 0));
+        assert!(placed.iter().any(|(idx, _)| *idx == 1), "raster preview resolves the same equation XObject");
+    }
+
+    /// Offline visual-QA fixture runner. Inputs are explicit isolated bank copies; it never
+    /// opens a user store or performs inference. Run with a manifest path when reviewing exports.
+    #[test]
+    #[ignore = "requires an explicit isolated export review manifest"]
+    fn render_isolated_stored_candidate_math_exports() {
+        let path = crate::env_var("VERSHION_EXPORT_REVIEW_MANIFEST").expect("isolated manifest path");
+        let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let output = std::path::PathBuf::from(manifest["output"].as_str().unwrap());
+        std::fs::create_dir_all(&output).unwrap();
+        for input in manifest["banks"].as_array().unwrap() {
+            let name = input["name"].as_str().unwrap();
+            assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+            let bank: serde_json::Value = serde_json::from_slice(&std::fs::read(input["path"].as_str().unwrap()).unwrap()).unwrap();
+            let questions: Vec<model::Question> = serde_json::from_value(bank[0]["questions"].clone()).unwrap();
+            assert!(questions.iter().all(|q| q.image.is_none()), "fixture must not resolve any real-store media");
+            let mapped: Vec<_> = questions.iter().enumerate().map(|(i,q)| map_question_style(i as u32 + 1, q, model::PaperStyle::Standard)).collect();
+            let dqs = mapped.into_iter().map(|mut m| { m.dq.no_answer_space = true; m.dq }).collect();
+            let doc = ExamDoc { title: input["title"].as_str().unwrap_or(name).into(), header_line: "Name: ____________________  Date: __________".into(),
+                body_pt: 11.0, heading_pt: 16.0, margin_mm: 18.0, questions: dqs, ..Default::default() };
+            std::fs::write(output.join(format!("{name}.pdf")), crate::export::render_pdf(&doc).unwrap()).unwrap();
+            std::fs::write(output.join(format!("{name}.docx")), crate::export::render_docx(&doc).unwrap()).unwrap();
+            let pv = crate::export::preview_pages(&doc).unwrap();
+            let (svg, placed) = page_svg_with_equations(pv.page_w, pv.page_h, &pv.pages[0], &pv.fallback, &pv.equation_images);
+            let scale = 2.0;
+            let (w,h,mut pixels) = crate::figures::to_rgba(&svg, scale).unwrap();
+            for (k,[x,y,bw,bh]) in placed {
+                let bytes = pv.equation_images[k].as_ref().expect("all fixture images are math");
+                let rgba = image::load_from_memory(bytes).unwrap().to_rgba8();
+                let small = image::imageops::resize(&rgba, (bw as f32 * scale).round().max(1.0) as u32, (bh as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle);
+                blend_premul(&mut pixels,w,h,&small,(x as f32*scale).round() as i64,(y as f32*scale).round() as i64);
+            }
+            // The SVG page has an opaque white backdrop, so premultiplied output is straight.
+            image::RgbaImage::from_raw(w,h,pixels).unwrap().save(output.join(format!("{name}-preview.png"))).unwrap();
+            println!("{name}: {} questions, {} pages, {} equation images",doc.questions.len(),pv.pages.len(),pv.equation_images.iter().flatten().count());
+        }
+    }
+}
+
+#[cfg(test)]
+mod child_figure_mapping_tests {
+    use super::*;
+    #[test]
+    fn owning_part_picture_marker_survives_mapping_choices_and_part_work_splitting() {
+        let q=model::Question { id:"child-picture".into(),stem:"Shared givens.".into(),kind:Kind::Multipart {parts:vec![
+            model::Part {stem:"a) Earlier part.".into(),kind:model::PartKind::Short {sample:"".into()}},
+            model::Part {stem:"b) Owning part.\n[picture]".into(),kind:model::PartKind::Mc {answers:vec![model::Answer {text:"First choice".into(),correct:false,locked:false, image: None, figure: None},model::Answer {text:"Second choice".into(),correct:false,locked:false, image: None, figure: None}]}},
+            model::Part {stem:"c) Later part.".into(),kind:model::PartKind::Short {sample:"".into()}}
+        ]},points:None,difficulty:None,topics:Vec::new(),image:None,explanation:None,figure:None,created:0,modified:0};
+        let mut mapped=map_question_style(1,&q,model::PaperStyle::Standard);
+        let joined=mapped.dq.text.join("\n");let image=joined.find("[picture]").unwrap();
+        assert!(joined.find("Owning part.").unwrap()<image && image<joined.find("First choice").unwrap());
+        assert!(image<joined.find("Later part.").unwrap());assert_eq!(mapped.dq.key_text,"Key not provided");
+        apply_part_work(&mut mapped,&[1,2,3]);assert_eq!(mapped.dq.space_after,[1,2,3]);assert_eq!(mapped.dq.text.len(),3);
+        assert!(mapped.dq.text[1].contains("[picture]") && mapped.dq.text[1].contains("Second choice"));
+        assert!(!mapped.dq.text[0].contains("[picture]") && !mapped.dq.text[2].contains("[picture]"));
+    }
+
+    /// Read-only source replay against an explicit isolated manifest. It performs no fitting,
+    /// inference or candidate certification: the retained source crop is exported for visual QA.
+    #[test]
+    #[ignore="requires an explicit isolated child-figure source-replay manifest"]
+    fn replay_real_ci_child_figure_into_student_pdf_and_editable_docx() {
+        use std::io::Read;
+        let manifest_path=crate::env_var("VERSHION_CHILD_FIGURE_REPLAY").expect("isolated replay manifest");
+        let manifest:serde_json::Value=serde_json::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+        let root=std::path::PathBuf::from(manifest["store"].as_str().unwrap());std::fs::create_dir_all(&root).unwrap();
+        crate::store::init(Box::new(crate::store::FsBackend::new(&root)));
+        let raw=std::fs::read_to_string(manifest["raw_reply"].as_str().unwrap()).unwrap();
+        let page=std::fs::read(manifest["source_png"].as_str().unwrap()).unwrap();
+        assert!(crate::ditto::figure_box_issues(&raw,Some(&page),1).is_empty());
+        let got=crate::ditto::import_text(&raw,Some(&page),1,"Source worksheet").unwrap();
+        assert_eq!(got.doc.questions.len(),1);assert_eq!(got.figures,1);
+        assert_eq!(got.items[0].figure_source.as_ref().unwrap().path,"/parts/0/figure");
+        let source=&got.doc.questions[0];let Kind::Multipart {parts}=&source.kind else {panic!("source parts retained")};
+        assert_eq!(parts.len(),3);assert!(parts[0].stem.ends_with("[picture]"));
+        assert!(matches!(&parts[0].kind,model::PartKind::Short {sample} if sample.is_empty()));
+        assert!(matches!(&parts[1].kind,model::PartKind::Short {sample} if sample.is_empty()));
+        assert!(matches!(&parts[2].kind,model::PartKind::Mc {answers} if answers.len()==3 && answers.iter().all(|a| !a.correct)));
+        assert!(source.stem.contains("A sample is ONLY representative") && source.stem.contains("no subgroups or wider populations"));
+        assert!(source.image.is_some() && source.figure.is_none(),"source crop retained, not falsely promoted to accepted editable recreation");
+        let persisted=serde_json::to_vec_pretty(source).unwrap();let restored:model::Question=serde_json::from_slice(&persisted).unwrap();
+        let mut mapped=map_question_style(1,&restored,model::PaperStyle::Standard);assert_eq!(mapped.dq.key_text,"Key not provided");
+        mapped.dq.no_answer_space=true;
+        let doc=ExamDoc {title:got.doc.name.clone(),header_line:"Name: ____________________  Date: __________".into(),body_pt:11.0,heading_pt:16.0,margin_mm:18.0,questions:vec![mapped.dq],..Default::default()};
+        let pv=crate::export::preview_pages(&doc).unwrap();let ops=pv.pages.iter().map(|p|String::from_utf8_lossy(p).into_owned()).collect::<Vec<_>>().join("\n");
+        let image=ops.find("/Im1 Do").unwrap();assert!(ops.find("This means:").unwrap()<image && image<ops.find("Find the following").unwrap(),"source image must follow part a and precede part b");
+        let word=crate::export::render_docx(&doc).unwrap();let mut zip=zip::ZipArchive::new(std::io::Cursor::new(&word)).unwrap();let mut xml=String::new();zip.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
+        let image=xml.find("<w:drawing").unwrap();assert!(xml.find("This means:").unwrap()<image && image<xml.find("Find the following").unwrap());assert!(!xml.contains("[picture]"));
+        let output=std::path::PathBuf::from(manifest["output"].as_str().unwrap());std::fs::create_dir_all(&output).unwrap();
+        std::fs::write(output.join("ci-student.pdf"),crate::export::render_pdf(&doc).unwrap()).unwrap();
+        std::fs::write(output.join("ci-student.docx"),&word).unwrap();
+        std::fs::write(output.join("persisted-question.json"),persisted).unwrap();
+        std::fs::write(output.join("source-items.json"),serde_json::to_vec_pretty(&got.items).unwrap()).unwrap();
+        std::fs::write(output.join("warnings.json"),serde_json::to_vec_pretty(&got.warnings).unwrap()).unwrap();
+        let previews=crate::ditto::source_figure_previews(&raw,&page,1);assert_eq!(previews.len(),1);std::fs::write(output.join("supplied-source-crop.png"),&previews[0].2).unwrap();
+        println!("offline replay: {} question, {} original parts, {} supplied source crop, {} student PDF pages; no API or fitting call, no fresh-bank acceptance claim",got.doc.questions.len(),parts.len(),got.figures,pv.pages.len());
+    }
+}
+
+#[cfg(test)]
+mod picture_choice_paper_tests {
+    use super::*;
+    use crate::qedit::pic_test::{solid, Drawn, Painter};
+    use model::{Answer, ImageRef, Part};
+
+    const FILES: [&str; 4] = ["media/pie-a.png", "media/pie-b.png", "media/pie-c.png", "media/pie-d.png"];
+
+    fn pic(file: &str, text: &str, correct: bool) -> Answer {
+        Answer { text: text.into(), correct, image: Some(ImageRef { file: file.into(), width: 160, height: 120 }), ..Answer::default() }
+    }
+
+    fn question(kind: Kind) -> model::Question {
+        model::Question { id: "pies".into(), stem: "Which pie chart shows one quarter shaded?".into(), kind, points: Some(1.0), difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 0, modified: 0 }
+    }
+
+    /// Four pie charts as A-D, B correct. `captions`: each choice also has a word.
+    fn pies(captions: bool) -> model::Question {
+        let t = |s: &'static str| if captions { s } else { "" };
+        question(Kind::Mc { answers: vec![pic(FILES[0], t("half"), false), pic(FILES[1], t("quarter"), true), pic(FILES[2], t("third"), false), pic(FILES[3], t("whole"), false)] })
+    }
+
+    /// A headless paper column drawing `q` as it prints, with the pictures in the media cache.
+    struct Paper {
+        ctx: egui::Context,
+        app: crate::App,
+        ids: Vec<egui::TextureId>,
+        painter: Painter,
+    }
+
+    impl Paper {
+        fn new() -> Paper {
+            crate::store::init(Box::new(crate::store::FsBackend::new(std::env::temp_dir().join(format!("vershion-picture-choices-{}", std::process::id())))));
+            let ctx = egui::Context::default();
+            let mut app = crate::App::new_from(&ctx);
+            theme::setup(&ctx);
+            let cols = [[230, 120, 60], [70, 140, 210], [90, 170, 90], [200, 80, 160]];
+            let ids = FILES
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let t = solid(&ctx, f, 160, 120, cols[i]);
+                    let id = t.id();
+                    app.textures.insert(f.to_string(), t);
+                    id
+                })
+                .collect();
+            Paper { ctx, app, ids, painter: Painter::default() }
+        }
+
+        fn out(&mut self, q: &model::Question, style: model::PaperStyle) -> egui::FullOutput {
+            let mut last = None;
+            for _ in 0..3 {
+                let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(PAGE_W, PAGE_H))), ..Default::default() };
+                let ctx = self.ctx.clone();
+                let app = &mut self.app;
+                let out = ctx.run_ui(input, |ui| {
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::WHITE).inner_margin(Margin::same(40))).show_inside(ui, |ui| {
+                        let cw = ui.available_width();
+                        paper_question(app, ui, &ctx, Some(q), 1, cw, 12.0 * PT * 1.25, style);
+                    });
+                });
+                self.painter.apply(&out.textures_delta);
+                if let Some(o) = last.replace(out) {
+                    o.drop_without_applying_deltas();
+                }
+            }
+            last.unwrap()
+        }
+
+        fn draw(&mut self, q: &model::Question, style: model::PaperStyle) -> Drawn {
+            let out = self.out(q, style);
+            let d = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+            d
+        }
+    }
+
+    /// Each picture choice prints its letter with its picture beside it, A to D down the page, in
+    /// every paper style's letter form, whether or not the choice has text.
+    #[test]
+    fn picture_choices_print_with_their_letters() {
+        let mut paper = Paper::new();
+        for (style, labels) in [
+            (model::PaperStyle::Standard, ["A.", "B.", "C.", "D."]),
+            (model::PaperStyle::Classic, ["a.", "b.", "c.", "d."]),
+            (model::PaperStyle::ExamBoard, ["A", "B", "C", "D"]),
+        ] {
+            for captions in [false, true] {
+                let d = paper.draw(&pies(captions), style);
+                let mut prev = f32::MIN;
+                for (i, id) in paper.ids.iter().enumerate() {
+                    let l = d.find(labels[i]).unwrap_or_else(|| panic!("{style:?}: letter {} printed: {:?}", labels[i], d.text));
+                    let p = d.pictures(*id);
+                    assert_eq!(p.len(), 1, "{style:?} {}: its picture once", labels[i]);
+                    let p = p[0];
+                    assert!(p.left() > l.right(), "{style:?} {}: the picture is beside the letter ({l:?} {p:?})", labels[i]);
+                    assert!(p.top() < l.bottom() + 40.0, "{style:?} {}: on the letter's line, or under its text", labels[i]);
+                    assert!(p.height() <= CHOICE_PICTURE_MAX_H_PT as f32 * PT + 0.5, "{p:?}");
+                    assert!(l.top() > prev, "{style:?}: A to D in order");
+                    prev = p.bottom();
+                }
+                if captions {
+                    let q = d.find("quarter").expect("B's text prints");
+                    let b = d.pictures(paper.ids[1])[0];
+                    assert!(q.bottom() <= b.top() + 0.5 && (q.left() - b.left()).abs() < 2.0, "text above its picture");
+                }
+                assert!(!d.text.iter().any(|(t, _)| t.contains("Picture needed")));
+            }
+        }
+    }
+
+    /// The exam item's answer columns lay picture choices out in the same column-major grid as
+    /// text: 4 pictures in 2 columns print A C / B D.
+    #[test]
+    fn picture_choices_take_the_items_answer_columns() {
+        let mut paper = Paper::new();
+        let mut item = ExamItem::new("b", "pies");
+        item.answer_columns = 2;
+        let e = model::Exam { paper_style: Default::default(), margins: None, id: "pie-exam".into(), name: "Quiz".into(), header: String::new(), title: None, items: vec![item], heading_pt: 16.0, body_pt: 11.0, margin_mm: 18.0, ruled_blanks: 2, modified: 0 };
+        paper.app.store.exams.push(e);
+        let q = pies(true);
+        let mut st = EditUi::default();
+        let ctx = paper.ctx.clone();
+        let mut d = Drawn::default();
+        for _ in 0..3 {
+            let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(PAGE_W, PAGE_H))), ..Default::default() };
+            let app = &mut paper.app;
+            let st = &mut st;
+            let out = ctx.run_ui(input, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
+                    let cw = ui.available_width();
+                    let id: Id = "pie-exam".into();
+                    paper_question_ws(app, ui, &ctx, Some(&q), 1, cw, 12.0, model::PaperStyle::Standard, Some((&id, 0, st)));
+                });
+            });
+            d = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+        }
+        let r: Vec<Rect> = paper.ids.iter().map(|id| d.pictures(*id)[0]).collect();
+        assert!((r[0].top() - r[2].top()).abs() < 1.0 && r[2].left() > r[0].right(), "A and C share the first row: {r:?}");
+        assert!((r[1].top() - r[3].top()).abs() < 1.0 && r[1].top() > r[0].bottom(), "B and D the second: {r:?}");
+        for l in ["A.", "B.", "C.", "D."] {
+            assert!(d.find(l).is_some(), "{l} printed");
+        }
+    }
+
+    /// A multipart part's picture choices print with their letters too; text choices print as
+    /// before (one label per choice, no picture).
+    #[test]
+    fn part_picture_choices_print_and_text_choices_are_unchanged() {
+        let mut paper = Paper::new();
+        let q = question(Kind::Multipart { parts: vec![Part { stem: "a. Pick one".into(), kind: model::PartKind::Mc { answers: vec![pic(FILES[0], "", true), pic(FILES[1], "", false)] } }] });
+        let d = paper.draw(&q, model::PaperStyle::Standard);
+        for (i, l) in ["A.", "B."].iter().enumerate() {
+            let lr = d.find(l).unwrap_or_else(|| panic!("{l}: {:?}", d.text));
+            assert!(d.pictures(paper.ids[i])[0].left() > lr.right());
+        }
+        let text = question(Kind::Mc { answers: vec![Answer::new("Venus", false), Answer::new("Mercury", true)] });
+        let d = paper.draw(&text, model::PaperStyle::Standard);
+        assert!(d.find("A. Venus").is_some() && d.find("B. Mercury").is_some(), "{:?}", d.text);
+        assert!(paper.ids.iter().all(|id| d.pictures(*id).is_empty()));
+    }
+
+    /// For export a picture choice keeps its letter ("A." with no text) and its place in the key:
+    /// the marked key still marks B.
+    #[test]
+    fn exported_picture_choices_keep_their_letters_and_key() {
+        let m = map_question_raw(1, &pies(true));
+        assert_eq!(m.dq.choices, ["A. half", "B. quarter", "C. third", "D. whole"]);
+        assert_eq!((m.dq.correct.clone(), m.dq.key_marks.clone()), (vec![1], vec!["B".to_string()]));
+        let m = map_question_raw(1, &pies(false));
+        assert!(m.dq.choices.iter().zip(["A.", "B.", "C.", "D."]).all(|(c, l)| c.trim_end() == l), "{:?}", m.dq.choices);
+    }
+
+    /// Hand-run: `PA_SHOTS=<dir> cargo test --offline --lib examui::picture_choice_paper_tests::shot -- --ignored`
+    /// writes a paper page with four picture choices as `exam-picture-choices.png`.
+    #[test]
+    #[ignore = "writes a PNG; run by hand with PA_SHOTS=<dir>"]
+    fn shot_exam_page_with_picture_choices() {
+        let Some(dir) = crate::qedit::pic_test::shot_dir() else { return };
+        let mut paper = Paper::new();
+        let out = paper.out(&pies(false), model::PaperStyle::Standard);
+        let ctx = paper.ctx.clone();
+        let img = paper.painter.paint(&ctx, out, PAGE_W as usize, PAGE_H as usize, Color32::WHITE);
+        let p = dir.join("exam-picture-choices.png");
+        img.save(&p).unwrap();
+        println!("{}", p.display());
     }
 }

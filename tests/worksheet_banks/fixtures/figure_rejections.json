@@ -1,0 +1,38 @@
+[
+  {
+    "case": "statistics-scatter-plots-p1",
+    "number": 2,
+    "generator": "scatterplot",
+    "candidate_note": "Scatterplot of ten blue points on a grey grid that stops at y=1 with no top border, labels 0.2\u20131 and 200\u2013800 and no titles. Compromises: the generator cannot extend the x-axis past the last gridline, and its grid is a single shade, whereas the source has a darker line at y=1 and lighter odd-tenth lines.",
+    "problems": [
+      "The y-axis in the reference extends above the y=1 gridline, but in the figure it stops exactly at y=1.",
+      "The x-axis in the reference extends past the last gridline and the rightmost point, but in the figure it ends flush with the grid's right edge.",
+      "The axis line styling differs: the figure's left axis is a thick dark navy line, while the reference's left axis is thinner."
+    ],
+    "source_run_report_sha256": "23c79eb2544ba4d12ceaf25722ec01ff3d71eabc3a79ba5fd2fe51abcdcd41fd"
+  },
+  {
+    "case": "statistics-scatter-plots-p1",
+    "number": 3,
+    "generator": "scatterplot",
+    "candidate_note": "Scatterplot with eight blue points on a gray grid that ends at the 4000 and 900 gridlines. It has labels, no titles and no fit line. The axes do not extend past the last gridlines as slightly as the source's do.",
+    "problems": [
+      "The x-axis in image 1 ends at the 900 gridline (about x=900). In the reference it extends past 900 to about 1000, so the right margin is missing.",
+      "The y-axis in image 1 stops at the 4000 gridline. In the reference it extends noticeably above 4000, so the top margin is missing.",
+      "The axis ranges and margins differ from the source, so the layout is not faithful, even though the points, labels and gridlines match."
+    ],
+    "source_run_report_sha256": "23c79eb2544ba4d12ceaf25722ec01ff3d71eabc3a79ba5fd2fe51abcdcd41fd"
+  },
+  {
+    "case": "trigonometry-graphs-p1",
+    "number": 2,
+    "generator": "coordinate-grid",
+    "candidate_note": "Blank trig grid: vertical lines every \u03c0/4 from -\u03c0/4 to 3\u03c0, horizontal lines at integers -6 to 6, labels at multiples of \u03c0/2 with stacked fractions, thick double-arrow axes, no curve. Small compromise: y-axis numbers have small tick marks and sit slightly left of the axis, and the right edge extends slightly past 3\u03c0.",
+    "problems": [
+      "The grid has an extra vertical gridline at 13\u03c0/4, one \u03c0/4 step past the 3\u03c0 label. In the reference the last vertical gridline is at 3\u03c0, and the horizontal lines only extend a little past it with no vertical line there.",
+      "The right-hand grid edge is rounded up to a full \u03c0/4 cell, so it sits at a different place and has an extra border line compared with the reference.",
+      "The left edge of the grid may not match the reference, which has one vertical line at -\u03c0/4 with horizontal lines extending slightly beyond it. This is hard to confirm in the generated image."
+    ],
+    "source_run_report_sha256": "23c79eb2544ba4d12ceaf25722ec01ff3d71eabc3a79ba5fd2fe51abcdcd41fd"
+  }
+]

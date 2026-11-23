@@ -58,7 +58,7 @@ fn fixtures_round_trip_unchanged_and_canonical() {
 #[test]
 fn stripped_goldens() {
     for name in MODEL {
-        let s = stripped(name, vec![]);
+        let s = stripped(name, image_ok_for(name));
         golden(&format!("stripped/{name}.json"), &pretty(&s.payload.to_value()));
         // The stripped form is itself a valid (v2) payload and re-validates to itself.
         assert_eq!(s.payload.schema_version, 2);

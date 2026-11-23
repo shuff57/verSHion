@@ -26,6 +26,14 @@ fn dir() -> PathBuf {
 }
 
 const HASH: &str = "3f2a9c0b1d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8";
+const HASH2: &str = "0c1d2e3f405162738495a6b7c8d9eaf00c1d2e3f405162738495a6b7c8d9eaf0";
+
+/// The pictures share-core's strip keeps for a fixture (`image_ok`): every question of the picture-choice fixture
+/// (a picture-only choice can not be served without its picture), none elsewhere. share-core's `golden.rs` uses the
+/// same rule.
+fn image_ok_for(name: &str) -> Vec<usize> {
+    if name == "question_mc_pictures" { vec![0] } else { vec![] }
+}
 
 fn q(id: &str, stem: &str, kind: Kind) -> Question {
     Question {
@@ -44,7 +52,7 @@ fn q(id: &str, stem: &str, kind: Kind) -> Question {
 }
 
 fn ans(text: &str, correct: bool) -> Answer {
-    Answer { text: text.into(), correct, locked: false }
+    Answer { text: text.into(), correct, locked: false, image: None, figure: None }
 }
 
 /// A figure spec exactly as the figure editor writes one: the registry's defaults through `spec_for`.
@@ -59,7 +67,7 @@ fn pipette_spec() -> FigureSpec {
 /// (name, value, the app's own pretty JSON of it in struct field order).
 fn fixtures() -> Vec<(&'static str, serde_json::Value, String)> {
     let mut mc = q("q00101a2b3c", "Which planet is closest to the Sun?\n\n**Hint:** think *small*.", Kind::Mc {
-        answers: vec![ans("Venus", false), ans("Mercury", true), ans("Mars", false), Answer { text: "None of these".into(), correct: false, locked: true }],
+        answers: vec![ans("Venus", false), ans("Mercury", true), ans("Mars", false), Answer { text: "None of these".into(), correct: false, locked: true, image: None, figure: None }],
     });
     mc.points = Some(2.0);
     mc.difficulty = Some(Difficulty::Medium);
@@ -115,6 +123,17 @@ fn fixtures() -> Vec<(&'static str, serde_json::Value, String)> {
         distractors: vec!["Mammal".into(), "Bird".into()],
     });
 
+    // Picture choices: one with no text, one with text and the figure that drew it, and a text choice beside them.
+    // Not in `bank_all_kinds`, so the older fixtures stay as they were.
+    let mut pictures = q("q01001a2b3c", "Which chart shows one quarter shaded?", Kind::Mc {
+        answers: vec![
+            Answer { image: Some(ImageRef { file: format!("media/{HASH}.png"), width: 200, height: 200 }), ..ans("", false) },
+            Answer { image: Some(ImageRef { file: format!("media/{HASH2}.webp"), width: 240, height: 180 }), figure: Some(pipette_spec()), ..ans("Chart B", true) },
+            Answer { locked: true, ..ans("None of these", false) },
+        ],
+    });
+    pictures.explanation = Some("B has one of four parts shaded.".into());
+
     let questions = vec![mc.clone(), ma.clone(), tf.clone(), matching.clone(), blank.clone(), short.clone(), multipart.clone(), figure.clone()];
     let bank = QuestionBank {
         id: "b00101a2b3c".into(),
@@ -142,6 +161,7 @@ fn fixtures() -> Vec<(&'static str, serde_json::Value, String)> {
         { let (j, t) = v(&multipart); ("question_multipart", j, t) },
         { let (j, t) = v(&figure); ("question_figure_image", j, t) },
         { let (j, t) = v(&shared); ("question_matching_shared", j, t) },
+        { let (j, t) = v(&pictures); ("question_mc_pictures", j, t) },
         { let (j, t) = v(&bank); ("bank_all_kinds", j, t) },
         { let (j, t) = v(&plain); ("bank_no_details", j, t) },
     ]
@@ -310,7 +330,7 @@ fn share_core_writes_the_app_json_and_the_app_reads_share_core_output() {
             .into_iter()
             .map(|f| share_core::LabelDecision { question: f.question, part: f.part, choice: if f.strip_allowed { share_core::LabelChoice::Strip } else { share_core::LabelChoice::Keep } })
             .collect();
-        let s = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions { image_ok: vec![], labels, ..Default::default() }, seed).unwrap();
+        let s = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions { image_ok: image_ok_for(name), labels, ..Default::default() }, seed).unwrap();
         assert_eq!(s.payload.schema_version, 2);
         let mut stripped = s.payload.to_value()[key].clone();
         let app_back = if key == "bank" {
@@ -365,4 +385,50 @@ fn imported_keyless_copies_load_and_print_cleanly_in_the_app() {
             }
         }
     }
+}
+
+/// A text choice is written exactly as before picture choices existed: no `image`, no `figure` key, by the app and by
+/// share-core, so older clients and the stored fixtures read it unchanged.
+#[test]
+fn a_text_choice_serialises_as_before_picture_choices() {
+    let a = Answer::new("Mercury", true);
+    assert_eq!(serde_json::to_string(&a).unwrap(), r#"{"text":"Mercury","correct":true,"locked":false}"#);
+    let sc = share_core::Answer::new("Mercury", true);
+    assert_eq!(serde_json::to_string(&sc).unwrap(), r#"{"text":"Mercury","correct":true,"locked":false}"#);
+    // And an old file (no picture keys) reads as a text choice.
+    let old: Answer = serde_json::from_str(r#"{"text":"Venus","correct":false,"locked":true}"#).unwrap();
+    assert!(old.image.is_none() && old.figure.is_none() && old.locked);
+}
+
+/// A question with picture choices goes through share-core (validate, the author's full form, the stripped form with
+/// its pictures ticked) and loads back through the app's types with every choice's picture and (full form) figure
+/// intact.
+#[test]
+fn picture_choices_survive_validation_and_stripping_into_the_app() {
+    let (_, value, _) = fixtures().into_iter().find(|(n, ..)| *n == "question_mc_pictures").unwrap();
+    let env = envelope("question", &value);
+    let v = share_core::validate(&env, &share_core::Limits::default(), &declared()).unwrap();
+    assert!(v.dropped.is_empty(), "{:?}", v.dropped);
+    let back: Question = serde_json::from_value(v.payload.to_value()["question"].clone()).unwrap();
+    let Kind::Mc { answers } = &back.kind else { panic!() };
+    assert_eq!(answers[0].text, "");
+    let img = answers[0].image.as_ref().unwrap();
+    assert_eq!((img.file.clone(), img.width, img.height), (format!("media/{HASH}.png"), 200, 200));
+    assert_eq!(answers[1].image.as_ref().map(|i| i.file.clone()), Some(format!("media/{HASH2}.webp")));
+    assert_eq!(answers[1].figure.as_ref().map(|f| f.id.as_str()), Some("micropipette-reading"));
+    assert!(answers[2].image.is_none() && answers[2].figure.is_none());
+
+    // The stripped form with the question's pictures ticked: every choice keeps its picture, no figure is served.
+    let s = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions { image_ok: vec![0], ..Default::default() }, [9; 32]).unwrap();
+    assert_eq!(s.images_kept, [0]);
+    assert_eq!(s.figures_removed, [0]);
+    let served: Question = serde_json::from_value(s.payload.to_value()["question"].clone()).unwrap();
+    let Kind::Mc { answers } = &served.kind else { panic!() };
+    let mut files: Vec<String> = answers.iter().filter_map(|a| a.image.as_ref().map(|i| i.file.clone())).collect();
+    files.sort();
+    assert_eq!(files, [format!("media/{HASH2}.webp"), format!("media/{HASH}.png")]);
+    assert!(answers.iter().all(|a| a.figure.is_none() && !a.correct));
+    // Unticked: the picture-only choice can not be served blank, so the strip refuses with its exact path.
+    let e = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions::default(), [9; 32]).unwrap_err();
+    assert_eq!(e.iter().map(|e| (e.code, e.path.as_str())).collect::<Vec<_>>(), [("choice_picture_needs_image_ok", "question.kind.Mc.answers[0].image")]);
 }

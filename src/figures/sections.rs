@@ -64,9 +64,68 @@ static FIG_5: [RefSection; 5] = [
 
 static FIG_6: [RefSection; 4] = [
     s("Titles", &["title", "equations", "eq_labels", "title_mode", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
-    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end"], ""),
-    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end"], ""),
-    s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end", "x_left_extension", "x_right_extension"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end", "y_bottom_extension", "y_top_extension"], ""),
+    s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label", "point_radius", "pt_outline", "x_major_every", "x_major_style", "y_major_every", "y_major_style"], ""),
+];
+
+static CONIC_SECTIONS: [RefSection; 6] = [
+    s("Conic", &["conic", "equation", "h", "k", "r", "a", "b", "pf", "axis", "opens"], "Set the conic by its values or type its equation; drag the centre, a vertex, a co-vertex, the focus or P on the figure."),
+    s("Parts", &["show_name", "show_centre", "show_vertices", "show_covertices", "show_foci", "show_directrix", "show_directrices", "show_axes", "show_sym", "show_asymptotes", "show_rect", "show_latus", "show_p", "p_at", "show_ecc", "show_work"], ""),
+    s("Labels", &["pt_labels", "coords", "dec", "eq_form", "title_mode", "title", "label_size", "label_offsets"], "Drag any label on the figure to move it."),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
+    s("Grid and copies", &["minor", "grid", "style", "show_answers", "blank_labels", "blank_curve", "blank_equation", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
+static LIMITS: [RefSection; 7] = [
+    s("Function", &["pieces", "dots"], "One piece a line: a formula with its domain, or points joined smoothly. Click a circle on the figure to switch it open or closed; drag a single point up or down."),
+    s("Questions", &["ask_at", "ask_left", "ask_right", "ask_two", "ask_value", "ask_inf", "ask_disc", "inf_answer", "dne_word"], "Drag a marker along the x-axis to move x = a."),
+    s("On the graph", &["guide", "show_asym", "asym_eqs", "kind_labels", "arrows", "eps_band", "eps"], ""),
+    s("Title and labels", &["title_mode", "title", "label_size"], ""),
+    s("x-axis", &["xmin", "xmax", "xstep", "numbers", "xlabel"], ""),
+    s("y-axis", &["ymin", "ymax", "ystep", "ylabel"], ""),
+    s("Grid and copies", &["minor", "grid", "square", "style", "show_answers", "stu_hide_kinds", "stu_hide_asym"], "Turn off Show answers for the student copy: each answer becomes a line to write on; Student + key exports both."),
+];
+
+static POLAR_PARAMETRIC: [RefSection; 7] = [
+    s("Curves", &["curves", "theta_from", "theta_to", "t_from", "t_to", "style1", "style2", "style3", "style4", "eq_labels", "arrows"], "One curve a line; drag T along curve 1 on the figure."),
+    s("Points", &["points", "marks_at", "mark_curve", "pt_labels", "values", "dec"], "Drag a point on the grid to set its r and \u{3b8}."),
+    s("Tracer and tangent", &["tracer", "trace_at", "tangent", "tangent_at", "tangent_curve"], ""),
+    s("Shading", &["shade", "shade_in", "shade_out", "shade_from", "shade_to", "show_area"], ""),
+    s("Grid", &["grid_kind", "rays", "ray_labels", "rmax", "rstep", "xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "grid", "numbers"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
+static SLOPE_FIELDS: [RefSection; 7] = [
+    s("Equation", &["dydx", "var", "dep"], ""),
+    s("Solution curves", &["points", "curves", "direction", "curve_style", "pt_labels", "solution"], "Drag a starting point on the figure to move its curve; click the field to start a new one."),
+    s("Field", &["show_field", "spacing", "seg_len", "draw_as", "equilibria"], ""),
+    s("Euler's method", &["euler", "h", "n", "euler_table", "compare", "dec"], ""),
+    s("Axes", &["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "minor", "numbers", "grid", "square", "xlabel", "ylabel"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "others", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
+static TANGENT_SECANT: [RefSection; 7] = [
+    s("Function", &["func", "fname", "var", "a", "h", "more_h", "more_a"], "Drag P or Q along the curve on the figure; Q's drag changes h."),
+    s("Lines", &["show_tangent", "show_secant", "normal", "tangent_style", "secant_style", "normal_style", "extent"], ""),
+    s("Slopes", &["show_slopes", "worked", "tangent_eq", "secant_eq", "table", "slope_form", "dec"], ""),
+    s("Marks", &["pt_labels", "secant_triangle", "tangent_triangle", "h_mark", "label_offsets"], "Drag any label on the graph to move it."),
+    s("Axes", &["xmin", "xmax", "xstep", "ymin", "ymax", "ystep", "xunits", "square", "xlabel", "ylabel", "numbers", "minor", "grid"], ""),
+    s("Titles", &["title_mode", "title", "label_size", "style"], ""),
+    s("Student copy", &["show_answers", "student_copy", "key_line"], "Turn off Show answers for the student copy; Student + key exports both."),
+];
+
+static DERIVATIVE_GRAPHS: [RefSection; 7] = [
+    s("Function", &["start", "f", "fp", "pt_x", "pt_y", "name", "graph_labels"], "Type f, or its pieces with their domains (x^2, x < 1; 2 - x, x >= 1). Start from f\u{2032}(x) for an AP graph of f\u{2032}: f is drawn on the key through the point you give."),
+    s("Graphs", &["layout", "show_fpp", "line_f", "line_fp", "line_fpp"], ""),
+    s("Marks", &["crit", "extrema", "inflect", "incdec", "concavity", "sign_fp", "sign_fpp", "absolute", "abs_a", "abs_b", "rounding", "tracer", "tracer_x"], "Drag the tracer on the figure to read f, f\u{2032} and f\u{2033} at one x."),
+    s("x-axis", &["xmin", "xmax", "xstep", "xunits", "xlabel", "numbers"], ""),
+    s("y-axes", &["ymin", "ymax", "ystep", "ymin1", "ymax1", "ystep1", "ymin2", "ymax2", "ystep2", "ylabel"], "Each graph has its own y range."),
+    s("Grid and title", &["minor", "grid", "title", "title_mode", "label_size", "style"], ""),
+    s("Student copy and key", &["show_answers", "student_copy", "key_list"], "Show answers off is the student copy; Student + key exports both."),
 ];
 
 static TRANSFORMATIONS: [RefSection; 7] = [
@@ -1278,6 +1337,9 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "composite-shape" => &FIG_4,
         "cone" => &FIG_5,
         "coordinate-grid" => &FIG_6,
+        "conic-sections" => &CONIC_SECTIONS,
+        "limits-discontinuities" => &LIMITS,
+        "derivative-graphs" => &DERIVATIVE_GRAPHS,
         "transformations" => &TRANSFORMATIONS,
         "cylinder" => &FIG_7,
         "free-body-diagram" => &FIG_8,
@@ -1329,6 +1391,9 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "volume-by-displacement" => &FIG_47,
         "volume-reading" => &FIG_48,
         "waves" => &FIG_49,
+        "tangent-secant-lines" => &TANGENT_SECANT,
+        "polar-parametric" => &POLAR_PARAMETRIC,
+        "slope-fields" => &SLOPE_FIELDS,
         _ => return None,
     })
 }

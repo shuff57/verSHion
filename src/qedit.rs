@@ -34,11 +34,7 @@ pub fn type_tag(k: QKind) -> &'static str {
 }
 
 fn empty_answer() -> Answer {
-    Answer {
-        text: String::new(),
-        correct: false,
-        locked: false,
-    }
+    Answer::default()
 }
 
 fn empty_answers(n: usize) -> Vec<Answer> {
@@ -210,6 +206,8 @@ struct Temp {
     left: Vec<EqField>,
     /// The field the focus was in at the start of the last frame.
     focus_seen: Option<EqField>,
+    /// Answer rows (named by their text field) whose picture tools are open without a picture yet.
+    pics_open: Vec<EqField>,
 }
 
 /// Which text field an equation is being spliced into.
@@ -397,6 +395,9 @@ pub struct Draft {
     /// The True/False answers the teacher picked in this edit (`None` = the question, `Some(i)` =
     /// part `i`): picking counts as entering the key even when it equals the placeholder.
     pub tf_keyed: Vec<Option<usize>>,
+    /// Whose picture the figure picker fills while it is open: the question's own (`None`) or an
+    /// answer choice's. Set by the button that opened the picker; not part of any saved data.
+    pub fig_target: Option<ChoiceAt>,
     /// Fingerprint of the saved content, taken once the first frame has settled; the editor is
     /// "dirty" when the content no longer matches it. Not part of any saved data.
     baseline: Option<String>,
@@ -404,6 +405,18 @@ pub struct Draft {
     confirm: Option<Confirm>,
     /// The modal has skipped its opening frame.
     armed: bool,
+}
+
+/// One answer choice of a draft: of the question itself (`part` None) or of a multipart part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChoiceAt {
+    pub part: Option<usize>,
+    pub choice: usize,
+}
+
+/// A choice with a picture counts as filled, with or without text.
+fn choice_filled(a: &Answer) -> bool {
+    filled(&a.text) || a.image.is_some()
 }
 
 /// A question the footer asks before it acts.
@@ -469,6 +482,7 @@ impl Draft {
             figure: None,
             keyless: false,
             tf_keyed: Vec::new(),
+            fig_target: None,
             baseline: None,
             confirm: None,
             armed: false,
@@ -490,6 +504,7 @@ impl Draft {
             figure: q.figure.clone(),
             keyless: crate::model::is_keyless(q),
             tf_keyed: Vec::new(),
+            fig_target: None,
             baseline: None,
             confirm: None,
             armed: false,
@@ -603,11 +618,14 @@ impl Draft {
         let clean_mc = |answers: &[Answer]| -> Vec<Answer> {
             answers
                 .iter()
-                .filter(|a| !a.text.trim().is_empty())
+                .filter(|a| choice_filled(a))
                 .map(|a| Answer {
                     text: a.text.trim().to_string(),
                     correct: a.correct,
                     locked: a.locked,
+                    image: a.image.clone(),
+                    // (as for the question: a figure origin without its picture is not kept)
+                    figure: if a.image.is_some() { a.figure.clone() } else { None },
                 })
                 .collect()
         };
@@ -771,12 +789,12 @@ fn plural(n: usize, one: &str, many: &str) -> String {
 fn content_items(kind: &Kind) -> Vec<String> {
     match kind {
         Kind::Mc { answers } => {
-            let n = answers.iter().filter(|a| filled(&a.text)).count();
+            let n = answers.iter().filter(|a| choice_filled(a)).count();
             let mut v = Vec::new();
             if n > 0 {
                 v.push(plural(n, "answer choice", "answer choices"));
             }
-            if answers.iter().any(|a| a.correct && filled(&a.text)) {
+            if answers.iter().any(|a| a.correct && choice_filled(a)) {
                 v.push("the answer key".to_string());
             }
             v
@@ -874,15 +892,15 @@ pub fn plan_switch(stem: &str, from: &Kind, to: QKind, tf_keyed: bool) -> Switch
         },
         (Kind::Short { sample }, QKind::Mc) if filled(sample) => {
             let mut answers = empty_answers(4);
-            answers[0] = Answer { text: sample.trim().to_string(), correct: true, locked: false };
+            answers[0] = Answer { text: sample.trim().to_string(), correct: true, locked: false, image: None, figure: None };
             plan.kind = Kind::Mc { answers };
             plan.kept.push("the model answer as the first choice, marked correct".to_string());
             plan.lost.clear();
         }
         (Kind::Tf { correct }, QKind::Mc) if tf_keyed => {
             let mut answers = empty_answers(4);
-            answers[0] = Answer { text: "True".into(), correct: *correct, locked: false };
-            answers[1] = Answer { text: "False".into(), correct: !*correct, locked: false };
+            answers[0] = Answer { text: "True".into(), correct: *correct, locked: false, image: None, figure: None };
+            answers[1] = Answer { text: "False".into(), correct: !*correct, locked: false, image: None, figure: None };
             plan.kind = Kind::Mc { answers };
             plan.kept.push("True and False as the first two choices".to_string());
         }
@@ -901,6 +919,34 @@ pub fn plan_switch(stem: &str, from: &Kind, to: QKind, tf_keyed: bool) -> Switch
 }
 
 impl Draft {
+    /// The answer choice `at` names, if the draft still has it.
+    pub fn choice_mut(&mut self, at: ChoiceAt) -> Option<&mut Answer> {
+        let answers = match (&mut self.kind, at.part) {
+            (Kind::Mc { answers }, None) => answers,
+            (Kind::Multipart { parts }, Some(p)) => match &mut parts.get_mut(p)?.kind {
+                PartKind::Mc { answers } => answers,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        answers.get_mut(at.choice)
+    }
+
+    /// Swaps the question's picture and figure with those of the choice the figure picker is
+    /// working for (`fig_target`); nothing when it works for the question. The bank screen calls
+    /// it before and after the picker draws, so the picker, which reads and fills the question's
+    /// slot, reads and fills that choice's instead.
+    pub fn swap_figure_slot(&mut self) {
+        let Some(at) = self.fig_target else { return };
+        let (mut image, mut figure) = (self.image.take(), self.figure.take());
+        if let Some(a) = self.choice_mut(at) {
+            std::mem::swap(&mut a.image, &mut image);
+            std::mem::swap(&mut a.figure, &mut figure);
+        }
+        self.image = image;
+        self.figure = figure;
+    }
+
     /// A new unsaved question of the chosen type (picked from the New menu).
     pub fn new_of(bank_id: Id, k: QKind) -> Draft {
         let mut d = Draft::new(bank_id);
@@ -946,6 +992,20 @@ enum Ico {
     Down,
     Lock,
     Close,
+    Picture,
+}
+
+impl Ico {
+    fn glyph(self) -> &'static str {
+        use egui_phosphor::regular as ph;
+        match self {
+            Ico::Up => ph::CARET_UP,
+            Ico::Down => ph::CARET_DOWN,
+            Ico::Lock => ph::LOCK_SIMPLE,
+            Ico::Close => ph::X,
+            Ico::Picture => ph::IMAGE,
+        }
+    }
 }
 
 /// A 24 px square painter-drawn icon button (reorder / lock / remove).
@@ -964,26 +1024,19 @@ fn icon_btn(ui: &mut Ui, ico: Ico, on: bool) -> egui::Response {
     } else {
         theme::muted_col()
     };
-    use egui_phosphor::regular as ph;
-    let glyph = match ico {
-        Ico::Up => ph::CARET_UP,
-        Ico::Down => ph::CARET_DOWN,
-        Ico::Lock => ph::LOCK_SIMPLE,
-        Ico::Close => ph::X,
-    };
-    p.text(rect.center(), egui::Align2::CENTER_CENTER, glyph, theme::icon_font(15.0), col);
+    p.text(rect.center(), egui::Align2::CENTER_CENTER, ico.glyph(), theme::icon_font(15.0), col);
     resp
 }
 
 /// A row control that shows only while the row is hovered or has focus. Its 24 px stay reserved
-/// when hidden, so rows never reflow; a lock that is on stays drawn (dim) as the row's state.
+/// when hidden, so rows never reflow; a lock (or picture) that is on stays drawn (dim) as the row's state.
 fn row_btn(ui: &mut Ui, ico: Ico, on: bool, show: bool) -> Option<egui::Response> {
     if show {
         return Some(icon_btn(ui, ico, on));
     }
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), Sense::hover());
     if on {
-        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, egui_phosphor::regular::LOCK_SIMPLE, theme::icon_font(15.0), theme::accent_col().gamma_multiply(0.6));
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, ico.glyph(), theme::icon_font(15.0), theme::accent_col().gamma_multiply(0.6));
     }
     None
 }
@@ -1681,7 +1734,7 @@ fn topic_hint(exists: bool, has_matches: bool) -> &'static str {
 
 /// Stem, per-type answers, then the collapsible Explanation and Image sections.
 fn body(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, textures: &mut HashMap<String, egui::TextureHandle>) {
-    left_col(ui, ctx, draft, key, w);
+    left_col(ui, ctx, draft, key, w, textures);
     ui.add_space(14.0);
     let has_expl = draft.explanation.as_deref().is_some_and(|e| !e.trim().is_empty());
     egui::CollapsingHeader::new(RichText::new("Explanation (optional)").family(theme::bold_family()).size(13.0))
@@ -1718,7 +1771,7 @@ fn first_field(kind: &Kind, blank_rows: Option<&[String]>) -> Option<(EqField, u
     }
 }
 
-fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32) {
+fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, textures: &mut HashMap<String, egui::TextureHandle>) {
     use crate::qcheck::Where;
     // Stem with the equation hook.
     let eq = EqCtx { ctx: ctx.clone(), key };
@@ -1788,7 +1841,8 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
                 "Answers",
                 "Click the circle or press Alt+Enter to mark correct · Enter adds a row · the ∑ button inserts an equation",
             );
-            mc_editor(ui, &eq, answers, usize::MAX, w, &|i| EqField::Mc(i), (EqField::Stem, stem_len));
+            let mut pics = PicCtx { textures, fig_target: &mut draft.fig_target, part: None };
+            mc_editor(ui, &eq, answers, usize::MAX, w, &|i| EqField::Mc(i), (EqField::Stem, stem_len), &mut pics);
             eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
         Kind::Tf { correct } => {
@@ -1821,7 +1875,8 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
         }
         Kind::Multipart { parts } => {
             label(ui, "Parts");
-            multipart_editor(ui, &eq, parts, w, draft.keyless, &mut draft.tf_keyed);
+            let mut pics = PicCtx { textures, fig_target: &mut draft.fig_target, part: None };
+            multipart_editor(ui, &eq, parts, w, draft.keyless, &mut draft.tf_keyed, &mut pics);
             eq.warn_line(ui, w, |a| matches!(a, Where::Parts));
         }
     }
@@ -1835,15 +1890,19 @@ fn chars(s: &str) -> usize {
 /// single choice; several = multiple answer), text, then reorder up/down, lock and remove, which
 /// show on hover or while the row has focus. Keys: Enter adds/next, Tab/Shift+Tab walk, Backspace
 /// on an empty row removes it, Alt+Enter marks correct, Alt+Up/Down moves the row.
-/// `before` is the field Shift+Tab leaves to (and its text length).
-fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: f32, fld: &dyn Fn(usize) -> EqField, before: (EqField, usize)) {
+/// `before` is the field Shift+Tab leaves to (and its text length). A choice can be a picture: the
+/// picture control opens a row under the choice with the question image row's buttons, and a
+/// choice that has a picture shows it there as a thumbnail (its text is then optional).
+#[allow(clippy::too_many_arguments)]
+fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: f32, fld: &dyn Fn(usize) -> EqField, before: (EqField, usize), pics: &mut PicCtx) {
     let mut to_remove: Option<usize> = None;
     let mut move_up: Option<usize> = None;
     let add_anchor = fld(0);
     // keyboard, before the fields see the keys
     if let Some(i) = eq.last_focus().and_then(|f| (0..answers.len()).find(|&i| fld(i) == f)) {
         let n = answers.len();
-        let empty = crate::wysiwyg::visibly_empty(&answers[i].text);
+        // (a picture choice with no text is not empty: Backspace never removes it)
+        let empty = crate::wysiwyg::visibly_empty(&answers[i].text) && answers[i].image.is_none();
         if let Some(nav) = take_nav(&eq.ctx, true, empty) {
             match nav {
                 Nav::MarkCorrect => answers[i].correct = !answers[i].correct,
@@ -1877,18 +1936,21 @@ fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: 
         }
     }
     let n = answers.len();
-    let ctrl_w = 4.0 * 24.0 + 4.0 * 6.0;
+    let ctrl_w = 5.0 * 24.0 + 5.0 * 6.0;
     let field_w = (w - 22.0 - 6.0 - ctrl_w).max(120.0);
+    let mut toggle_pic: Option<usize> = None;
+    let open: Vec<bool> = eq.temp(|t| (0..n).map(|i| t.pics_open.contains(&fld(i))).collect());
     for i in 0..n {
         let locked = answers[i].locked;
+        let has_pic = answers[i].image.is_some();
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             let start = ui.cursor().min;
             if kit::check_circle(ui, answers[i].correct).clicked() {
                 answers[i].correct = !answers[i].correct;
             }
-            let out = eq_line(ui, eq, fld(i), &mut answers[i].text, field_w, "Answer");
-            if answers[i].text.trim().is_empty() && !out.focused {
+            let out = eq_line(ui, eq, fld(i), &mut answers[i].text, field_w, if has_pic { "Text (optional)" } else { "Answer" });
+            if answers[i].text.trim().is_empty() && !has_pic && !out.focused {
                 eq.warn_in(ui, out.rect, crate::qcheck::Where::Answer(i));
             }
             if out.focused && chars(&answers[i].text) < 24 {
@@ -1919,6 +1981,12 @@ fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: 
                     answers[i].locked = !locked;
                 }
             }
+            if let Some(r) = row_btn(ui, Ico::Picture, has_pic || open[i], show) {
+                let tip = if has_pic { "This choice is a picture (shown below)" } else if open[i] { "Hide the picture buttons" } else { "Add a picture to this choice" };
+                if r.on_hover_text(tip).clicked() && !has_pic {
+                    toggle_pic = Some(i);
+                }
+            }
             if n > 2 {
                 if let Some(r) = row_btn(ui, Ico::Close, false, show) {
                     if r.on_hover_text("Remove (Backspace in an empty row)").clicked() {
@@ -1929,7 +1997,20 @@ fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: 
                 ui.add_space(24.0);
             }
         });
+        if has_pic || open[i] {
+            let at = ChoiceAt { part: pics.part, choice: i };
+            ui.push_id(("choice_picture", i), |ui| choice_picture_row(ui, &mut answers[i], at, pics));
+        }
         ui.add_space(2.0);
+    }
+    if let Some(i) = toggle_pic {
+        let f = fld(i);
+        eq.temp(|t| if let Some(k) = t.pics_open.iter().position(|x| *x == f) { t.pics_open.remove(k); } else { t.pics_open.push(f); });
+    }
+    if to_remove.is_some() || move_up.is_some() {
+        // (rows change places: an open picture row would stay with the wrong choice)
+        let fields: Vec<EqField> = (0..n).map(fld).collect();
+        eq.temp(|t| t.pics_open.retain(|f| !fields.contains(f)));
     }
     if let Some(i) = to_remove {
         answers.remove(i);
@@ -2156,7 +2237,7 @@ fn blank_editor(ui: &mut Ui, eq: &EqCtx, draft: &mut Draft, w: f32) {
 }
 
 /// Multipart: each part has a stem, a kind selector and an expanded editor below.
-fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32, keyless: bool, tf_keyed: &mut Vec<Option<usize>>) {
+fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32, keyless: bool, tf_keyed: &mut Vec<Option<usize>>, pics: &mut PicCtx) {
     let mut remove: Option<usize> = None;
     for i in 0..parts.len() {
         let cur = match &parts[i].kind {
@@ -2195,7 +2276,10 @@ fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32, keyl
             Frame::new().inner_margin(Margin::symmetric(18, 6)).show(ui, |ui| {
                 let iw = w - 36.0;
                 match &mut parts[i].kind {
-                    PartKind::Mc { answers } => mc_editor(ui, eq, answers, 6, iw, &|j| EqField::PartMc(i, j), (EqField::PartStem(i), chars(&stem_i))),
+                    PartKind::Mc { answers } => {
+                        let mut pics = PicCtx { textures: &mut *pics.textures, fig_target: &mut *pics.fig_target, part: Some(i) };
+                        mc_editor(ui, eq, answers, 6, iw, &|j| EqField::PartMc(i, j), (EqField::PartStem(i), chars(&stem_i)), &mut pics)
+                    }
                     PartKind::Tf { correct } => {
                         let unset = keyless && !tf_keyed.contains(&Some(i));
                         for (val, name) in [(true, "True"), (false, "False")] {
@@ -2258,14 +2342,32 @@ fn media_texture(
     Some(tex)
 }
 
-/// Attach / preview / remove image row.
-fn draw_image_row(
-    ui: &mut Ui,
-    draft: &mut Draft,
-    textures: &mut HashMap<String, egui::TextureHandle>,
-) {
-    let key = UiId::new("testparrot_qedit_media_status");
+/// What the answer editor needs for choice pictures: the shared media textures, the slot the
+/// figure picker fills, and which part's choices are drawn (None: the question's own).
+struct PicCtx<'a> {
+    textures: &'a mut HashMap<String, egui::TextureHandle>,
+    fig_target: &'a mut Option<ChoiceAt>,
+    part: Option<usize>,
+}
 
+/// Status line key of the question's image row (a choice's adds its place).
+fn media_status_key() -> UiId {
+    UiId::new("testparrot_qedit_media_status")
+}
+
+/// The buttons of a picture row: Attach image..., Remove, Insert figure..., Edit figure and
+/// Import SVG/PNG..., then the figure's name and the attach status. The question's image row and
+/// each choice's picture row draw the same set; `target` names whose picture the figure picker
+/// then fills (None: the question's).
+fn picture_buttons(
+    ui: &mut Ui,
+    image: &mut Option<ImageRef>,
+    figure: &mut Option<crate::model::FigureSpec>,
+    textures: &mut HashMap<String, egui::TextureHandle>,
+    key: UiId,
+    target: Option<ChoiceAt>,
+    fig_target: &mut Option<ChoiceAt>,
+) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
         if ghost_button(ui, "Attach image...").clicked()
@@ -2275,8 +2377,8 @@ fn draw_image_row(
                 Ok(bytes) => match crate::store::put_image(&bytes) {
                     Ok(img) => {
                         media_texture(textures, ui.ctx(), &img.file);
-                        draft.image = Some(img);
-                        draft.figure = None;
+                        *image = Some(img);
+                        *figure = None;
                         ui.ctx().data_mut(|d| d.insert_temp(key, None::<(String, bool)>));
                     }
                     Err(e) => {
@@ -2288,41 +2390,77 @@ fn draw_image_row(
                 }),
             }
         }
-        if draft.image.is_some() && ghost_button(ui, "Remove").clicked() {
-            draft.image = None;
-            draft.figure = None;
+        if image.is_some() && ghost_button(ui, "Remove").clicked() {
+            *image = None;
+            *figure = None;
         }
+        let mut ask = |ui: &Ui, what: u8| {
+            *fig_target = target;
+            crate::figuresui::request(ui.ctx(), what);
+        };
         if ghost_button(ui, "Insert figure...").clicked() {
-            crate::figuresui::request(ui.ctx(), crate::figuresui::REQ_INSERT);
+            ask(ui, crate::figuresui::REQ_INSERT);
         }
-        if draft.figure.is_some() && ghost_button(ui, "Edit figure").clicked() {
-            crate::figuresui::request(ui.ctx(), crate::figuresui::REQ_EDIT);
+        if figure.is_some() && ghost_button(ui, "Edit figure").clicked() {
+            ask(ui, crate::figuresui::REQ_EDIT);
         }
         if ghost_button(ui, "Import SVG/PNG...").clicked() {
-            crate::figuresui::request(ui.ctx(), crate::figuresui::REQ_IMPORT);
+            ask(ui, crate::figuresui::REQ_IMPORT);
         }
     });
-    if let Some(f) = &draft.figure {
+    if let Some(f) = figure.as_ref() {
         ui.label(theme::muted(format!("Generated figure: {}", f.id)).size(11.0));
     }
-
     if let Some(status) = ui.ctx().data_mut(|d| d.get_temp::<(String, bool)>(key)) {
         if !status.0.is_empty() {
             red(ui, &status.0);
         }
     }
+}
 
-    if let Some(img) = draft.image.clone()
-        && let Some(tex) = media_texture(textures, ui.ctx(), &img.file)
-    {
-        ui.add_space(4.0);
+/// A stored picture in the editor's field-coloured frame, at most `max_h` tall.
+fn picture_thumb(ui: &mut Ui, textures: &mut HashMap<String, egui::TextureHandle>, img: &ImageRef, max_h: f32) {
+    if let Some(tex) = media_texture(textures, ui.ctx(), &img.file) {
         Frame::new()
             .fill(theme::field())
             .corner_radius(CornerRadius::same(kit::R_FIELD))
             .inner_margin(Margin::same(6))
             .show(ui, |ui| {
-                ui.add(egui::Image::new(&tex).max_height(110.0));
+                ui.add(egui::Image::new(&tex).max_height(max_h));
             });
+    }
+}
+
+/// Tallest a choice's thumbnail is drawn in the editor.
+const CHOICE_THUMB_H: f32 = 72.0;
+
+/// Under an answer row: the choice's picture as a thumbnail beside the picture buttons, lined up
+/// with the row's text field.
+fn choice_picture_row(ui: &mut Ui, a: &mut Answer, at: ChoiceAt, pics: &mut PicCtx) {
+    let key = media_status_key().with(("choice", at.part, at.choice));
+    ui.horizontal_top(|ui| {
+        // (the correct-circle and its gap: the picture sits under the text it goes with)
+        ui.add_space(22.0 + 6.0);
+        ui.spacing_mut().item_spacing.x = 8.0;
+        if let Some(img) = a.image.clone() {
+            picture_thumb(ui, pics.textures, &img, CHOICE_THUMB_H);
+        }
+        ui.vertical(|ui| {
+            picture_buttons(ui, &mut a.image, &mut a.figure, pics.textures, key, Some(at), pics.fig_target);
+        });
+    });
+}
+
+/// Attach / preview / remove image row.
+fn draw_image_row(
+    ui: &mut Ui,
+    draft: &mut Draft,
+    textures: &mut HashMap<String, egui::TextureHandle>,
+) {
+    picture_buttons(ui, &mut draft.image, &mut draft.figure, textures, media_status_key(), None, &mut draft.fig_target);
+    if let Some(img) = draft.image.clone() {
+        ui.add_space(4.0);
+        picture_thumb(ui, textures, &img, 110.0);
     }
 }
 
@@ -2389,12 +2527,12 @@ mod tests {
                     Answer {
                         text: "4".to_string(),
                         correct: true,
-                        locked: false,
+                        locked: false, image: None, figure: None
                     },
                     Answer {
                         text: "5".to_string(),
                         correct: false,
-                        locked: false,
+                        locked: false, image: None, figure: None
                     },
                 ],
             },
@@ -2796,7 +2934,7 @@ mod tests {
             let mut m = Modal::new();
             let mut d = Draft::new("b".to_string());
             d.stem = "Which is prime".to_string();
-            d.kind = Kind::Mc { answers: (0..9).map(|i| Answer { text: format!("a{i}"), correct: i == 1, locked: false }).collect() };
+            d.kind = Kind::Mc { answers: (0..9).map(|i| Answer { text: format!("a{i}"), correct: i == 1, locked: false, image: None, figure: None }).collect() };
             m.settle(&mut d, 8);
             let sid: UiId = m.ctx.data(|dd| dd.get_temp(UiId::new("qedit_test_scroll_id"))).unwrap();
             d.confirm = Some(c.clone());
@@ -2896,7 +3034,7 @@ mod tests {
         d.stem = "Parts".to_string();
         if let Kind::Multipart { parts } = &mut d.kind {
             parts[1].stem = "second".to_string();
-            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }, Answer { text: "y".into(), correct: false, locked: false }] };
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }, Answer { text: "y".into(), correct: false, locked: false, image: None, figure: None }] };
         }
         assert_eq!(msgs_of(&d), ["Part 1 needs its own stem", "Part 2 needs a correct answer"]);
         assert_eq!(d.build_question(None).stem, "Parts");
@@ -3012,7 +3150,7 @@ mod tests {
             parts[0].stem = "first".into();
             parts[0].kind = PartKind::Mc { answers: vec![] };
             parts[1].stem = "second".into();
-            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }] };
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false, image: None, figure: None }] };
         }
         // (a new draft, no part visited)
         let mut m = Modal::new();
@@ -3075,7 +3213,7 @@ mod tests {
     }
 
     fn mc(texts: &[(&str, bool)]) -> Kind {
-        Kind::Mc { answers: texts.iter().map(|(t, c)| Answer { text: t.to_string(), correct: *c, locked: false }).collect() }
+        Kind::Mc { answers: texts.iter().map(|(t, c)| Answer { text: t.to_string(), correct: *c, locked: false, image: None, figure: None }).collect() }
     }
 
     #[test]
@@ -3341,5 +3479,420 @@ mod tests {
         assert_eq!(t.chars().skip(*at).take(run.chars().count()).collect::<String>(), *run);
         assert!(!has_picture("a [pictures] b"));
         assert!(!renders_rich("Number of charge clouds: 4"));
+    }
+}
+
+/// Test helpers for picture choices, shared with the bank and exam screens' tests: a solid test
+/// texture, what a frame drew (text runs and textured rects), and a small software painter so a
+/// headless frame can be looked at as a PNG (no GPU, no window).
+#[cfg(test)]
+pub(crate) mod pic_test {
+    use std::collections::HashMap;
+
+    /// A `w` x `h` texture of one colour.
+    pub fn solid(ctx: &egui::Context, name: &str, w: usize, h: usize, rgb: [u8; 3]) -> egui::TextureHandle {
+        let img = egui::ColorImage::new([w, h], vec![egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]); w * h]);
+        ctx.load_texture(name, img, egui::TextureOptions::LINEAR)
+    }
+
+    /// Text runs (with their screen rects) and textured rects (pictures) of a frame's shapes.
+    #[derive(Default, Debug)]
+    pub struct Drawn {
+        pub text: Vec<(String, egui::Rect)>,
+        pub images: Vec<(egui::TextureId, egui::Rect)>,
+    }
+
+    impl Drawn {
+        pub fn of(shapes: &[egui::epaint::ClippedShape]) -> Drawn {
+            fn walk(s: &egui::Shape, d: &mut Drawn) {
+                match s {
+                    egui::Shape::Text(t) => d.text.push((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()))),
+                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, d)),
+                    egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::Managed(0) => {
+                        let r = m.vertices.iter().fold(egui::Rect::NOTHING, |r, v| r.union(egui::Rect::from_min_max(v.pos, v.pos)));
+                        d.images.push((m.texture_id, r));
+                    }
+                    egui::Shape::Rect(r) if r.fill_texture_id() != egui::TextureId::Managed(0) => d.images.push((r.fill_texture_id(), r.rect)),
+                    _ => {}
+                }
+            }
+            let mut d = Drawn::default();
+            for s in shapes {
+                walk(&s.shape, &mut d);
+            }
+            d
+        }
+
+        /// The first text run equal to `s` (trimmed).
+        pub fn find(&self, s: &str) -> Option<egui::Rect> {
+            self.text.iter().find(|(t, _)| t.trim() == s).map(|(_, r)| *r)
+        }
+
+        /// How many text runs equal `s` (trimmed).
+        pub fn count(&self, s: &str) -> usize {
+            self.text.iter().filter(|(t, _)| t.trim() == s).count()
+        }
+
+        /// The pictures drawn with texture `id`.
+        pub fn pictures(&self, id: egui::TextureId) -> Vec<egui::Rect> {
+            self.images.iter().filter(|(t, _)| *t == id).map(|(_, r)| *r).collect()
+        }
+    }
+
+    /// A small software painter for egui's meshes.
+    #[derive(Default)]
+    pub struct Painter {
+        textures: HashMap<egui::TextureId, egui::ColorImage>,
+    }
+
+    impl Painter {
+        pub fn apply(&mut self, delta: &egui::TexturesDelta) {
+            for (id, list) in &delta.set {
+                for d in list {
+                    let egui::ImageData::Color(img) = &d.image;
+                    match d.pos {
+                        None => {
+                            self.textures.insert(*id, (**img).clone());
+                        }
+                        Some([x0, y0]) => {
+                            let Some(t) = self.textures.get_mut(id) else { continue };
+                            for y in 0..img.size[1] {
+                                for x in 0..img.size[0] {
+                                    t.pixels[(y0 + y) * t.size[0] + x0 + x] = img.pixels[y * img.size[0] + x];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// The frame `out` as an image `w` x `h`, on `bg`.
+        pub fn paint(&mut self, ctx: &egui::Context, out: egui::FullOutput, w: usize, h: usize, bg: egui::Color32) -> image::RgbaImage {
+            self.apply(&out.textures_delta);
+            let mut px = vec![[bg.r() as f32, bg.g() as f32, bg.b() as f32, 255.0]; w * h];
+            for p in ctx.tessellate(out.shapes, out.pixels_per_point) {
+                let egui::epaint::Primitive::Mesh(mesh) = p.primitive else { continue };
+                let tex = self.textures.get(&mesh.texture_id);
+                let clip = p.clip_rect;
+                for tri in mesh.indices.chunks(3) {
+                    let [a, b, c] = [mesh.vertices[tri[0] as usize], mesh.vertices[tri[1] as usize], mesh.vertices[tri[2] as usize]];
+                    let area = (b.pos.x - a.pos.x) * (c.pos.y - a.pos.y) - (c.pos.x - a.pos.x) * (b.pos.y - a.pos.y);
+                    if area.abs() < 1e-6 {
+                        continue;
+                    }
+                    let x0 = a.pos.x.min(b.pos.x).min(c.pos.x).max(clip.min.x).max(0.0).floor() as usize;
+                    let x1 = (a.pos.x.max(b.pos.x).max(c.pos.x).min(clip.max.x).min(w as f32).ceil() as usize).min(w);
+                    let y0 = a.pos.y.min(b.pos.y).min(c.pos.y).max(clip.min.y).max(0.0).floor() as usize;
+                    let y1 = (a.pos.y.max(b.pos.y).max(c.pos.y).min(clip.max.y).min(h as f32).ceil() as usize).min(h);
+                    for y in y0..y1 {
+                        for x in x0..x1 {
+                            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                            let w0 = ((b.pos.x - fx) * (c.pos.y - fy) - (c.pos.x - fx) * (b.pos.y - fy)) / area;
+                            let w1 = ((c.pos.x - fx) * (a.pos.y - fy) - (a.pos.x - fx) * (c.pos.y - fy)) / area;
+                            let w2 = 1.0 - w0 - w1;
+                            if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
+                                continue;
+                            }
+                            let mix = |f: fn(&egui::epaint::Vertex) -> f32| w0 * f(&a) + w1 * f(&b) + w2 * f(&c);
+                            let col = [mix(|v| v.color.r() as f32), mix(|v| v.color.g() as f32), mix(|v| v.color.b() as f32), mix(|v| v.color.a() as f32)];
+                            let t = tex.map_or([255.0; 4], |t| {
+                                let u = (mix(|v| v.uv.x) * t.size[0] as f32) as usize;
+                                let v = (mix(|v| v.uv.y) * t.size[1] as f32) as usize;
+                                let c = t.pixels[v.min(t.size[1] - 1) * t.size[0] + u.min(t.size[0] - 1)];
+                                [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
+                            });
+                            let src: Vec<f32> = (0..4).map(|i| col[i] * t[i] / 255.0).collect();
+                            let d = &mut px[y * w + x];
+                            let k = 1.0 - src[3] / 255.0;
+                            for i in 0..4 {
+                                d[i] = src[i] + d[i] * k;
+                            }
+                        }
+                    }
+                }
+            }
+            image::RgbaImage::from_fn(w as u32, h as u32, |x, y| {
+                let p = px[y as usize * w + x as usize];
+                image::Rgba([p[0].min(255.0) as u8, p[1].min(255.0) as u8, p[2].min(255.0) as u8, 255])
+            })
+        }
+    }
+
+    /// `PA_SHOTS=<dir>`: where the hand-run screenshot tests write their PNGs.
+    pub fn shot_dir() -> Option<std::path::PathBuf> {
+        let d = std::path::PathBuf::from(std::env::var("PA_SHOTS").ok()?);
+        std::fs::create_dir_all(&d).ok()?;
+        Some(d)
+    }
+}
+
+#[cfg(test)]
+mod picture_choice_tests {
+    use super::pic_test::{solid, Drawn, Painter};
+    use super::*;
+    use crate::model::FigureSpec;
+
+    fn img(file: &str) -> ImageRef {
+        ImageRef { file: file.to_string(), width: 160, height: 120 }
+    }
+
+    fn pic(file: &str, correct: bool) -> Answer {
+        Answer { image: Some(img(file)), correct, ..Answer::default() }
+    }
+
+    fn spec(id: &str) -> FigureSpec {
+        FigureSpec { id: id.to_string(), params: Default::default() }
+    }
+
+    /// Four pie charts as A-D (A made by the figure engine).
+    fn pie_draft() -> Draft {
+        let mut d = Draft::new("b".to_string());
+        d.stem = "Which pie chart shows 25%?".to_string();
+        let mut a = pic("media/pie-a.png", false);
+        a.figure = Some(spec("pie-chart"));
+        d.kind = Kind::Mc { answers: vec![a, pic("media/pie-b.png", true), pic("media/pie-c.png", false), pic("media/pie-d.png", false)] };
+        d
+    }
+
+    #[test]
+    fn a_picture_choice_with_no_text_is_kept_with_its_picture_and_figure() {
+        let mut d = Draft::new("b".to_string());
+        d.stem = "Pick".to_string();
+        let mut stray = Answer::new("", false);
+        stray.figure = Some(spec("pie-chart"));
+        let mut a = pic("media/a.png", true);
+        a.figure = Some(spec("pie-chart"));
+        let mut b = pic("media/b.png", false);
+        b.text = "  half  ".to_string();
+        d.kind = Kind::Mc { answers: vec![a, Answer::new("", false), b, stray] };
+        let q = d.build_question(None);
+        let Kind::Mc { answers } = &q.kind else { panic!() };
+        assert_eq!(answers.len(), 2, "the empty rows go, the picture choices stay: {answers:?}");
+        assert_eq!(answers[0].image.as_ref().map(|i| i.file.as_str()), Some("media/a.png"));
+        assert_eq!(answers[0].figure, Some(spec("pie-chart")));
+        assert!(answers[0].correct && answers[0].text.is_empty());
+        assert_eq!((answers[1].text.as_str(), answers[1].image.is_some()), ("half", true));
+        // the same in a part
+        d.kind = Kind::Multipart { parts: vec![Part { stem: "a".into(), kind: PartKind::Mc { answers: vec![pic("media/a.png", true), Answer::new("", false)] } }] };
+        let q = d.build_question(None);
+        let Kind::Multipart { parts } = &q.kind else { panic!() };
+        assert!(matches!(&parts[0].kind, PartKind::Mc { answers } if answers.len() == 1 && answers[0].image.is_some()));
+    }
+
+    #[test]
+    fn picture_choices_count_as_content() {
+        let mut d = Draft::new("b".to_string());
+        assert!(d.is_empty_draft());
+        d.kind = Kind::Mc { answers: vec![pic("media/a.png", true), Answer::new("", false)] };
+        assert!(!d.is_empty_draft() && d.can_save(), "a draft of only a picture choice is not empty");
+        assert!(d.kind_has_content());
+        let plan = d.switch_plan(QKind::Short);
+        assert!(plan.lost.iter().any(|l| l == "1 answer choice") && plan.lost.iter().any(|l| l == "the answer key"), "{:?}", plan.lost);
+        // text-only rows count as before
+        d.kind = Kind::Mc { answers: vec![Answer::new("x", true), Answer::new("", false)] };
+        assert_eq!(content_items(&d.kind), vec!["1 answer choice".to_string(), "the answer key".to_string()]);
+    }
+
+    /// The figure picker fills the question's slot; around it the bank screen swaps in the slot of
+    /// the choice that opened it, so an inserted figure lands on that choice and the question's
+    /// own picture is untouched.
+    #[test]
+    fn the_figure_picker_fills_the_choice_that_opened_it() {
+        let file = |i: &Option<ImageRef>| i.as_ref().map(|i| i.file.clone());
+        let mut d = pie_draft();
+        d.image = Some(img("media/question.png"));
+        d.figure = Some(spec("bar-chart"));
+        d.fig_target = Some(ChoiceAt { part: None, choice: 0 });
+        d.swap_figure_slot();
+        // what the picker sees: choice A's picture and figure (Edit figure reopens it)
+        assert_eq!(file(&d.image).as_deref(), Some("media/pie-a.png"));
+        assert_eq!(d.figure, Some(spec("pie-chart")));
+        // the picker inserts
+        d.image = Some(img("media/new.png"));
+        d.figure = Some(spec("pie-chart-2"));
+        d.swap_figure_slot();
+        assert_eq!(file(&d.image).as_deref(), Some("media/question.png"));
+        assert_eq!(d.figure, Some(spec("bar-chart")));
+        let Kind::Mc { answers } = &d.kind else { panic!() };
+        assert_eq!(file(&answers[0].image).as_deref(), Some("media/new.png"));
+        assert_eq!(answers[0].figure, Some(spec("pie-chart-2")));
+        // a part's choice
+        d.kind = Kind::Multipart { parts: vec![Part { stem: "a".into(), kind: PartKind::Tf { correct: true } }, Part { stem: "b".into(), kind: PartKind::Mc { answers: vec![Answer::new("x", false), Answer::new("y", false)] } }] };
+        let at = ChoiceAt { part: Some(1), choice: 1 };
+        d.fig_target = Some(at);
+        d.swap_figure_slot();
+        assert!(d.image.is_none() && d.figure.is_none(), "the choice's empty slot");
+        d.image = Some(img("media/part.png"));
+        d.swap_figure_slot();
+        assert_eq!(d.choice_mut(at).and_then(|a| a.image.clone()).map(|i| i.file).as_deref(), Some("media/part.png"));
+        assert_eq!(file(&d.image).as_deref(), Some("media/question.png"));
+        // a target that is not a choice changes nothing; nor do the question's own buttons
+        for t in [Some(ChoiceAt { part: Some(0), choice: 0 }), None] {
+            d.fig_target = t;
+            d.swap_figure_slot();
+            assert_eq!(file(&d.image).as_deref(), Some("media/question.png"));
+        }
+    }
+
+    /// Frames of the real modal, headless, with each picture's texture already loaded.
+    struct Rig {
+        ctx: egui::Context,
+        tex: HashMap<String, egui::TextureHandle>,
+        t: f64,
+        painter: Painter,
+    }
+
+    impl Rig {
+        fn new(files: &[String]) -> Rig {
+            let ctx = egui::Context::default();
+            crate::theme::setup(&ctx);
+            let mut tex = HashMap::new();
+            let cols = [[230, 120, 60], [70, 140, 210], [90, 170, 90], [200, 80, 160]];
+            for (i, f) in files.iter().enumerate() {
+                tex.insert(f.clone(), solid(&ctx, f, 160, 120, cols[i % 4]));
+            }
+            Rig { ctx, tex, t: 0.0, painter: Painter::default() }
+        }
+
+        fn run(&mut self, d: &mut Draft, events: Vec<egui::Event>) -> egui::FullOutput {
+            let mut input = egui::RawInput::default();
+            input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 900.0)));
+            input.time = Some(self.t);
+            input.events = events;
+            self.t += 0.05;
+            let (ctx, tex) = (self.ctx.clone(), &mut self.tex);
+            ctx.run_ui(input, |_ui| {
+                draw_modal(&ctx, d, &[], tex);
+            })
+        }
+
+        fn frame(&mut self, d: &mut Draft, events: Vec<egui::Event>) -> Drawn {
+            let out = self.run(d, events);
+            self.painter.apply(&out.textures_delta);
+            let drawn = Drawn::of(&out.shapes);
+            out.drop_without_applying_deltas();
+            drawn
+        }
+
+        fn settle(&mut self, d: &mut Draft, n: usize) -> Drawn {
+            let mut last = Drawn::default();
+            for _ in 0..n {
+                last = self.frame(d, vec![]);
+            }
+            last
+        }
+    }
+
+    fn files(d: &Draft) -> Vec<String> {
+        let Kind::Mc { answers } = &d.kind else { panic!() };
+        answers.iter().filter_map(|a| a.image.as_ref().map(|i| i.file.clone())).collect()
+    }
+
+    /// Each picture choice shows its picture as a thumbnail under its row, beside the picture
+    /// buttons, in order A-D; the figure-made one offers Edit figure.
+    #[test]
+    fn the_editor_shows_each_choice_picture_with_its_buttons() {
+        let mut d = pie_draft();
+        let fs = files(&d);
+        let mut rig = Rig::new(&fs);
+        let drawn = rig.settle(&mut d, 8);
+        // (the body scrolls: D is below the fold, so it is looked for after a scroll down)
+        let over = egui::Event::PointerMoved(Pos2::new(640.0, 500.0));
+        rig.frame(&mut d, vec![over.clone()]);
+        rig.frame(&mut d, vec![over, egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -400.0), phase: egui::TouchPhase::Move, modifiers: Modifiers::NONE }]);
+        let scrolled = rig.settle(&mut d, 6);
+        let mut tops = Vec::new();
+        for (i, f) in fs.iter().enumerate() {
+            let pics = (if i < 3 { &drawn } else { &scrolled }).pictures(rig.tex[f].id());
+            assert_eq!(pics.len(), 1, "{f}: one thumbnail: {drawn:?}");
+            let r = pics[0];
+            assert!(r.height() <= CHOICE_THUMB_H + 0.5 && r.height() > 40.0, "{f}: a thumbnail, {r:?}");
+            tops.push(r.top());
+        }
+        assert!(tops[..3].windows(2).all(|w| w[0] < w[1]), "in choice order: {tops:?}");
+        let c = scrolled.pictures(rig.tex[&fs[2]].id());
+        assert!(c.first().is_none_or(|c| c.top() < tops[3]), "D under C");
+        // each picture choice can drop its picture (D's button is below the fold at first)
+        assert_eq!(drawn.count("Remove"), 3);
+        assert!(scrolled.text.iter().any(|(t, r)| t.trim() == "Remove" && (r.top() - tops[3]).abs() < 12.0), "D's Remove beside its thumbnail");
+        assert_eq!(drawn.count("Edit figure"), 1, "only the figure-made choice reopens a figure");
+        assert_eq!(drawn.count("Generated figure: pie-chart"), 1);
+        assert_eq!(drawn.count("Text (optional)"), 4, "the text of a picture choice is optional");
+        assert_eq!(drawn.count("Answer"), 0);
+    }
+
+    /// Backspace in the empty text of a picture choice keeps the choice (it is not empty).
+    #[test]
+    fn backspace_never_removes_a_picture_choice() {
+        let mut d = pie_draft();
+        let fs = files(&d);
+        let mut rig = Rig::new(&fs);
+        rig.settle(&mut d, 8);
+        let key = |k: Key| egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: Modifiers::NONE };
+        // the stem has the keyboard: Tab to choice A, Tab to choice B
+        for _ in 0..2 {
+            rig.frame(&mut d, vec![key(Key::Tab)]);
+            rig.settle(&mut d, 4);
+        }
+        for _ in 0..3 {
+            rig.frame(&mut d, vec![key(Key::Backspace)]);
+            rig.settle(&mut d, 3);
+        }
+        assert_eq!(files(&d).len(), 4, "every picture choice is still there");
+        // a text-only empty row still goes (as before)
+        let mut t = Draft::new("b".to_string());
+        t.stem = "Pick".to_string();
+        let mut rig = Rig::new(&[]);
+        rig.settle(&mut t, 8);
+        rig.frame(&mut t, vec![key(Key::Tab)]);
+        rig.settle(&mut t, 4);
+        rig.frame(&mut t, vec![key(Key::Backspace)]);
+        rig.settle(&mut t, 4);
+        let Kind::Mc { answers } = &t.kind else { panic!() };
+        assert_eq!(answers.len(), 3, "an empty text row is removed: {answers:?}");
+    }
+
+    /// A text-only question draws no picture row and no thumbnail; the picture control opens one
+    /// (the buttons, no picture yet) under that choice only.
+    #[test]
+    fn a_text_choice_has_no_picture_row_until_it_is_asked_for() {
+        let mut d = Draft::new("b".to_string());
+        d.stem = "Pick".to_string();
+        d.kind = Kind::Mc { answers: vec![Answer::new("one", true), Answer::new("two", false), Answer::new("three", false)] };
+        let mut rig = Rig::new(&[]);
+        let drawn = rig.settle(&mut d, 8);
+        assert!(drawn.find("Attach image...").is_none(), "(the question's Image section is closed)");
+        let key = temp_key(&d.bank_id, d.qid.as_ref());
+        rig.ctx.data_mut(|m| m.get_temp_mut_or_default::<Temp>(key).pics_open = vec![EqField::Mc(1)]);
+        let drawn = rig.settle(&mut d, 3);
+        let attach: Vec<Rect> = drawn.text.iter().filter(|(t, _)| t.trim() == "Attach image...").map(|(_, r)| *r).collect();
+        assert_eq!(attach.len(), 1, "one picture row");
+        let (two, three) = (drawn.find("two").unwrap(), drawn.find("three").unwrap());
+        assert!(two.bottom() < attach[0].top() && attach[0].bottom() < three.top(), "under choice B: {two:?} {:?} {three:?}", attach[0]);
+        assert!(drawn.find("Remove").is_none(), "nothing to remove yet");
+        assert_eq!(drawn.count("Insert figure..."), 1);
+    }
+
+    /// Hand-run: `PA_SHOTS=<dir> cargo test --offline --lib qedit::picture_choice_tests::shot -- --ignored`
+    /// writes the editor with four picture choices as `editor-picture-choices.png`.
+    #[test]
+    #[ignore = "writes a PNG; run by hand with PA_SHOTS=<dir>"]
+    fn shot_editor_with_picture_choices() {
+        let Some(dir) = super::pic_test::shot_dir() else { return };
+        let mut d = pie_draft();
+        // B also has a caption
+        if let Kind::Mc { answers } = &mut d.kind {
+            answers[1].text = "One quarter shaded".to_string();
+        }
+        let fs = files(&d);
+        let mut rig = Rig::new(&fs);
+        rig.settle(&mut d, 8);
+        let out = rig.run(&mut d, vec![egui::Event::PointerGone]);
+        let ctx = rig.ctx.clone();
+        let img = rig.painter.paint(&ctx, out, 1280, 900, crate::theme::cream());
+        let p = dir.join("editor-picture-choices.png");
+        img.save(&p).unwrap();
+        println!("{}", p.display());
     }
 }

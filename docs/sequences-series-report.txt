@@ -1,0 +1,249 @@
+Implementation report: sequences-series, independent-check revision R2
+Current R2 commits: 48469db (structural limits), 5f64a43 (bounded cached sums); final report commit is HEAD.
+The earlier R1 report and all 36 frozen evidence tokens follow; the R2 additions and verification are at the end.
+Branch: newfig-sequences
+Starting revision: fe8c8d8; original base new-figures-base adb6747.
+Only /home/shuff57/Documents/GitHub/verSHion-parity3 was modified. No push, browser or subagents.
+The full checker rejection report was read. All blocking and near-blocking items have implementation and regression coverage.
+
+Revision commits (the final report commit is HEAD):
+9c2e87f Quantize dragged sequence values in integer decimal units and sweep 14400 drop positions
+7cbc9f2 Keep requested student sums out of lists and graph labels and exhaust every worksheet toggle combination
+326eef7 Use one seed for first-order recurrences and hide the unused second seed with accepted textbook aliases
+056e3e3 Refuse ambiguous implicit fraction products and ask for explicit denominator brackets
+060149b Evaluate textbook functions inside exact expressions, preserve proven trig zeros and support factorial sequences
+a095753 Derive rational-function and standard sequence limits and first-order recurrence fixed points with numeric confirmation
+2c828cf Separate named number-line limits from axis numbers, dash zero limits and keep axis and point labels clear
+1ea8307 Add requested sums through 1000 terms with big rational formulas, sigma notation and student blanks
+cc0063f Prove exact trig-period cancellation and cover every new worksheet toggle and crowded checker label case
+b9d80a3 Show seed choices on every recursive key and strengthen checklist evidence for points, formulas, lists, limits and drags
+0b20889 Verify 21 textbook sequences against independent term and partial-sum oracles and retain compact exact large-sum forms
+446ad74 Prove pi factors symbolically, refuse unresolved trig poles and cache limit analysis during label placement
+71494e3 Finish worksheet control relevance and persistence, keep coefficients bracketed and typeset separated sigma bounds
+867b379 Classify a series as divergent when its established term limit is nonzero or fails to exist
+
+Controls (all 40 parameter keys and the example selector):
+mode — Arithmetic, Geometric, Explicit f(n), or Recursive.
+first — First value, absent for Explicit.
+difference — Arithmetic difference, typed as a number or exact expression.
+ratio — Geometric multiplier, including negative and fractional values.
+formula — Typed explicit expression; ambiguous 1/2n-style spellings are refused with bracket examples.
+recurrence — Typed previous-term expression; a_(n-1), a_{n-1}, a(n-1), and Unicode subscripts are accepted.
+second — Second seed, shown and used only if the recurrence refers to the second previous term.
+count — Number of displayed terms, 3–24.
+start — Index starts at 0 or 1.
+display — Terms, Partial sums, or Both; aligned graphs always show Both.
+layout — One grid, Two aligned graphs, or Number line.
+join — Light joins between consecutive visible marks, with gaps around text.
+marks — Dots or Spikes.
+point_values — Values beside marks; long values are explicitly approximate, with exact key/list values retained.
+terms — Term list; hidden and inert for Missing terms, whose requested list is forced on.
+sums — Partial-sum list; student sum answers are blanked whenever a sum is requested.
+explicit — Written explicit formula, or a student blank. Find formula always retains a blank even with both formula toggles off; the toggle is hidden when that compulsory blank makes it inert.
+recursive — Written recurrence and the actual seeds/domain, or a student blank.
+sum — Finite sum of the displayed terms, general arithmetic/geometric formula, and established geometric infinity sum.
+sum_n — Separately request the sum of the first N terms, independently of how many terms are drawn.
+sum_count — N, 1–1000; shown only with sum_n or sigma.
+sigma — Sigma notation for the current sequence, from k=start through start+N-1; expression blank on a student copy.
+convergence — Derived sequence/series classification and limit; unsupported cases remain cannot determine.
+limit — Established finite term/sum limit, named and dashed on a grid, named above the number line.
+band — Standard L ± epsilon band, total width 2epsilon.
+epsilon — Typed positive distance from L.
+from — Lower vertical bound (horizontal value bound on the number line), -100 through 99.
+to — Upper bound, -99 through 100; must exceed From.
+step — Count by, 0.000001 through 20; all axis controls use 0.000001 increments; dense requests receive notes.
+grid — None, Light, Standard, Bold; hidden on the number line.
+xlabel — Index-axis name at the arrow; hidden on the number line. A long multiword name is shortened with a note (Term number becomes Term); unfitting/reserved names are omitted with a note.
+ylabel — Value-axis name, with the same fitting/reserved-name rule.
+title — Teacher caption, up to 48 characters.
+blank_title — Blank caption line; student copies always have a blank title.
+task — Find formula, Missing terms, Continue.
+missing — Comma-separated requested indices; shown on student copies and keys for Missing terms; key rows mark these as asked.
+given — First 1–6 terms provided for Continue; at least one term remains blank.
+show_answers — Key/student copy toggle. Answer-bearing points, values, formulas, sums and descriptions obey the selected task.
+style — Colour or grey-only Print.
+label_size — Small, Medium, Large, with canvas and label placement scaled accordingly.
+Classic examples — Arithmetic, Geometric halving, Alternating halves, Fibonacci, Reciprocals, Geometric partial sums.
+
+Frozen checklist evidence: each JSON overrides the opening state and is asserted to change SVG bytes. The frozen checklist file itself is untouched.
+cap-01 changes:{"first":"3"}
+cap-02 changes:{"mode":"Geometric","ratio":"-1/2"}
+cap-03 changes:{"formula":"n^2","from":0,"mode":"Explicit","step":10,"to":70}
+cap-04 changes:{"explicit":false,"first":"1","from":0,"mode":"Recursive","recurrence":"a_(n-1)+a_(n-2)","recursive":true,"second":"1","step":5,"to":25}
+cap-05 changes:{"count":10,"start":"0"}
+cap-06 changes:{"count":12,"explicit":false,"formula":"(-1)^n*n/(n+1)","from":-1.2,"mode":"Explicit","step":0.4,"terms":false,"to":1.2}
+cap-07 changes:{"display":"Partial sums","step":10,"to":50}
+cap-08 changes:{"display":"Partial sums","explicit":false,"first":"6","from":0,"limit":true,"mode":"Geometric","ratio":"1/2","step":2,"terms":false,"to":14}
+cap-09 changes:{"first":"1/3"}
+cap-10 changes:{"explicit":true,"first":"3","from":0,"mode":"Geometric","ratio":"2/3","start":"0","step":1,"terms":false,"to":4}
+cap-11 changes:{"recursive":true}
+cap-12 changes:{"point_values":true}
+cap-13 changes:{"count":10,"explicit":false,"formula":"(-1)^n/(n+1)","from":-1,"mode":"Explicit","start":"0","step":0.5,"terms":true,"to":1}
+cap-14 changes:{"step":10,"sums":true,"to":50}
+cap-15 changes:{"mode":"Geometric","sum":true}
+cap-16 changes:{"convergence":true,"mode":"Geometric"}
+cap-17 changes:{"join":true}
+cap-18 changes:{"marks":"Spikes"}
+cap-19 changes:{"display":"Both","layout":"Two aligned graphs","step":10,"to":50}
+cap-20 changes:{"band":true,"limit":true,"mode":"Geometric"}
+cap-21 changes:{"from":-1,"layout":"Number line","limit":true,"mode":"Geometric","to":3}
+cap-22 changes:{"first":"8","mode":"Geometric"}
+cap-23 changes:{"from":-4,"step":4,"to":16}
+cap-24 changes:{"grid":"Bold"}
+cap-25 changes:{"xlabel":"Term","ylabel":"Value"}
+cap-26 changes:{"title":"A growing sequence"}
+cap-27 changes:{"blank_title":true}
+cap-28 changes:{"label_size":"Large"}
+cap-29 changes:{"style":"Print"}
+cap-30 changes:{"show_answers":false}
+cap-31 changes:{"show_answers":false,"task":"Missing terms"}
+cap-32 changes:{"show_answers":false,"task":"Continue"}
+cap-33 changes:{"convergence":true,"first":"3","from":-2,"missing":"4,6,8","mode":"Geometric","point_values":true,"ratio":"-1/2","recursive":true,"show_answers":true,"step":1,"sum":true,"task":"Missing terms","to":4}
+cap-34 changes:{"first":"10.7","from":0,"step":5,"to":20}
+cap-35 changes:{"difference":"-0.35","from":-2,"step":1,"to":4}
+cap-36 changes:{"count":10}
+
+cap-34 handle:drag:Drag the first term up or down to change the first value
+cap-35 handle:drag:Drag the second term up or down to change the difference or ratio
+cap-36 handle:drag:Drag the last term left or right to change the number of terms
+
+Extra capabilities requested after the frozen checklist:
+Requested sum evidence changes:{"mode":"Geometric","sum_n":true,"sum_count":1000,"sum":true}
+Sigma evidence changes:{"mode":"Geometric","sigma":true,"sum_count":1000}
+Student evidence changes:{"mode":"Geometric","sum_n":true,"sum_count":1000,"sigma":true,"sum":true,"sums":true,"display":"Both","point_values":true,"show_answers":false}
+These are small additions outside the 36 frozen entries. Sigma uses the existing formula and integer start/N controls; there is no second, independent sigma-expression language.
+
+Corrections from the rejection:
+1. Handles format integer decimal units. They never multiply a rounded float back by a fractional step. 14,400 drops (1200 per handle over four states) exercise the real hit test, decimal-place limits, intended values and integer count clamping. The reported 10.700000000000001 and -0.35000000000000003 cases now become 10.7 and -0.35.
+2. A requested student sum suppresses partial-sum marks/labels and blanks partial-sum lists. Find formula keeps its blank with both formula rows off. The exhaustive test covers 49,152 mode/task/toggle combinations, including the new sum and sigma toggles. It extracts key sum values and checks that the answer-bearing student text, graph labels and description do not disclose them.
+3. First-order recurrence generation starts at the second term using only the first seed. Only a second-previous-term reference enables the second seed. The key states the seeds used, even with its recurrence row off.
+4. Ambiguous implicit denominator products are refused with examples of 1/(2*n) and (1/2)*n. Bracketed alternatives calculate different, correct functions.
+5. Functions compose within the checked expression reader. Rational-angle trig identities and perfect rational squares yield exact values; other values carry approximations. Reflection identities pair trig terms so complete periods sum exactly. Factorials support the requested small-n examples.
+6. Rational-function limits use polynomial degrees and leading coefficients, with exact checked coefficients. Standard identities cover (1+1/n)^n, n^(1/n), root differences, n sin(1/n), logarithmic-over-linear decay, constants and supported powers/oscillations. First-order linear recurrences use their exact multiplier, intercept and fixed point, including constant-seed exceptions. Numerical confirmation tests accompany the proofs; no limit is inferred from samples.
+7. Number-line limits are named Term/Sum and placed above the line, away from axis numbers. The empty graph height is reduced and the floating n label is removed.
+8. Axis labels always use the fitting helper. No refused full label is drawn off page.
+9. Grid limits have explicit dashes and a distinct colour (grey in Print); a coincident solid zero line is omitted. Evidence for caps 06, 08, 10, 13, 33 is substantially changed; cap 08 uses the nonzero partial-sum limit 12.
+Cheap known issues: n+1 replaces the opening unsimplified expression; n-0 and redundant plain-number brackets are removed where algebra establishes the simplification; whole decimal results omit .0; formulas, term rows and point labels use mathematical minus; zero geometric infinity sums print simply 0; the infinity sum uses consistent sans wording and sigma uses a separate math glyph with measured upper/lower bounds; list columns use non-collapsing spacing; keys retain known out-of-window values; requested missing terms are marked asked; first-order seed aliases work; near-unity decimals retain exact digits where checked arithmetic fits; long point values get honest approximate labels. The checker's seven crowded ordinary label cases pass at three sizes on one/aligned graphs.
+
+Hand-worked checks and independent oracles:
+Arithmetic a=2,d=1: 2,3,4,5,6,7,8,9; S8=44; S1000=1000(4+999)/2=501500.
+Geometric a=2,r=-1/2: 2,-1,1/2,-1/4; S4=5/4; S-infinity=4/3.
+Geometric a=2,r=1/2: a8=1/64; S8=255/64; S-infinity=4; S1000=4(1-2^(-1000)).
+Fibonacci seeds 1,1: 1,1,2,3,5,8,13,21; S8=54.
+First-order a_n=a_(n-1)/2+3, seed 2: 2,4,5,11/2,23/4; fixed point 6.
+First-order a_n=2a_(n-1)+1, seed 1: 1,3,7,15,31; diverges.
+Pell-style seeds 1,1: 1,1,3,7,17,41,99,239; S8=408.
+ln(1)/1=0; cos(n*pi/3) begins 1/2,-1/2,-1,-1/2,1/2,1 and sums to 0 over six terms. sin(n*pi/5) sums to 0 over ten terms.
+For a=1,r=19/20,N=24: exact finite sum 11878453069039153182283704722079/838860800000000000000000000000.
+Numeric scientific input 1e-5 is a number. Exact function values are derived from input arithmetic, never recognised from a float.
+Fixtures: 60 original Fraction cases (480 terms and 480 sums); 21 independent textbook formulas (168 terms and 168 sums); 60 additional Fraction finite sums, N=1,2,24,127,1000. Term/partial-sum values and all available exact fractions are compared. Textbook fixtures include ln(n)/n, n sin(pi/n), (-1)^n n/(n+1), cos(n*pi), sin(n*pi/2), 2^n/n!, n!/n^n, sqrt(n+1)-sqrt(n), n^(1/n), (1+1/n)^n, 1-1/2^n and ten additional forms.
+Symbolic proof scope tests include sin(n^pi), sin(floor(pi)), sin(pi^2) and pi in a denominator, preventing incorrect rational-angle classification. Unresolved near-poles, uncertain trig zero residues and excessively large phases are refused rather than assigned fake values.
+
+Sweeps:
+1440 original oracle/annotation renders, 1440 all-text/stroke renders, 180 joined labels, 240 combined labels/joins/limits/bands, 108 mode/size/count/layout rasterisations, 42 additional crowded checker layouts, 49,152 worksheet toggle combinations, 14,400 handle drops, every numeric range endpoint, share/spec round trips including N=1000/sigma, and bounded 24-term exact-trig renders.
+
+Shared code touched:
+src/figures/mod.rs — existing new-ID registration, examples, relevance and notes dispatch only.
+src/figures/interact.rs — existing dispatch guarded by this figure ID only.
+src/figures/faq.rs — this figure's FAQ only, updated to explain order, limits and N/sigma.
+src/figures/math.rs — existing two-line re-export of flat::eval_typed/pretty, no change to those functions.
+Cargo.toml/Cargo.lock — direct use of already-transitive num-bigint, num-rational, num-traits; no dependency versions were changed.
+tests/fixtures/figure_census.txt — this figure's defaults/start hashes only; all pre-existing base figures must remain byte-identical.
+New implementation, proof, series and oracle files remain under src/figures/sequences*.
+
+Teacher task on the NAS (browser task intentionally skipped):
+Choose Sequences and series; select Geometric; type first=2 and ratio=-1/2; choose Both or Partial sums; turn on finite sum, convergence and limit. For a larger sum enable Sum first N terms, set N=1000 and optionally Write sigma notation. Choose a student task and turn Show answers off; export the student copy and key. In Recursive mode type a_(n-1)/2+3 with first=2; the second seed disappears and the key gives the one-seed recurrence and fixed point 6.
+
+Limits and precision boundaries:
+No frozen capability is intentionally skipped. Arbitrary symbolic limits remain cannot determine; unsupported domains are refused with panel notes. Per-term exact arithmetic is checked i128 rational arithmetic; requested arithmetic/geometric sums use arbitrary-size rational integers. Other requested sums accumulate exact term fractions where available and become approximate if a term needs numerical evaluation. A fully evaluated exact requested sum longer than 16 characters is shown approximately; a geometric request also retains a compact exact formula. This keeps large N useful without emitting pages of fraction digits. General symbolic irrational simplification is not claimed. The infinity row says Sum to infinity to avoid whole-line font fallback; its value and defining fraction are retained. Numeric overflow/underflow is never written as an exact value. Generic requested sums stop growing exact fractions once their bit budget is exceeded, and use compensated two-component accumulation. Results are cached by the mathematical parameters across rendering, notes and handles. The diagram remains capped at 24 visible terms; the independent requested sum reaches 1000. No separate free-form sigma-bound parser was added. The owner's independent checker has not been rerun by this builder; no independent acceptance is claimed.
+
+Final verification:
+Broad run: 1719 passed, 0 failed, 4 existing ignored, 191.99 seconds. Filters: sequences census frozen share figures::start figures::faq figures::interact. The ignored checks are the census dump, two external-rig share round trips, and the PNG-frame diagnostic. Log: /home/shuff57/newfig-out/sequences/r1/regression.log.
+Final targeted run after the last math, panel and typography fixes: 43 passed, 0 failed, 4.83 seconds. This includes all 41 figure tests plus FAQ and census. Log: /home/shuff57/newfig-out/sequences/r1/final-targeted.log.
+Final native executable build: successful; /home/shuff57/newfig-out/sequences/r1/build-final.log.
+All 48 executable PNGs rendered; each of the 36 evidence cases differs from the opening. The final build preserves every reviewed PNG byte for byte; /home/shuff57/newfig-out/sequences/r1/png-hashes.json.
+Print verification: 1538 x 2937, all 4,517,106 pixels grey-only.
+The final executable enumerates exactly three opening-state drag handles. Their tips and the 14,400-drop regression cover caps 34–36; no visual handle overlay is claimed for the headless renderer.
+Census: all old base rows remain identical; exactly sequences-series__defaults and sequences-series__start are added, both hash 9240b785875bde18. Frozen capability files and frozen saved/share fixtures were not edited.
+
+
+PNGs opened and inspected (all under /home/shuff57/newfig-out/sequences/r1/):
+colour.png
+student.png
+key.png
+print.png
+first-order.png
+ln-sequence.png
+cos-sequence.png
+numberline-large.png
+long-axis.png
+sum-1000.png
+sum-1000-student.png
+large-N-arithmetic.png
+cap-06.png
+cap-08.png
+cap-10.png
+cap-13.png
+cap-15.png
+cap-20.png
+cap-21.png
+cap-33.png
+cap-34.png
+cap-35.png
+The last seven changed images were reopened after the final typography correction. The remaining inspected images retained identical bytes. The opening has a_n=n+1; the two student images contain sum/formula blanks and no partial-sum answers; keys mark requested terms; the first-order graph approaches 6; the logarithmic graph includes its exact zero; the cosine graph has exact half-integers and complete-period sums; number-line limits have separate named captions; the nonzero sum-limit evidence line is dashed; the large-N geometric key retains a compact exact expression, and the arithmetic key gives 501500. Sigma bounds and summands occupy separate clear text boxes at every label size.
+
+
+Second independent-check revision R2 (starting at 15eb6c6):
+The complete ~/checker-out/sequences-r2/report.md was read. The earlier four blockers remain covered by all their existing tests; no earlier test was removed. Exact-output display assertions were adjusted to the newly requested 16-character readability cutoff.
+
+Blocking limit analysis: the suffix-based base extraction is removed. An operator-precedence tree represents every sum, product, quotient, power, function and factorial separately, including implicit multiplication. Rational-function leading terms and standard identities are applied to individual tree nodes. Products/sums combine established finite limits; polynomial/exponential/factorial growth comparisons establish supported decay or divergence. A base tending to 1 is not treated as the constant base 1. Even powers of -1 and bounded-but-unestablished trigonometric sequences have explicit safeguards. Supported standard shifted powers, n/2^n, n²/3^n, exp-ratios, cosine over n, logarithms and square roots are included. Unsupported or indeterminate compositions remain cannot determine. Every reported finite explicit limit must also agree with the last evaluable large-index term, using the same reader as the plot, at indices through 10^12. The confirmation tolerance is 0.001 times max(1,|L|); this confirms an analytic proof and never invents one from samples.
+New independent hand-rule fixture: 229 ordinary formulas (160 offset/scaled decays, 40 shifted powers, 29 named examples). Expected finite limits are exact Fraction constants; divergent forms are marked explicitly. The test checks both written limits/classification and large-index term agreement. Cases include every false-limit family in the rejection.
+
+Blocking sum speed: the result is held in a bounded thread-local cache keyed by mathematical parameters, so render, notes, two graphs and labels reuse one computation. General sums use a bounded exact accumulator and compensated high/low floating accumulation once the exact result grows past the bit budget. Arithmetic/geometric sums still use closed BigRational formulas. The cold performance sweep covers 40 formulas at N=1000 with 24 plotted terms, Large labels, two graphs, sigma and all answer annotations; render + notes + handles must finish below 0.5 seconds for every case.
+
+Additional fixes: exact requested sums above 16 characters are displayed approximately; explicit geometric sums use a structurally derived constant ratio rather than sampled ratios, allowing 3^(n-1) through 1000 terms beyond f64 range to print a scientific decimal. Factorial reciprocal tails beyond term 170 use compensated recurrence accumulation instead of overflowing n!. Alternating (-1)^n sums remain exact. N=1 says Sum of the first term. Approximate-row text and the mathematical approximation glyph use separate SVG text runs to avoid whole-row serif fallback. Free explicit variable names such as k and r receive a note naming the offending identifier and directing the teacher to n. Spaced recurrence subscripts are accepted. Number-line height adapts to the number of visible terms.
+
+Additional review evidence (all earlier 36 frozen tokens are retained):
+changes:{"mode":"Explicit","formula":"1-(1/2)^n","convergence":true,"limit":true,"point_values":true,"from":0,"to":1.25,"step":0.25}
+changes:{"mode":"Explicit","formula":"5*(1/2)^n","convergence":true,"limit":true,"from":0,"to":3,"step":0.5}
+changes:{"mode":"Explicit","formula":"3-2^n","convergence":true,"limit":true,"from":-100,"to":5,"step":10}
+changes:{"mode":"Explicit","formula":"1/(n^2+1)","sum_n":true,"sum_count":1000,"sigma":true,"count":24,"point_values":true,"sums":true,"sum":true,"convergence":true,"label_size":"Large","display":"Both","layout":"Two aligned graphs"}
+changes:{"mode":"Explicit","formula":"3^(n-1)","sum_n":true,"sum_count":1000,"sigma":true}
+changes:{"mode":"Explicit","formula":"1/n!","sum_n":true,"sum_count":1000,"sigma":true}
+
+Remaining scope: general symbolic limits and arbitrary indeterminate forms still receive cannot determine; large phases/unsupported domains receive notes. The existing graceful refusal of some crowded all-options point labels remains; this revision preserves the clean placement rules rather than placing text on other marks. There is no separate sigma-bound expression parser. No independent acceptance is claimed. R2 final verification and inspected images are recorded below.
+
+
+R2 final verification:
+78 passed, 0 failed, 1 existing ignored (census dump), 10.75 seconds. Filters: figures::sequences census frozen figures::faq figures::start. Every earlier sequences test is retained, including the full worksheet/handle sweeps. Log: /home/shuff57/newfig-out/sequences/r2/final.log.
+Separate cold timing sweep: all 40 N=1000 formulas passed; maximum render + notes + handles time 0.007317 seconds. Each case clears the sum cache first and checks that only one result is cached. Log: /home/shuff57/newfig-out/sequences/r2/timing.log.
+Native executable build successful, 23.63 seconds; /home/shuff57/newfig-out/sequences/r2/build.log.
+54 executable PNGs rendered; all 36 frozen evidence cases differ from the opening render. Params and hashes: /home/shuff57/newfig-out/sequences/r2/executable-renders.json and png-hashes.json. Frozen evidence tokens: evidence.json in that directory, also individually retained above.
+Print: 1538 x 2937, all 4,517,106 pixels grey-only.
+R2 changes touch only this figure's implementation/tests/oracles and this report. No shared implementation, dependencies, census or frozen fixture files were changed in R2. Census/freeze tests pass. Relative to new-figures-base all pre-existing census rows remain byte-identical; the only added rows are sequences-series defaults/start, both 9240b785875bde18.
+
+R2 hand checks:
+1-(1/2)^n: first terms 1/2,3/4,7/8; limit 1.
+5*(1/2)^n: first terms 5/2,5/4,5/8; limit 0.
+2+3*(1/2)^n: 7/2,11/4,19/8; limit 2.
+3-2^n: 1,-1,-5,-13; tends to negative infinity (key says diverges).
+1+(-1)^n alternates 0,2; does not converge.
+(n+1)/n tends to 1; 2*n/(n+1) tends to 2; (n^2+1)/(2*n^2-3) tends to 1/2 by leading coefficients.
+n/2^n and n^2/3^n tend to 0 by exponential domination.
+Sum n=1..1000 of 3^(n-1) = (3^1000-1)/2, displayed approximately 6.6103541e476.
+Sum n=1..1000 of (-1)^n = 0 exactly. Sum of 1/n! through 1000 is approximately 1.7182818; the omitted positive tail beyond underflow is below displayed precision.
+The 229-case JSON fixture records hand-derived Fraction constants and explicit divergence classifications for each ordinary formula; tests also confirm the actual reader's large-index terms. Earlier Python Fraction term/partial-sum and large-N fixtures remain checked.
+
+R2 PNGs opened and inspected (all under /home/shuff57/newfig-out/sequences/r2/):
+colour.png
+student.png
+key.png
+print.png
+numberline-large.png
+offset-limit.png
+scaled-limit.png
+growth-limit.png
+slow-sum.png
+extended-sum.png
+factorial-sum.png
+The offset limit line is at 1, scaled decay limit at 0, growth has no false finite line, the slow rational sum is approximately 1.0756745, the huge geometric sum is a scientific approximation, and the factorial sum remains finite. Student sums remain blank; the key marks asked terms; colour and grey Print are clear; the number line uses less empty height. Some crowded all-options labels still receive a refusal note. Arbitrary symbolic limits and unsupported domains remain explicitly unresolved. No frozen capability was skipped; no independent acceptance or new full-share-suite run is claimed for R2.

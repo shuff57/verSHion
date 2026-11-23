@@ -345,7 +345,7 @@ fn a_real_bank_and_exam_become_sources() {
 fn a_draft_can_not_be_shared_and_a_fixed_one_can() {
     use crate::model::*;
     let q = |id: &str, stem: &str, kind: Kind| Question { id: id.into(), stem: stem.into(), kind, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 1, modified: 1 };
-    let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false };
+    let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false, image: None, figure: None };
     let ok = q("ok", "Fine", Kind::Tf { correct: true });
     let drafts = [
         (q("mc", "Pick", Kind::Mc { answers: vec![a("x", false), a("y", false)] }), "Mark one answer correct"),
@@ -1179,6 +1179,48 @@ fn pictures_go_up_privately_before_the_check_and_a_kept_picture_changes_the_opti
     assert!(m.preview.as_ref().unwrap().images[0].kept);
     // the picture is already on the server: it is not sent again for the second check
     assert_eq!(s.paths().iter().filter(|p| p.starts_with("Put /blobs")).count(), 1);
+}
+
+/// A picture choice goes up like the question's picture: uploaded privately before the check, listed once under its
+/// question for the "keep it for students" tick, and that tick is the question's `image_ok`.
+#[test]
+fn a_picture_choice_goes_up_and_is_ticked_like_a_question_picture() {
+    let (b1, b2) = (b"choice picture one".to_vec(), b"choice picture two".to_vec());
+    let (sha1, sha2) = (sha256_hex(&b1), sha256_hex(&b2));
+    let (f1, f2) = (format!("media/{sha1}.webp"), format!("media/{sha2}.webp"));
+    let mut media = HashMap::new();
+    media.insert(f1.clone(), b1);
+    media.insert(f2.clone(), b2);
+    let (mut m, _) = model(media);
+    let s = Script::new();
+    let mut bank: Value = serde_json::from_str(&bank_json(2, None)).unwrap();
+    bank["questions"][1]["kind"] = json!({"Mc": {"answers": [
+        {"text": "", "correct": true, "image": {"file": f1, "width": 4, "height": 4}},
+        {"text": "Beta", "correct": false, "image": {"file": f2, "width": 4, "height": 4}}
+    ]}});
+    let source = ShareSource::from_bank_json("bank:b1", "Bank: Unit 1", "Unit 1", &bank.to_string());
+    assert_eq!(source.questions[1].image.as_deref(), Some(f1.as_str()), "a question with only picture choices has a picture");
+    assert!(source.questions[0].image.is_none());
+    m.start(source);
+    m.frame(now(), &ready(&s));
+    fill(&mut m);
+    s.say(201, json!({"sha256": sha1, "size": 18, "width": 4, "height": 4}))
+        .say(201, json!({"sha256": sha2, "size": 18, "width": 4, "height": 4}))
+        .say(200, {
+            let mut v = preview_ok(2);
+            v["images_removed"] = json!([1]);
+            v
+        });
+    m.check();
+    m.frame(now(), &ready(&s));
+    assert_eq!(s.paths(), [format!("Put /blobs/{sha1}"), format!("Put /blobs/{sha2}"), "Post /items/preview".to_string()]);
+    let p = m.preview.as_ref().unwrap();
+    assert_eq!(p.images, vec![ImageNote { question: 1, file: f1.clone(), kept: false }], "one note per question");
+    m.set_keep_image(1, true);
+    s.say(200, preview_ok(2));
+    m.check();
+    m.frame(now(), &ready(&s));
+    assert_eq!(s.seen().last().unwrap().meta()["image_ok"], json!([1]));
 }
 
 #[test]

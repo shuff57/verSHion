@@ -58,7 +58,7 @@ fn source(c: &Connection, served: bool) {
     }
 }
 fn facts_with_image() -> Facts {
-    Facts { img_at: vec![Some(SHA.into())], served_text: vec![vec![]], hidden_text: vec![vec![]], unit_keys: vec![vec![]], ..Default::default() }
+    Facts { img_at: vec![vec![SHA.into()]], served_text: vec![vec![]], hidden_text: vec![vec![]], unit_keys: vec![vec![]], ..Default::default() }
 }
 fn look(c: &Connection, f: &Facts, dry: bool, max: usize) -> Res<Units> {
     lookup(&PoolCtx::new(c, 1000), "me", dry, &AuthorCtx::default(), f, max)
@@ -67,7 +67,7 @@ fn look(c: &Connection, f: &Facts, dry: bool, max: usize) -> Res<Units> {
 #[test]
 fn no_units_means_no_lookups() {
     let (c, _d) = world();
-    let f = Facts { img_at: vec![None], served_text: vec![vec![]], hidden_text: vec![vec![]], unit_keys: vec![vec![]], ..Default::default() };
+    let f = Facts { img_at: vec![vec![]], served_text: vec![vec![]], hidden_text: vec![vec![]], unit_keys: vec![vec![]], ..Default::default() };
     let u = look(&c, &f, false, 10).unwrap();
     assert!(u.lifts.is_empty() && u.units_at == vec![vec![]]);
 }
@@ -117,7 +117,7 @@ fn the_accounts_own_items_are_never_sources() {
 #[test]
 fn too_many_distinct_units_are_refused() {
     let (c, _d) = world();
-    let f = Facts { img_at: vec![None, None], served_text: vec![vec!["a".into(), "b".into()], vec!["b".into(), "c".into()]], hidden_text: vec![vec![], vec![]], unit_keys: vec![vec![], vec![]], ..Default::default() };
+    let f = Facts { img_at: vec![vec![], vec![]], served_text: vec![vec!["a".into(), "b".into()], vec!["b".into(), "c".into()]], hidden_text: vec![vec![], vec![]], unit_keys: vec![vec![], vec![]], ..Default::default() };
     let e = match look(&c, &f, false, 2) {
         Err(crate::pool::ctx::Fail::Pool(p)) => p,
         other => panic!("{other:?}"),
@@ -129,7 +129,7 @@ fn too_many_distinct_units_are_refused() {
 #[test]
 fn a_hidden_text_is_a_unit_too_and_a_previews_lookups_are_charged() {
     let (c, _d) = world();
-    let f = Facts { img_at: vec![None], served_text: vec![vec!["t1".into()]], hidden_text: vec![vec!["t2".into()]], unit_keys: vec![vec![]], ..Default::default() };
+    let f = Facts { img_at: vec![vec![]], served_text: vec![vec!["t1".into()]], hidden_text: vec![vec!["t2".into()]], unit_keys: vec![vec![]], ..Default::default() };
     let u = look(&c, &f, true, 10).unwrap();
     assert_eq!(u.units_at[0].iter().map(|x| (x.key.as_str(), x.hidden)).collect::<Vec<_>>(), vec![("t1", false), ("t2", true)]);
     let used: i64 = c.query_row("SELECT count FROM usage_daily WHERE user_id = 'me' AND metric = 'preview_units'", [], |r| r.get(0)).unwrap();

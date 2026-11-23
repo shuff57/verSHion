@@ -1,5 +1,10 @@
 # Staging runbook: one host, two containers on the existing VPS
 
+> Historical staging recipe. The staging environment was intentionally removed on 2026-11-07.
+> Its old hostname and `/etc/vershion-staging/api.env` are not active services or credential locations.
+> Current production configuration is `vps:/etc/vershion/api.env`; see `docs/hosting-port.md`.
+
+
 `staging-vershion.lefthanddev.com` serves the API and the app's web build. On the VPS (`ssh vps`, Debian 12, Docker) two
 containers run from `/opt/vershion-staging/compose.yml`:
 
@@ -55,7 +60,7 @@ rsync -a --delete dist-web/ vps:/var/www/vershion-staging/
 ```
 
 Env file `/etc/vershion-staging/api.env` (root, mode 600): copy `api.env.example`, generate `AUTH_SECRET` and
-`POOL_HASH_KEY` on the server (`head -c48 /dev/urandom | base64 | tr -d '/+=\n'`), then add the SMTP, OpenRouter and
+`POOL_HASH_KEY` on the server (`head -c48 /dev/urandom | base64 | tr -d '/+=\n'`), then add the SMTP, AI provider and
 Stripe **test** values yourself.
 
 ```

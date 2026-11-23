@@ -18,10 +18,11 @@ use super::{ParamDef, Params};
 /// Param holding the label offsets.
 pub const KEY: &str = "label_offsets";
 
-/// Figures whose labels can be dragged (the 12 reference geometry pages that offer it).
-pub const FIGURES: [&str; 12] = [
+/// Figures whose labels can be dragged.
+pub const FIGURES: [&str; 15] = [
     "triangle", "rectangle", "parallelogram", "trapezoid", "kite", "regular-polygon",
     "prism", "pyramid", "cylinder", "cone", "sphere", "solid-net",
+    "conic-sections", "tangent-secant-lines", "complex-plane",
 ];
 
 /// Figures with the reference's Turn slider (+ Straighten): the flat shapes.
