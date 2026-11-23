@@ -735,7 +735,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 32);
+        assert_eq!(ids.len(), 33);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {

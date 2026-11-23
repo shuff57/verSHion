@@ -4512,6 +4512,10 @@ const BOND_ENERGY_CURVE: &[Faq] = &[
         q: "How can students match the curves to bond names?",
         a: "Hide bond names to label the curves Bond A, B and C. Student + key exports the lettered curves and a key that matches each letter to its name, length and energy.",
     },
+    Faq {
+        q: "How can I compare which of two bonds is stronger?",
+        a: "Show two or three bonds and compare the depth of the wells. The deeper minimum is the stronger bond because more energy is needed to separate the atoms. A stronger bond is often also shorter, so its minimum sits closer to the vertical axis, but the figure uses whatever lengths and energies you enter.",
+    },
 ];
 
 const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
