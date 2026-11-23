@@ -1221,6 +1221,16 @@ static PHOTOSYNTHESIS: [RefSection; 10] = [
     s("More options", &["show_answers", "style", "label_size"], ""),
 ];
 
+static BOND_ENERGY: [RefSection; 7] = [
+    s("Bonds", &["count", "length_unit", "energy_unit", "name1", "length1", "energy1", "name2", "length2", "energy2", "name3", "length3", "energy3"], ""),
+    s("Guide lines", &["guides", "guide_labels"], ""),
+    s("Curves", &["dots", "hide_names", "regions", "style", "answer"], ""),
+    s("Titles", &["title_style", "title", "xtitle_mode", "xtitle", "ytitle_mode", "ytitle"], ""),
+    s("Axes", &["fit", "axes", "x_from", "x_to", "x_by", "x_num"], ""),
+    s("y-axis", &["y_from", "y_to", "y_by", "y_num"], ""),
+    s("Grid", &["grid", "label_size"], ""),
+];
+
 static HALF_LIFE: [RefSection; 9] = [
     s("Isotopes", &["count", "iso1", "iso2", "iso3", "custom_name", "custom_half", "custom_unit"], "Every curve halves once per half-life, N = N\u{2080}(\u{bd})^(t/T\u{bd}); the mass, the number of nuclei and the activity all follow it."),
     s("Up the side", &["y", "act_unit", "amount"], ""),
@@ -1411,6 +1421,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "gas-syringe" => &FIG_9,
         "gel-electrophoresis" => &FIG_10,
         "heating-cooling-curve" => &FIG_11,
+        "bond-energy-curve" => &BOND_ENERGY,
         "inclined-plane" => &FIG_12,
         "kite" => &FIG_13,
         "length-reading" => &FIG_14,

@@ -155,6 +155,9 @@ pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
     if fig == nets::ID {
         return nets::control_label(key, p);
     }
+    if fig == chemistry::bond_energy::ID {
+        return chemistry::bond_energy::control_label(key, p);
+    }
     if fig != "predator-prey" {
         return None;
     }
@@ -474,6 +477,19 @@ const ANSWER: AnswerRule = AnswerRule { student: &[("answer", &[], AV::B(false))
 /// under the figure); the rest map the controls that blank the working.
 pub fn answer_rule(id: &str) -> Option<AnswerRule> {
     Some(match id {
+        chemistry::bond_energy::ID => AnswerRule {
+            student: &[
+                ("answer", &[], AV::B(false)),
+                ("hide_names", &[], AV::B(true)),
+                ("guide_labels", &[AV::S("Values")], AV::S("Blank lines")),
+            ],
+            key: &[
+                ("answer", &[], AV::B(true)),
+                ("hide_names", &[], AV::B(true)),
+                ("guide_labels", &[AV::S("Blank lines")], AV::S("Values")),
+                ("regions", &[AV::S("Blank lines")], AV::S("Words")),
+            ],
+        },
         "spring-scale" | "micropipette-reading" | "gel-electrophoresis" | "volume-reading" | "volume-by-displacement"
         | "gas-syringe" | "length-reading" | "mass-reading" | "temperature-reading" | "ph-reading" | "titration-curve"
         | "lewis-structures" | "line-spectrum" | "photoelectron-spectrum" | "mass-spectrum" | "ruler-reading" => ANSWER,
@@ -742,6 +758,7 @@ pub fn card_keys(id: &str) -> &'static [&'static str] {
 /// ranges also take a fraction or mixed number (-7/2, 3 1/2), which numbers that axis in fractions.
 pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f64> {
     match fig {
+        chemistry::bond_energy::ID => chemistry::bond_energy::typed_float(key, text, p),
         "coordinate-grid" => math::grid_typed_float(key, text, p),
         "derivative-graphs" => math::derivative_graphs::typed(text).map(|t| t.v),
         _ => text.trim().parse::<f64>().ok(),
@@ -751,6 +768,7 @@ pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f
 /// How a figure shows a number box's value when it has its own way (None: the usual decimal).
 pub fn float_text(fig: &str, key: &str, p: &Params) -> Option<String> {
     match fig {
+        chemistry::bond_energy::ID => chemistry::bond_energy::float_text(key, p),
         "coordinate-grid" => math::grid_float_text(key, p),
         _ => None,
     }
@@ -853,6 +871,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "enzyme-kinetics" => biology::enzyme::relevant(key, p),
         // only the chosen setup's controls: two or three steps' valleys, the catalysed path's, the typed axis range
         "reaction-energy-diagram" => chemistry::reactionenergy::relevant(key, p),
+        chemistry::bond_energy::ID => chemistry::bond_energy::relevant(key, p),
         // only the chosen instrument's controls: the ruler's, the caliper's or the micrometer's
         "length-reading" => chemistry::length_relevant(key, p) && cards::relevant(id, key, p),
         // the ions' layout only for an ionic compound, picked or typed
@@ -909,6 +928,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     // unticking the half-life graph's "Fit the axes" fills the range boxes with the fitted axes
     if id == chemistry::halflife::ID {
         chemistry::halflife::panel_changed(key, old, p);
+    }
+    if id == chemistry::bond_energy::ID {
+        chemistry::bond_energy::panel_changed(key, old, p);
     }
     if id == "transformations" {
         transform::panel_changed(key, p);
@@ -970,7 +992,7 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
     }
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "segment-addition" => segment::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "table-of-values" => stats::tov::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "segment-addition" => segment::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), chemistry::bond_energy::ID => chemistry::bond_energy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "table-of-values" => stats::tov::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
         "pulley" => physics::pulley_warnings(p),
         "population-growth" => biology::popdyn::growth_warnings(p),
@@ -1776,6 +1798,7 @@ mod answer_rule_tests {
         ("punnett-square", &[], "Genotype ratio: 1 TT : 2 Tt : 1 tt"),
         ("population-growth", &[], "Carrying capacity (K)"),
         ("heating-cooling-curve", &[], "Solid + liquid"),
+        ("bond-energy-curve", &[], "Bond A = Bond X"),
     ];
 
     #[test]

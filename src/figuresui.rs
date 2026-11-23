@@ -31,6 +31,8 @@ mod logic_canvas;
 mod data_entry;
 #[cfg(test)]
 mod ui_test;
+#[cfg(test)]
+mod bond_energy_tests;
 mod pedigree_panel;
 
 const DEBOUNCE: Duration = Duration::from_millis(150);
@@ -4380,7 +4382,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 });
             });
         }
-        Kind::Float { min, max, .. } if theme::chem_skin() => {
+        Kind::Float { min, max, .. } if theme::chem_skin() || fig == figures::chemistry::bond_energy::ID => {
             // the chemistry page types every number into a boxed field (no sliders)
             param_label(ui, label, pd.hint);
             let id = ui.make_persistent_id(("chem_float", fig, pd.key));
