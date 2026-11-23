@@ -162,3 +162,25 @@ fn fit_seeds_editable_ranges_in_the_selected_units() {
     p.set_b("fit", true);
     assert_eq!(render(&p), before);
 }
+
+#[test]
+fn nearby_guide_labels_have_separate_baselines() {
+    let mut p = example(0);
+    p.set_f("energy2", 399.0);
+    let svg = render(&p);
+    let xml = Document::parse(&svg).unwrap();
+    let baseline = |label| {
+        attr(xml.descendants().find(|n| n.has_tag_name("text") && n.text() == Some(label)).unwrap(), "y")
+    };
+    assert!((baseline("−400 kJ/mol") - baseline("−399 kJ/mol")).abs() >= 14.0);
+}
+
+#[test]
+fn dense_manual_steps_explain_the_rendered_spacing() {
+    let mut p = Params::defaults(&params());
+    p.set_b("fit", false);
+    p.set_f("x_by", 1.0);
+    assert_eq!(warnings(&p), ["The x-axis uses 50 pm tick spacing because the requested 1 pm step is too dense."]);
+    p.set_f("x_by", 50.0);
+    assert!(warnings(&p).is_empty());
+}

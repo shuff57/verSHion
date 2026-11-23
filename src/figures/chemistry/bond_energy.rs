@@ -298,15 +298,41 @@ fn ranges(p: &Params, bonds: &[Bond<'_>]) -> ([f64; 3], [f64; 3]) {
     (x, y)
 }
 
-fn ticks([from, to, by]: [f64; 3], scale: f64, numbering: &str) -> Vec<Tick> {
-    let every = match numbering {
+fn numbering_interval(numbering: &str) -> usize {
+    match numbering {
         "Every 2nd line" => 2,
         "Every 5th line" => 5,
         "Every 10th line" => 10,
         "No numbers" => 0,
         _ => 1,
-    };
-    let by = by.max(nice_step(to - from, 20.0 * every.clamp(1, 4) as f64));
+    }
+}
+
+fn effective_tick_step([from, to, by]: [f64; 3], every: usize) -> f64 {
+    by.max(nice_step(to - from, 20.0 * every.clamp(1, 4) as f64))
+}
+
+pub fn warnings(p: &Params) -> Vec<String> {
+    if p.b("fit") || p.s("axes") == "Shape only" {
+        return Vec::new();
+    }
+    let (x, y) = ranges(p, &bonds(p));
+    let (x_unit, scale) = length_unit(p);
+    [("x", x, "x_num", x_unit, scale), ("y", y, "y_num", energy_unit(p), 1.0)]
+        .into_iter()
+        .filter_map(|(axis, range, key, unit, scale)| {
+            let step = effective_tick_step(range, numbering_interval(p.s(key)));
+            (step > range[2]).then(|| format!(
+                "The {axis}-axis uses {} {unit} tick spacing because the requested {} {unit} step is too dense.",
+                fmt(step / scale), fmt(range[2] / scale)
+            ))
+        })
+        .collect()
+}
+
+fn ticks(range @ [from, to, _]: [f64; 3], scale: f64, numbering: &str) -> Vec<Tick> {
+    let every = numbering_interval(numbering);
+    let by = effective_tick_step(range, every);
     chart::ticks(from, to, by)
         .into_iter()
         .enumerate()
@@ -508,6 +534,7 @@ fn render(p: &Params) -> String {
         curve(&mut doc, &frame, bond, &fills, i);
     }
     doc.raw("</g>");
+    let mut energy_labels = Vec::new();
     for (i, bond) in visible_minima {
         let x = frame.px(bond.length);
         let y = frame.py(-bond.depth);
@@ -525,8 +552,26 @@ fn render(p: &Params) -> String {
                 _ => continue,
             };
             doc.text(x, b + 41.0 + i as f64 * 17.0, 11.0 * lf, "middle", &lx);
-            doc.text(l + 7.0, (y - 6.0).max(t + 13.0), 11.0 * lf, "start", &ly);
+            energy_labels.push((y, ly));
         }
+    }
+    energy_labels.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let gap = 14.0 * lf;
+    let mut next_baseline = t + 13.0 * lf;
+    let mut positioned = Vec::with_capacity(energy_labels.len());
+    for (guide_y, label) in energy_labels {
+        let target = (guide_y - 6.0).max(t + 13.0 * lf);
+        let baseline = target.max(next_baseline);
+        next_baseline = baseline + gap;
+        positioned.push((guide_y, target, baseline, label));
+    }
+    let overflow = positioned.last().map_or(0.0, |(_, _, y, _)| (y - b).max(0.0));
+    for (guide_y, target, baseline, label) in positioned {
+        let baseline = baseline - overflow;
+        if (baseline - target).abs() > 0.5 {
+            doc.line(l + 1.0, guide_y, l + 6.0, baseline - 4.0, "#595959", 0.8);
+        }
+        doc.text(l + 7.0, baseline, 11.0 * lf, "start", &label);
     }
     if bonds.len() == 1 && p.s("regions") != "None" {
         let x = frame.px(bonds[0].length).clamp(l, r);
