@@ -1285,6 +1285,12 @@ static TORQUE: &[RefSection] = &[
     s("Worksheet", &["title", "show_answers", "mirror", "style", "label_size"], ""),
 ];
 
+const CIRCULAR_MOTION: &[RefSection] = &[
+    s("Setup", &["setup", "position", "direction", "angle"], ""),
+    s("Measurements", &["mass", "radius", "speed"], ""),
+    s("Figure", &["dec", "show_answers", "style", "label_size"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
         "chromatography" => &CHROMATOGRAPHY,
@@ -1434,6 +1440,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "predator-prey" => &FIG_31,
         "prism" => &FIG_32,
         "projectile-motion" => &FIG_33,
+        super::circular::ID => CIRCULAR_MOTION,
         "pulley" => &FIG_34,
         "punnett-square" => &FIG_35,
         "pyramid" => &FIG_36,

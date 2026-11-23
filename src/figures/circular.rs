@@ -1,8 +1,4 @@
-//! Uniform circular motion: a body on a circle with its tangential velocity and its centripetal acceleration and
-//! force, and the numbers worked out from the radius, the speed and the mass. Drawn with `svg::Doc` only.
-//!
-//! The acceleration, the force, the period and the angular speed are the answers, so they are blanks while Show
-//! answers is off; the circle, the body and the given radius, speed and mass stay.
+//! Circular motion seen from above, or at the top and bottom of a vertical circle on a string.
 use super::circle::num;
 use super::svg::{self, Doc};
 use super::*;
@@ -24,13 +20,22 @@ const R: f64 = 105.0;
 const ROWS_Y0: f64 = 300.0;
 const ROW_H: f64 = 18.0;
 const ROW_FS: f64 = 15.0;
+const TOP_VIEW: &str = "Top view";
+const VERTICAL: &str = "Vertical circle";
+const TOP: &str = "Top";
+const BOTTOM: &str = "Bottom";
+const BOTH: &str = "Top and bottom";
+const CCW: &str = "Counterclockwise";
+const CW: &str = "Clockwise";
+const G: f64 = 9.81;
+const SLACK: &str = "At the top the string goes slack. The ball leaves the circular path.";
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
         id: ID,
         subject: Subject::Physics,
         title: "Circular motion",
-        blurb: "A body going round a circle at a steady speed, with its velocity along the tangent and the centripetal acceleration towards the centre.",
+        blurb: "Draw tangent velocity and centripetal acceleration from above, or show gravity and tension on a string in a vertical circle.",
         params,
         render,
     }]
@@ -38,9 +43,13 @@ pub fn defs() -> Vec<FigureDef> {
 
 fn params() -> Vec<ParamDef> {
     vec![
+        ParamDef::choice("setup", "Setup", &[TOP_VIEW, VERTICAL], TOP_VIEW),
+        ParamDef::choice("position", "Drawn at", &[TOP, BOTTOM, BOTH], BOTH),
+        ParamDef::choice("direction", "Going round", &[CCW, CW], CCW),
         ParamDef::float("mass", "Mass (kg)", 0.1, 20.0, 0.1, 2.0),
         ParamDef::float("radius", "Radius (m)", 0.2, 5.0, 0.1, 1.5),
-        ParamDef::float("speed", "Speed (m/s)", 0.2, 30.0, 0.1, 6.0),
+        ParamDef::float("speed", "Speed (m/s)", 0.2, 30.0, 0.1, 6.0)
+            .hint("In a vertical circle, use the instantaneous speed at each position shown."),
         ParamDef::float("angle", "Where the body is (degrees)", 0.0, 360.0, 5.0, 40.0),
         ParamDef::int("dec", "Decimal places", 1, 4, 2),
         answers_param(),
@@ -49,7 +58,19 @@ fn params() -> Vec<ParamDef> {
     ]
 }
 
-fn render(p: &Params) -> String { build(p).0 }
+fn render(p: &Params) -> String {
+    if vertical(p) { render_vertical(p) } else { build(p).0 }
+}
+
+fn vertical(p: &Params) -> bool { p.s("setup") == VERTICAL }
+
+pub(super) fn relevant(key: &str, p: &Params) -> bool {
+    match key {
+        "position" | "direction" => vertical(p),
+        "angle" => !vertical(p),
+        _ => true,
+    }
+}
 
 /// (mass, radius, speed).
 pub fn given(p: &Params) -> (f64, f64, f64) {
@@ -71,12 +92,39 @@ fn q(v: f64, dec: i64) -> String {
     if v != 0.0 && all_zero { num(v, 4) } else { s }
 }
 
-pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
+struct VerticalForces {
+    weight: f64,
+    top_tension: Option<f64>,
+    bottom_tension: f64,
+    acceleration: f64,
+}
+
+fn vertical_forces(p: &Params) -> VerticalForces {
+    let (m, r, v) = given(p);
+    let acceleration = v * v / r;
+    // Inward is down at the top and up at the bottom. A string can only pull.
+    let top = acceleration - G;
+    // Round-off at v = sqrt(gr) should give a straight string with zero tension.
+    let tol = 8.0 * f64::EPSILON * G;
+    let top_tension = if top < -tol { None } else if top.abs() <= tol { Some(0.0) } else { Some(m * top) };
+    VerticalForces { weight: m * G, top_tension, bottom_tension: m * (acceleration + G), acceleration }
+}
+
+pub fn warnings(p: &Params) -> Vec<String> {
+    if vertical(p) && p.s("position") != BOTTOM && vertical_forces(p).top_tension.is_none() {
+        vec![SLACK.into()]
+    } else {
+        Vec::new()
+    }
+}
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
+    text_markup(x, y, size, anchor, fill, &svg::esc(s))
+}
+
+fn text_markup(x: f64, y: f64, size: f64, anchor: &str, fill: &str, markup: &str) -> String {
     format!(
-        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}" stroke="#fff" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">{}</text>"##,
-        svg::esc(s)
+        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}" stroke="#fff" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">{markup}</text>"##
     )
 }
 
@@ -156,6 +204,106 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     (d.finish(), Report { accel: a, force: fcent, period, body })
+}
+
+fn render_vertical(p: &Params) -> String {
+    let (m, r, v) = given(p);
+    let f = vertical_forces(p);
+    let draw_top = p.s("position") != BOTTOM;
+    let draw_bottom = p.s("position") != TOP;
+    let clockwise = p.s("direction") == CW;
+    let print = p.s("style") == "Print";
+    let answers = p.b(SHOW_ANSWERS);
+    let dec = p.i("dec").clamp(1, 4);
+    let lab = svg::label_factor(p.s("label_size"));
+    let (path, vel, acc, gravity, tension) = if print {
+        (PATH_PRINT, VEL_PRINT, ACC_PRINT, "#444444", "#222222")
+    } else {
+        (PATH, VEL, ACC, "#80541c", "#13776b")
+    };
+    let readout = |label: &str, value: f64, unit: &str| {
+        let value = if !answers {
+            BLANK.into()
+        } else if value > 0.0 && value < 0.0001 {
+            format!("{value:.1e}")
+        } else {
+            q(value, dec)
+        };
+        format!("{label}  {value} {unit}")
+    };
+    let mut rows = vec![
+        format!("m = {m} kg,  r = {r} m"),
+        format!("v = {v} m/s,  g = {G} m/s²"),
+        "Speed is local to each position. Arrow lengths are schematic.".into(),
+        readout("Weight", f.weight, "N"),
+        readout("Required centripetal acceleration", f.acceleration, "m/s²"),
+    ];
+    if draw_top {
+        rows.push(readout("Tension at the top", f.top_tension.unwrap_or(0.0), "N"));
+    }
+    if draw_bottom {
+        rows.push(readout("Tension at the bottom", f.bottom_tension, "N"));
+    }
+    if answers && draw_top && f.top_tension.is_none() {
+        rows.push(SLACK.into());
+    }
+
+    let rows_y0 = 355.0 + 12.0 * (lab - 1.0);
+    let half_width = W / 2.0 + 230.0 * (lab - 1.0).max(0.0);
+    let mut d = Doc::new(2.0 * half_width, rows_y0 + (rows.len() - 1) as f64 * ROW_H * lab + 14.0);
+    d.describe("Vertical circular motion on a string",
+        "A ball shown at the top or bottom of a vertical circle. Gravity points down and tension, when present, points toward the pivot.");
+    d.raw(&format!(r#"<circle cx="{half_width}" cy="{CY}" r="{R}" fill="none" stroke="{path}" stroke-width="1.6" stroke-dasharray="5 4"/>"#));
+    d.circle(half_width, CY, 2.5, INK, INK, 0.0);
+
+    // Use the same force-length scale at both positions, with a visible minimum for small forces.
+    let max_force = if draw_bottom { f.bottom_tension } else { f.weight.max(f.top_tension.unwrap_or(0.0)) };
+    let force_length = |n: f64| 17.0 + 62.0 * n / max_force;
+    let fs = 13.0 * lab;
+    for (at_top, drawn, pull, position) in [(true, draw_top, f.top_tension, TOP), (false, draw_bottom, Some(f.bottom_tension), BOTTOM)] {
+        if !drawn {
+            continue;
+        }
+        let x = half_width;
+        let inward = if at_top { 1.0 } else { -1.0 };
+        let y = CY - inward * R;
+        let tangent = if clockwise { inward } else { -inward };
+        d.raw(&format!("<g><title>{position}</title>"));
+        if pull.is_some() {
+            d.line(x, y, x, CY, path, 1.6);
+        } else {
+            d.path(&format!("M{x},{y} Q{},{} {x},{CY}", x + 44.0, (y + CY) / 2.0), "none", path, 1.6);
+        }
+        d.arrow_with(x + tangent * 11.0, y, x + tangent * 65.0, y, vel, 2.2, "6 3", false);
+        d.raw(&text_el(x + tangent * (69.0 + 6.0 * lab), y + fs * 0.32, fs, "middle", vel, "v"));
+
+        let gy = y + 8.0;
+        let gl = force_length(f.weight);
+        d.arrow(x - 8.0, gy, x - 8.0, gy + gl, gravity, 2.2);
+        d.raw(&text_markup(x - 16.0, gy + gl / 2.0 + fs * 0.32, fs, "end", gravity,
+            r#"F<tspan font-size="75%" baseline-shift="sub">g</tspan>"#));
+        if let Some(pull) = pull {
+            // Offset the force arrows to keep both shafts visible when both forces point down.
+            if pull > 0.0 {
+                let ty = y + inward * 8.0;
+                let tl = force_length(pull);
+                d.arrow(x + 8.0, ty, x + 8.0, ty + inward * tl, tension, 2.2);
+                d.raw(&text_el(x + 16.0, ty + inward * tl / 2.0 + fs * 0.32, fs, "start", tension, "T"));
+            }
+            let ax = x + inward * 58.0;
+            let ay = y + inward * 30.0;
+            d.arrow_with(ax, ay, ax, ay + inward * 42.0, acc, 2.2, "6 3", false);
+            let anchor = if at_top { "start" } else { "end" };
+            d.raw(&text_markup(ax + inward * 8.0, ay + inward * 21.0 + fs * 0.32, fs, anchor, acc,
+                r#"a<tspan font-size="75%" baseline-shift="sub">c</tspan>"#));
+        }
+        d.circle(x, y, 11.0, "#fff", INK, 2.0);
+        d.raw("</g>");
+    }
+    for (i, row) in rows.iter().enumerate() {
+        d.raw(&text_el(24.0, rows_y0 + i as f64 * ROW_H * lab, fs, "start", INK, row));
+    }
+    d.finish()
 }
 
 pub fn examples(id: &str) -> Option<Vec<Example>> {
@@ -299,11 +447,109 @@ mod tests {
         }
     }
 
+    #[test]
+    fn vertical_force_magnitudes_and_slack_threshold() {
+        let near = |actual: f64, expected: f64| assert!((actual - expected).abs() < 1e-9, "{actual} vs {expected}");
+        for (m, r, v, weight, top, bottom) in [
+            (2.0, 1.5, 6.0, 19.62, 28.38, 67.62),
+            (10.0, 4.0, 8.0, 98.1, 61.9, 258.1),
+            (20.0, 0.2, 30.0, 196.2, 89803.8, 90196.2),
+        ] {
+            let p = with(&[f("mass", m), f("radius", r), f("speed", v)]);
+            let forces = vertical_forces(&p);
+            near(forces.weight, weight);
+            near(forces.top_tension.unwrap(), top);
+            near(forces.bottom_tension, bottom);
+        }
+        let at_speed = |v| with(&[s("setup", VERTICAL), f("radius", 1.0), f("speed", v)]);
+        let threshold = 9.81_f64.sqrt();
+        let at = at_speed(threshold);
+        let below = at_speed(threshold - 0.000001);
+        let above = at_speed(threshold + 0.000001);
+        assert_eq!(vertical_forces(&below).top_tension, None);
+        assert_eq!(vertical_forces(&at).top_tension, Some(0.0));
+        near(vertical_forces(&at).bottom_tension, 39.24);
+        assert!(vertical_forces(&above).top_tension.unwrap() > 0.0);
+        assert!(warnings(&at).is_empty());
+        assert_eq!(warnings(&below), [SLACK]);
+        assert!(warnings(&above).is_empty());
+        let mut bottom_only = below.clone();
+        bottom_only.set_s("position", BOTTOM);
+        assert!(warnings(&bottom_only).is_empty());
+    }
+
+    #[test]
+    fn vertical_vectors_point_correctly_in_both_directions() {
+        for (direction, top_dx) in [(CCW, -1.0), (CW, 1.0)] {
+            let svg = render_of(&[s("setup", VERTICAL), s("direction", direction)]);
+            let doc = roxmltree::Document::parse(&svg).unwrap();
+            for (position, vertical_sign) in [(TOP, 1.0), (BOTTOM, -1.0)] {
+                let group = doc.descendants().find(|n| n.has_tag_name("g") && n.first_child().and_then(|t| t.text()) == Some(position)).unwrap();
+                let body = group.children().find(|n| n.has_tag_name("circle")).unwrap();
+                assert_eq!(body.attribute("cy").unwrap().parse::<f64>().unwrap(), CY - R * vertical_sign);
+                let delta = |label: &str| {
+                    let text = group.children().find(|n| n.has_tag_name("text") && n.text() == Some(label)).unwrap();
+                    let head = text.prev_sibling_element().unwrap();
+                    assert!(head.has_tag_name("polygon"));
+                    let shaft = head.prev_sibling_element().unwrap();
+                    assert!(shaft.has_tag_name("line"));
+                    let (tx, ty) = head.attribute("points").unwrap().split_whitespace().next().unwrap().split_once(',').unwrap();
+                    let dx = tx.parse::<f64>().unwrap() - shaft.attribute("x1").unwrap().parse::<f64>().unwrap();
+                    let dy = ty.parse::<f64>().unwrap() - shaft.attribute("y1").unwrap().parse::<f64>().unwrap();
+                    let sign = |n: f64| if n == 0.0 { 0.0 } else { n.signum() };
+                    (sign(dx), sign(dy), dy.abs())
+                };
+                let (dx, dy, _) = delta("v");
+                assert_eq!((dx, dy), (top_dx * vertical_sign, 0.0));
+                let (dx, dy, g_len) = delta("F");
+                assert_eq!((dx, dy), (0.0, 1.0));
+                let (dx, dy, t_len) = delta("T");
+                assert_eq!((dx, dy), (0.0, vertical_sign));
+                assert!(t_len > g_len, "at 6 m/s both tensions exceed weight");
+                let (dx, dy, _) = delta("a");
+                assert_eq!((dx, dy), (0.0, vertical_sign));
+            }
+        }
+        let slack = render_of(&[s("setup", VERTICAL), s("position", TOP), f("speed", 0.2), b(SHOW_ANSWERS, true)]);
+        assert!(slack.contains("<path") && slack.contains(SLACK));
+        assert!(slack.contains("Tension at the top  0 N") && !slack.contains(">T</text>") && !slack.contains(">a<tspan"));
+        let threshold_speed = 9.81_f64.sqrt();
+        let threshold = render_of(&[s("setup", VERTICAL), s("position", TOP), f("radius", 1.0), f("speed", threshold_speed)]);
+        assert!(!threshold.contains("<path") && !threshold.contains(">T</text>") && threshold.contains(">a<tspan"));
+        assert!(threshold.contains(&format!("v = {threshold_speed} m/s")));
+    }
+
+    #[test]
+    fn vertical_print_student_and_key_keep_the_diagram_and_givens() {
+        let p = with(&[s("setup", VERTICAL), s("style", "Print"), s("label_size", "Large")]);
+        let (student, key) = answer_pair(&def(), &p).unwrap();
+        for (label, value) in [("Weight", "19.62 N"), ("Tension at the top", "28.38 N"), ("Tension at the bottom", "67.62 N"),
+            ("Required centripetal acceleration", "24 m/s²")] {
+            assert!(student.contains(&format!("{label}  _____")));
+            assert!(key.contains(&format!("{label}  {value}")));
+        }
+        let drawing = |svg: &str| svg.split("</g>").take(2).collect::<Vec<_>>().join("</g>");
+        assert_eq!(drawing(&student), drawing(&key));
+        for svg in [student, key] {
+            assert!(svg.contains("v = 6 m/s,  g = 9.81 m/s²"));
+            assert!(super::super::census::non_grey_paints_within(&svg, 0).is_empty());
+            assert!(to_png(&svg, 1.3).is_ok());
+        }
+        let mut slack = p;
+        slack.set_f("speed", 0.2);
+        let (student, key) = answer_pair(&def(), &slack).unwrap();
+        assert!(!student.contains(SLACK) && key.contains(SLACK));
+    }
+
     /// Writes every example (Colour, Print, student, key) to $VERSHION_PNG_DIR.
     #[test]
     fn circular_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![
+            ("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")]),
+            ("vertical".into(), vec![s("setup", VERTICAL)]),
+            ("vertical-slack".into(), vec![s("setup", VERTICAL), s("label_size", "Large"), f("speed", 0.2)]),
+        ];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {

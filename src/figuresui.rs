@@ -6585,6 +6585,53 @@ mod tests {
         tree.nodes.iter().filter(|(_, nd)| nd.label().is_some_and(|l| l == label)).filter(|(_, nd)| nd.bounds().is_some_and(|b| b.x0 < 700.0)).count()
     }
 
+    #[test]
+    fn circular_motion_editor_round_trips_vertical_and_legacy_figures() {
+        let id = "circular-motion";
+        let (ctx, mut ws) = open_tall(id);
+        let (_, def) = find_def(id).unwrap();
+        if count_named(&ctx, &mut ws, "Vertical circle") == 0 {
+            open_section(&ctx, &mut ws, "Setup");
+        }
+        assert_eq!(count_named(&ctx, &mut ws, "Top and bottom"), 0);
+        click_nth(&ctx, &mut ws, "Vertical circle", 0);
+        assert_eq!(ws.params.s("setup"), "Vertical circle");
+        assert_eq!(ws.params.s("position"), "Top and bottom");
+        assert_eq!(count_text(&ctx, &mut ws, "Where the body is (degrees)"), 0);
+        let both = ws.output().unwrap().svg.unwrap();
+        assert!(both.contains("<title>Top</title>") && both.contains("<title>Bottom</title>"));
+
+        click_nth(&ctx, &mut ws, "Bottom", 0);
+        click_nth(&ctx, &mut ws, "Clockwise", 0);
+        let out = ws.output().unwrap();
+        let bottom = out.svg.unwrap();
+        assert!(bottom.contains("<title>Bottom</title>") && !bottom.contains("<title>Top</title>"));
+        let saved: FigureSpec = serde_json::from_str(&serde_json::to_string(&out.spec.unwrap()).unwrap()).unwrap();
+        let from_saved = Workspace::from_spec(&saved, true).unwrap();
+        let mut from_paste = Workspace::new(false);
+        from_paste.apply_spec_text(&ws.spec_json().unwrap()).unwrap();
+        let mut from_link = Workspace::new(false);
+        from_link.apply_link(&ws.share_link().unwrap()).unwrap();
+        for restored in [from_saved, from_paste, from_link] {
+            assert_eq!(restored.params.0, ws.params.0);
+            assert_eq!(restored.output().unwrap().svg.unwrap(), bottom);
+        }
+
+        let legacy = FigureSpec {
+            id: id.into(),
+            params: [("angle".into(), serde_json::json!(45.0))].into(),
+        };
+        let from_saved = Workspace::from_spec(&legacy, true).unwrap();
+        let old_diff = figures::share::b64url_encode(br#"{"angle":45}"#);
+        ws.apply_link(&format!("vershion://figure/{id}?p={old_diff}")).unwrap();
+        assert_eq!(ws.params.s("setup"), "Top view");
+        let linked_svg = def.svg(&ws.params);
+        assert_eq!(def.svg(&from_saved.params), linked_svg);
+        // FNV-1a of the council's pinned local clockwise top-view SVG at 45 degrees.
+        let hash = linked_svg.bytes().fold(0xcbf29ce484222325_u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100000001b3));
+        assert_eq!(hash, 0x6afdee2c25b377fa);
+    }
+
     /// "Reset label positions" is always in the Labels section, as on the reference: greyed out
     /// until a label has been dragged, then it puts the labels back.
     #[test]

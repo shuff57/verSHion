@@ -4677,19 +4677,23 @@ const RAY_DIAGRAM: &[Faq] = &[
 const CIRCULAR_MOTION: &[Faq] = &[
     Faq {
         q: "Why does the velocity point sideways?",
-        a: "The body is going round at a steady speed, so its velocity is along the tangent to the circle at the moment shown. Nothing in a circle is moving towards the centre; what points at the centre is the acceleration, which is what changes the direction of the velocity rather than its size.",
+        a: "The velocity is tangent to the circle at the moment shown. The inward acceleration changes the direction of that velocity.",
     },
     Faq {
         q: "Where do the numbers come from?",
-        a: "The centripetal acceleration is v squared over r, the force is the mass times that (m v squared over r), the angular speed is v over r, and the period is 2 pi r over v, the time for one whole turn. Doubling the speed on the same circle quadruples the acceleration.",
+        a: "The centripetal acceleration is v squared over r, the net inward force is m v squared over r, and the angular speed is v over r. In the top view the speed is steady, so the period is 2 pi r over v.",
     },
     Faq {
         q: "Is there a force pushing the body outwards?",
         a: "No. The only horizontal force on a body in steady circular motion acts towards the centre: the tension in a string, gravity for a satellite, friction for a car on a bend. What feels like being pushed outwards is the body trying to carry on in a straight line while it is being turned.",
     },
     Faq {
+        q: "Why is the tension different at the top and bottom?",
+        a: "Gravity points down at both positions. At the top it helps supply the inward force, so the tension is m(v²/r − g) if the string is taut. At the bottom gravity points away from the centre, so the tension is m(v²/r + g). If v²/r is less than g at the top, the string goes slack.",
+    },
+    Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the acceleration, the force, the angular speed and the period become blanks while the circle, the arrows and the given mass, radius and speed stay.",
+        a: "Turn Show answers off to replace the calculated values with blanks. The diagram and the given measurements stay visible.",
     },
 ];
 
