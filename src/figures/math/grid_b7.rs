@@ -27,7 +27,7 @@ pub(crate) const ARROW_KEYS: [&str; STYLED_ROWS] = ["eq1_arrows", "eq2_arrows", 
 pub(crate) const ROW_STYLE_KEYS: [&str; 3 * STYLED_ROWS] = ["eq1_line", "eq2_line", "eq3_line", "eq4_line", "eq1_weight", "eq2_weight", "eq3_weight", "eq4_weight", "eq1_arrows", "eq2_arrows", "eq3_arrows", "eq4_arrows"];
 pub(crate) const END_KEYS: [&str; 4] = ["x_left_end", "x_right_end", "y_bottom_end", "y_top_end"];
 pub(crate) const EXTENSION_KEYS: [&str; 4] = ["x_left_extension", "x_right_extension", "y_bottom_extension", "y_top_extension"];
-const AXIS_END_HINT: &str = "Automatic uses a filled triangle when Arrowheads on axes is on and no arrow when off. Triangle arrow is filled, including a filled head whose back edge is swept back, notched or barbed (the common printed worksheet head); Line arrow is an unfilled V of two separate strokes. Choose the visibly printed source style, and Automatic when the fill cannot be read; these choices do not move the grid or add labels.";
+const AXIS_END_HINT: &str = "Automatic uses a filled triangle when Arrowheads on axes is on and no arrow when off. Triangle arrow is filled, including a filled head whose back edge is swept back, notched or barbed (the common printed worksheet head); Line arrow is an open two-stroke chevron, an unfilled V. Choose the visibly printed source style, and Automatic when the fill cannot be read; these choices do not move the grid or add labels.";
 
 /// The params batch 7 adds; each default draws exactly what the figure drew before.
 pub(crate) fn params() -> Vec<ParamDef> {

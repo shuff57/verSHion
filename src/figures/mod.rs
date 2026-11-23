@@ -1253,12 +1253,21 @@ pub fn to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     pm.encode_png().map_err(|e| e.to_string())
 }
 
-/// `resvg::render`, with a renderer panic turned into an error. Coordinates far outside the
-/// canvas (a curve run out toward an asymptote) overflow resvg's integer group bounds, which
-/// panics in a checked build (holdout v14: one such drawing stopped a whole page import).
+/// Check layer bounds before converting them to renderer integers. Extreme coordinates can
+/// cause a panic in checked builds or silently drop a layer in optimized builds.
 fn render_guarded(tree: &resvg::usvg::Tree, transform: resvg::tiny_skia::Transform, pm: &mut resvg::tiny_skia::Pixmap) -> Result<(), String> {
+    const ERROR: &str = "The drawing could not be rendered: some of its coordinates are far outside the canvas. Keep every point, curve and label within a reasonable distance of the visible figure.";
+    // Allow space for integer padding and for the span between opposite edges.
+    const MAX_EDGE: f32 = (i32::MAX / 4) as f32;
+    let bounds = tree.root().abs_layer_bounding_box().transform(transform).ok_or(ERROR)?;
+    if [bounds.left(), bounds.top(), bounds.right(), bounds.bottom()]
+        .into_iter()
+        .any(|edge| edge.abs() > MAX_EDGE)
+    {
+        return Err(ERROR.to_string());
+    }
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resvg::render(tree, transform, &mut pm.as_mut())))
-        .map_err(|_| "The drawing could not be rendered: some of its coordinates are far outside the canvas. Keep every point, curve and label within a reasonable distance of the visible figure.".to_string())
+        .map_err(|_| ERROR.to_string())
 }
 
 /// A subpixel stroke in a crispEdges group can round to zero covered pixels at some phases.
@@ -1377,6 +1386,7 @@ mod crisp_grid_raster_tests {
         let r = std::panic::catch_unwind(|| to_png(svg, 1.0));
         assert!(r.is_ok(), "rendering must not panic");
         assert!(r.unwrap().unwrap_err().contains("far outside the canvas"));
+        assert!(to_rgba_at(svg, 0.5, (0.25, 0.25)).unwrap_err().contains("far outside the canvas"));
         assert!(to_png(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><g opacity="0.5"><path d="M 0 0 L 5 5" stroke="black"/></g></svg>"#, 1.0).is_ok());
     }
 
