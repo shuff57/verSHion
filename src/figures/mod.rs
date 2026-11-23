@@ -790,6 +790,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     if id == sequences::ID { return sequences::relevant(key,p); }
     if id == complex::ID { return complex::relevant(key, p); }
     match id {
+        chemistry::equilibrium::ID => chemistry::equilibrium::relevant(key, p),
         "pulley" => physics::pulley_relevant(key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
         "circle" if key == "join_from" || key == "poly_names" => false,
@@ -868,6 +869,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     // unticking the half-life graph's "Fit the axes" fills the range boxes with the fitted axes
     if id == chemistry::halflife::ID {
         chemistry::halflife::panel_changed(key, old, p);
+    }
+    if id == chemistry::equilibrium::ID {
+        chemistry::equilibrium::panel_changed(key, p);
     }
     if id == "transformations" {
         transform::panel_changed(key, p);

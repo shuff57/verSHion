@@ -1208,8 +1208,18 @@ static HALF_LIFE: [RefSection; 9] = [
     s("Grid", &["minor_grid"], ""),
 ];
 
+static EQUILIBRIUM_GRAPHS: [RefSection; 6] = [
+    s("Graph and reaction", &["mode", "task", "coef_a", "coef_b", "coef_c", "coef_d", "name_a", "name_b", "name_c", "name_d", "phase_a", "phase_b", "phase_c", "phase_d"], ""),
+    s("Starting concentrations and K", &["init_a", "init_b", "init_c", "init_d", "k", "eq_species", "eq_value"], ""),
+    s("First disturbance", &["dist", "dist_time", "dist_species", "dist_amount", "dist_factor", "dist_dh", "dist_t1", "dist_t2"], ""),
+    s("Second disturbance", &["dist2", "dist2_time", "dist2_species", "dist2_amount", "dist2_factor", "dist2_dh", "dist2_t1", "dist2_t2"], ""),
+    s("Working and answers", &["sig", "readout", "show_answers"], ""),
+    s("Appearance", &["grid", "style", "label_size"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
+        super::chemistry::equilibrium::ID => &EQUILIBRIUM_GRAPHS,
         "half-life-graph" => &HALF_LIFE,
         "angles" => &FIG_0,
         "histogram" => &HISTOGRAM,

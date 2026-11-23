@@ -4285,7 +4285,7 @@ const EQUILIBRIUM_GRAPHS: &[Faq] = &[
     },
     Faq {
         q: "What disturbances can I apply, and how are they worked out?",
-        a: "At a chosen time, once equilibrium is reached, add or remove some of a species, change the volume (every concentration is divided by the factor) or change the temperature (K changes by the van 't Hoff equation, taking the enthalpy change as constant). The key compares Q with K just after, says which way the system shifts and solves for the new equilibrium. Removing more than is there removes all of it, with a note.",
+        a: "At a chosen time, once equilibrium is reached, add or remove some of a species, change the volume (every concentration is divided by the factor) or change the temperature (K changes by the van 't Hoff equation, taking the enthalpy change as constant). Enable a second disturbance at least 6 time units after the first to apply it to the new equilibrium. A second temperature change starts from the temperature reached by the first. The key compares Q with K just after each event and solves for the new equilibrium. Removing more than is there removes all of it, with a note.",
     },
     Faq {
         q: "What does the student copy leave out?",

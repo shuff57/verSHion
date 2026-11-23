@@ -1,9 +1,9 @@
 //! Equilibrium graphs for a generic reversible reaction aA + bB <-> cC + dD with coefficients 0-4 (0 leaves a species
 //! out), a phase for each species, initial concentrations and Kc. Four graphs of the same reaction: concentration
 //! against time, the ICE (Initial-Change-Equilibrium) table, the reaction quotient Q against time with the K line, and
-//! the forward and reverse rates meeting at equilibrium; and an optional disturbance at a chosen time (add or remove a
-//! species, change the volume, change the temperature) that shows Le Chatelier's shift to a new equilibrium with Q
-//! against K before and after. Drawn with `svg::Doc` only; original drawing.
+//! the forward and reverse rates meeting at equilibrium. Up to two timed disturbances (add or remove a species,
+//! change volume, change temperature) show how each successive equilibrium responds, with Q against K before and
+//! after. Drawn with `svg::Doc` only; original drawing.
 //!
 //! The chemistry is exact. x is the extent of reaction as written (mol/L): [reactant] = c0 - (coefficient) x and
 //! [product] = c0 + (coefficient) x, so x < 0 is the reaction running in reverse. K is written from the coefficients
@@ -60,6 +60,34 @@ pub const K_DEF: f64 = 50.0;
 pub const C_HI: f64 = 1000.0;
 pub const T_D_LO: f64 = 6.0;
 pub const T_D_HI: f64 = 24.0;
+const SECOND_TIME_MAX: f64 = 48.0;
+const STRESS_GAP: f64 = 6.0;
+
+struct DistKeys {
+    kind: &'static str,
+    time: &'static str,
+    species: &'static str,
+    amount: &'static str,
+    volume: &'static str,
+    enthalpy: &'static str,
+    before: &'static str,
+    after: &'static str,
+    default_time: f64,
+    min_time: f64,
+    max_time: f64,
+}
+
+const FIRST: DistKeys = DistKeys {
+    kind: "dist", time: "dist_time", species: "dist_species", amount: "dist_amount",
+    volume: "dist_factor", enthalpy: "dist_dh", before: "dist_t1", after: "dist_t2",
+    default_time: 8.0, min_time: T_D_LO, max_time: T_D_HI,
+};
+const SECOND: DistKeys = DistKeys {
+    kind: "dist2", time: "dist2_time", species: "dist2_species", amount: "dist2_amount",
+    volume: "dist2_factor", enthalpy: "dist2_dh", before: "dist2_t1", after: "dist2_t2",
+    default_time: 16.0, min_time: T_D_LO + STRESS_GAP, max_time: SECOND_TIME_MAX,
+};
+
 /// The time (on the axis) at which the approach to equilibrium is within 0.01 % of finished.
 const T_OK: f64 = 5.0;
 /// Implicit Euler step, in the model's own time unit (the relaxation time at equilibrium is 1).
@@ -103,14 +131,23 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("k", "Equilibrium constant K (Kc)", 0.0, K_HI, 0.01, K_DEF).hint("Kept to 4 significant figures. K = 0 is drawn as 1e-30 and K above 1e30 as 1e30. Not used when the question is to find K"),
         ParamDef::choice("eq_species", "Equilibrium value given for", &SPECS, SPECS[2]).hint("For the question that finds K: which species' equilibrium concentration is given"),
         ParamDef::float("eq_value", "Its equilibrium concentration (M)", 0.0, C_HI, 0.01, 0.8),
-        ParamDef::choice("dist", "Disturbance", &DISTS, DISTS[0]).hint("Applied once the system has reached equilibrium"),
-        ParamDef::choice("dist_species", "Species added or removed", &SPECS, SPECS[0]),
-        ParamDef::float("dist_amount", "Amount added or removed (M)", 0.0, C_HI, 0.01, 0.5).hint("Removing more than is there removes it all, with a note"),
-        ParamDef::float("dist_factor", "Volume changes by a factor of", 0.1, 10.0, 0.1, 2.0).hint("2 doubles the volume (every concentration halves); 0.5 halves it"),
-        ParamDef::float("dist_dh", "Enthalpy change \u{394}H (kJ/mol)", -1000.0, 1000.0, 1.0, -50.0).hint("For the change of temperature: van 't Hoff, taking \u{394}H as constant"),
-        ParamDef::float("dist_t1", "Temperature before (K)", 100.0, 3000.0, 1.0, 298.0),
-        ParamDef::float("dist_t2", "Temperature after (K)", 100.0, 3000.0, 1.0, 350.0),
-        ParamDef::float("dist_time", "Disturbance at t", T_D_LO, T_D_HI, 0.5, 8.0).hint("In the figure's time units; the first approach to equilibrium is finished by t = 5"),
+    ]);
+    for (keys, label, timing) in [
+        (&FIRST, "First disturbance", "In arbitrary time units. The first approach to equilibrium finishes by t = 5"),
+        (&SECOND, "Second disturbance", "In arbitrary time units. Leave at least 6 time units after the first disturbance"),
+    ] {
+        v.extend([
+            ParamDef::choice(keys.kind, label, &DISTS, DISTS[0]),
+            ParamDef::float(keys.time, "Time (arbitrary units)", keys.min_time, keys.max_time, 0.5, keys.default_time).hint(timing),
+            ParamDef::choice(keys.species, "Species added or removed", &SPECS, SPECS[0]),
+            ParamDef::float(keys.amount, "Amount added or removed (M)", 0.0, C_HI, 0.01, 0.5).hint("Removing more than is there removes it all, with a note"),
+            ParamDef::float(keys.volume, "Volume changes by a factor of", 0.1, 10.0, 0.1, 2.0).hint("2 doubles the volume (every concentration halves); 0.5 halves it"),
+            ParamDef::float(keys.enthalpy, "Enthalpy change ΔH (kJ/mol)", -1000.0, 1000.0, 1.0, -50.0).hint("For the change of temperature: van 't Hoff, taking ΔH as constant"),
+            ParamDef::float(keys.before, "Temperature before (K)", 100.0, 3000.0, 1.0, 298.0),
+            ParamDef::float(keys.after, "Temperature after (K)", 100.0, 3000.0, 1.0, 350.0),
+        ]);
+    }
+    v.extend([
         ParamDef::int("sig", "Significant figures in answers", 2, 5, 3),
         ParamDef::bool("grid", "Grid lines", true),
         ParamDef::bool("readout", "Working under the graph", true),
@@ -523,14 +560,7 @@ pub struct Setup {
     pub k_param: f64,
     pub eq_i: usize,
     pub eq_v: f64,
-    pub dk: DKind,
-    pub d_i: usize,
-    pub d_amt: f64,
-    pub d_f: f64,
-    pub dh: f64,
-    pub t1: f64,
-    pub t2: f64,
-    pub t_d: f64,
+    disturbances: Vec<Disturbance>,
     pub sig: usize,
     pub grid: bool,
     pub readout: bool,
@@ -595,25 +625,107 @@ fn read(p: &Params) -> (Setup, Vec<String>) {
         eq_i = j;
     }
     let eq_v = bounded(p, "eq_value", "The equilibrium concentration given", 0.8, 0.0, C_HI, &mut n);
-    let dk = match choice_or(p, "dist", &DISTS, DISTS[0]) { s if s == DISTS[1] => DKind::Add, s if s == DISTS[2] => DKind::Remove, s if s == DISTS[3] => DKind::Volume, s if s == DISTS[4] => DKind::Temp, _ => DKind::None };
-    let mut d_i = SPECS.iter().position(|s| *s == choice_or(p, "dist_species", &SPECS, SPECS[0])).unwrap_or(0);
-    if matches!(dk, DKind::Add | DKind::Remove) && !rx.act(d_i) {
-        let j = (0..4).find(|&j| rx.act(j)).unwrap_or(0);
-        n.push(format!("{} is not in the reaction, so the disturbance is applied to {}.", SPECS[d_i], SPECS[j]));
-        d_i = j;
+    let mut disturbances = Vec::new();
+    if let Some(first) = read_disturbance(p, &FIRST, &rx, None, &mut n) {
+        let second = read_disturbance(p, &SECOND, &rx, Some(&first), &mut n);
+        disturbances.push(first);
+        disturbances.extend(second);
     }
-    let dq = dk != DKind::None;
-    let mut nn = Vec::new();
-    let d_amt = bounded(p, "dist_amount", "The amount added or removed", 0.5, 0.0, C_HI, &mut nn);
-    let d_f = bounded(p, "dist_factor", "The volume factor", 2.0, 0.1, 10.0, &mut nn);
-    let dh = bounded(p, "dist_dh", "\u{394}H", -50.0, -1000.0, 1000.0, &mut nn);
-    let t1 = bounded(p, "dist_t1", "The first temperature", 298.0, 100.0, 3000.0, &mut nn);
-    let t2 = bounded(p, "dist_t2", "The second temperature", 350.0, 100.0, 3000.0, &mut nn);
-    let t_d = bounded(p, "dist_time", "The disturbance time", 8.0, T_D_LO, T_D_HI, &mut nn);
-    if dq { n.extend(nn); }
     let sig = match num(p, "sig") { Some(v) if v.is_finite() => v.round().clamp(2.0, 5.0) as usize, _ => 3 };
-    let st = Setup { mode, task, rx, names, c0, k_param, eq_i, eq_v, dk, d_i, d_amt, d_f, dh, t1, t2, t_d, sig, grid: bo(p, "grid", true), readout: bo(p, "readout", true) };
+    let st = Setup { mode, task, rx, names, c0, k_param, eq_i, eq_v, disturbances, sig, grid: bo(p, "grid", true), readout: bo(p, "readout", true) };
     (st, n)
+}
+
+#[derive(Clone, Debug)]
+struct Disturbance {
+    kind: DKind,
+    species: usize,
+    amount: f64,
+    volume: f64,
+    dh: f64,
+    before: f64,
+    after: f64,
+    time: f64,
+}
+
+fn disturbance_kind(p: &Params, keys: &DistKeys) -> DKind {
+    match p.s(keys.kind) {
+        s if s == DISTS[1] => DKind::Add,
+        s if s == DISTS[2] => DKind::Remove,
+        s if s == DISTS[3] => DKind::Volume,
+        s if s == DISTS[4] => DKind::Temp,
+        _ => DKind::None,
+    }
+}
+
+pub fn relevant(key: &str, p: &Params) -> bool {
+    let first = disturbance_kind(p, &FIRST);
+    let keys = if key.starts_with("dist2") { &SECOND } else if key.starts_with("dist") { &FIRST } else { return true };
+    let second = keys.kind == SECOND.kind;
+    if second && first == DKind::None {
+        return false;
+    }
+    let kind = disturbance_kind(p, keys);
+    if key == keys.kind { return true; }
+    if key == keys.species || key == keys.amount { return matches!(kind, DKind::Add | DKind::Remove); }
+    if key == keys.volume { return kind == DKind::Volume; }
+    if key == keys.before || key == keys.enthalpy {
+        return kind == DKind::Temp && !(second && first == DKind::Temp);
+    }
+    if key == keys.after { return kind == DKind::Temp; }
+    kind != DKind::None
+}
+
+fn second_time_min(first: f64) -> f64 {
+    // A second time is at least 12 and has four significant figures, so round its minimum up to hundredths.
+    ((first + STRESS_GAP) * 100.0 - 1e-9).ceil() / 100.0
+}
+
+pub fn panel_changed(key: &str, p: &mut Params) {
+    if !matches!(key, "dist" | "dist_time" | "dist2" | "dist2_time")
+        || disturbance_kind(p, &FIRST) == DKind::None
+        || disturbance_kind(p, &SECOND) == DKind::None
+    {
+        return;
+    }
+    let earliest = second_time_min(sig4(p.f(FIRST.time)));
+    if p.f(SECOND.time) < earliest {
+        p.set_f(SECOND.time, earliest);
+    }
+}
+
+fn read_disturbance(
+    p: &Params, keys: &DistKeys, rx: &Rxn, previous: Option<&Disturbance>, n: &mut Vec<String>,
+) -> Option<Disturbance> {
+    let kind = disturbance_kind(p, keys);
+    if kind == DKind::None {
+        return None;
+    }
+    let mut species = SPECS.iter().position(|s| *s == p.s(keys.species)).unwrap_or(0);
+    if matches!(kind, DKind::Add | DKind::Remove) && !rx.act(species) {
+        let j = (0..4).find(|&j| rx.act(j)).unwrap_or(0);
+        n.push(format!("{} is not in the reaction, so the disturbance is applied to {}.", SPECS[species], SPECS[j]));
+        species = j;
+    }
+    let amount = bounded(p, keys.amount, "The amount added or removed", 0.5, 0.0, C_HI, n);
+    let volume = bounded(p, keys.volume, "The volume factor", 2.0, 0.1, 10.0, n);
+    let (dh, before) = match previous.filter(|d| d.kind == DKind::Temp) {
+        Some(d) => (d.dh, d.after),
+        None => (
+            bounded(p, keys.enthalpy, "ΔH", -50.0, -1000.0, 1000.0, n),
+            bounded(p, keys.before, "The first temperature", 298.0, 100.0, 3000.0, n),
+        ),
+    };
+    let after = bounded(p, keys.after, "The second temperature", 350.0, 100.0, 3000.0, n);
+    let mut time = bounded(p, keys.time, "The disturbance time", keys.default_time, keys.min_time, keys.max_time, n);
+    if let Some(d) = previous {
+        let earliest = second_time_min(d.time);
+        if time < earliest {
+            n.push(format!("The second disturbance is drawn at t = {} to leave 6 time units after the first.", given_fmt(earliest)));
+            time = earliest;
+        }
+    }
+    Some(Disturbance { kind, species, amount, volume, dh, before, after, time })
 }
 
 fn rx_task_is_k(t: Task) -> bool { t == Task::FindK }
@@ -623,9 +735,12 @@ fn rx_task_is_k(t: Task) -> bool { t == Task::FindK }
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
-pub struct D2 {
+pub struct Disturbed {
+    input: Disturbance,
+    k_before: f64,
+    before_stuck: bool,
     pub c_after: [f64; 4],
-    pub k2: f64,
+    pub k_after: f64,
     pub sol: Sol,
     pub dir: Dir,
     pub q_after: f64,
@@ -652,7 +767,7 @@ pub struct Model {
     pub kf: f64,
     pub kr: f64,
     pub sim: Arc<Sim>,
-    pub d2: Option<D2>,
+    pub disturbances: Vec<Disturbed>,
     /// Model time per unit of the time axis.
     pub tpt: f64,
 }
@@ -692,63 +807,79 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
     let (kf, kr) = rx.rate_consts(&c0, k, &sol);
     let sim = simulate(rx, &c0, kf, kr, &sol);
     let tpt = sim.tau_ok / T_OK;
-    let mut d2 = None;
-    if st.dk != DKind::None {
-        if dir == Dir::Stuck {
-            n.push("There is no equilibrium to disturb, so the disturbance is not drawn.".into());
-        } else {
-            let ce = sol.c;
-            let mut ca = ce;
-            let mut k2 = k;
-            let mut effect = true;
-            let mut clamp: Option<String> = None;
-            let nm = pretty(&st.names[st.d_i]);
-            let mut what_s = String::new();
-            let what = match st.dk {
-                DKind::Add => {
-                    if rx.ink(st.d_i) { ca[st.d_i] += st.d_amt; } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so adding more changes no concentration in K and the equilibrium does not shift.")); }
-                    if st.d_amt == 0.0 { effect = false; }
-                    format!("Add {} M {}", given_fmt(st.d_amt), nm)
-                }
-                DKind::Remove => {
-                    let mut label = format!("Remove {} M {}", given_fmt(st.d_amt), nm);
-                    if rx.ink(st.d_i) {
-                        if st.d_amt > ce[st.d_i] {
-                            n.push(format!("Removing {} M of {nm} would make its concentration negative, so all of it ({} M) is removed.", given_fmt(st.d_amt), sf(ce[st.d_i], st.sig)));
-                            clamp = Some(format!("Removing {} M of {nm} would make {} negative (only {} M is there), so all of it is removed.", given_fmt(st.d_amt), st.br(st.d_i), sf(ce[st.d_i], st.sig)));
-                            label = format!("Remove all of the {nm} ({} M)", sf(ce[st.d_i], st.sig));
-                            ca[st.d_i] = 0.0;
-                        } else { ca[st.d_i] = ce[st.d_i] - st.d_amt; }
-                    } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so removing some changes no concentration in K and the equilibrium does not shift.")); }
-                    if st.d_amt == 0.0 { effect = false; }
-                    what_s = format!("Remove up to {} M {}", given_fmt(st.d_amt), nm);
-                    label
-                }
-                DKind::Volume => {
-                    for i in 0..4 { if rx.ink(i) { ca[i] = ce[i] / st.d_f; } }
-                    if st.d_f == 1.0 { effect = false; }
-                    format!("Volume \u{d7} {}", given_fmt(st.d_f))
-                }
-                _ => {
-                    let e = (-st.dh * 1000.0 / R_GAS * (1.0 / st.t2 - 1.0 / st.t1)).exp();
-                    let k2r = k * e;
-                    k2 = k2r.clamp(K_LO, K_HI);
-                    if k2 != k2r { n.push("The new K lies beyond what this figure takes, so it is held at the nearest limit.".into()); }
-                    if st.t1 == st.t2 { effect = false; }
-                    format!("Temperature {} K to {} K", given_fmt(st.t1), given_fmt(st.t2))
-                }
-            };
-            let dir2 = rx.direction(&ca, k2);
-            let mut sol2 = rx.solve(&ca, k2);
-            if dir2 == Dir::AtEq { sol2 = Sol { x: 0.0, c: rx.conc(&ca, 0.0), lo: sol2.lo, hi: sol2.hi, stuck: sol2.stuck }; }
-            let (kf2, kr2) = if st.dk == DKind::Temp { arrhenius(kf, kr, k2 / k, st.t1, st.t2) } else { (kf, kr) };
-            if st.dk == DKind::Temp && (kf2 / kf).max(kr2 / kr).max((kf / kf2).max(kr / kr2)) > 100.0 { n.push("The rate constants change by a factor of more than 100 with this change of temperature, so the rates are drawn relative to the largest and the earlier part of the graph is small.".into()); }
-            let sim2 = simulate(rx, &ca, kf2, kr2, &sol2);
-            let q_after = rx.q(&ca);
-            d2 = Some(D2 { c_after: ca, k2, sol: sol2, dir: dir2, q_after, kf: kf2, kr: kr2, sim: sim2, effect, what_s: if what_s.is_empty() { what.clone() } else { what_s }, what, clamp });
+    let mut disturbances: Vec<Disturbed> = Vec::new();
+    if dir == Dir::Stuck && !st.disturbances.is_empty() {
+        n.push("There is no equilibrium to disturb, so the disturbance is not drawn.".into());
+    } else {
+        for input in &st.disturbances {
+            let (before, kk, forward, reverse) = disturbances.last().map_or(
+                (&sol, k, kf, kr), |d| (&d.sol, d.k_after, d.kf, d.kr),
+            );
+            disturbances.push(apply_disturbance(st, input, before, kk, (forward, reverse), n));
         }
     }
-    Model { st: st.clone(), k, sol, dir, q0, kf, kr, sim, d2, tpt }
+    Model { st: st.clone(), k, sol, dir, q0, kf, kr, sim, disturbances, tpt }
+}
+
+fn apply_disturbance(
+    st: &Setup, input: &Disturbance, before: &Sol, k: f64, rates: (f64, f64), n: &mut Vec<String>,
+) -> Disturbed {
+    let rx = &st.rx;
+    let ce = before.c;
+    let (kf, kr) = rates;
+    let mut ca = ce;
+    let mut k2 = k;
+    let mut effect = true;
+    let mut clamp: Option<String> = None;
+    let nm = pretty(&st.names[input.species]);
+    let mut what_s = String::new();
+    let what = match input.kind {
+        DKind::Add => {
+            if rx.ink(input.species) { ca[input.species] += input.amount; } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so adding more changes no concentration in K and the equilibrium does not shift.")); }
+            if input.amount == 0.0 { effect = false; }
+            format!("Add {} M {}", given_fmt(input.amount), nm)
+        }
+        DKind::Remove => {
+            let mut label = format!("Remove {} M {}", given_fmt(input.amount), nm);
+            if rx.ink(input.species) {
+                if input.amount > ce[input.species] {
+                    n.push(format!("Removing {} M of {nm} would make its concentration negative, so all of it ({} M) is removed.", given_fmt(input.amount), sf(ce[input.species], st.sig)));
+                    clamp = Some(format!("Removing {} M of {nm} would make {} negative (only {} M is there), so all of it is removed.", given_fmt(input.amount), st.br(input.species), sf(ce[input.species], st.sig)));
+                    label = format!("Remove all of the {nm} ({} M)", sf(ce[input.species], st.sig));
+                    ca[input.species] = 0.0;
+                } else { ca[input.species] = ce[input.species] - input.amount; }
+            } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so removing some changes no concentration in K and the equilibrium does not shift.")); }
+            if input.amount == 0.0 { effect = false; }
+            what_s = format!("Remove up to {} M {}", given_fmt(input.amount), nm);
+            label
+        }
+        DKind::Volume => {
+            for i in 0..4 { if rx.ink(i) { ca[i] = ce[i] / input.volume; } }
+            if input.volume == 1.0 { effect = false; }
+            format!("Volume \u{d7} {}", given_fmt(input.volume))
+        }
+        DKind::Temp => {
+            let e = (-input.dh * 1000.0 / R_GAS * (1.0 / input.after - 1.0 / input.before)).exp();
+            let k2r = k * e;
+            k2 = k2r.clamp(K_LO, K_HI);
+            if k2 != k2r { n.push("The new K lies beyond what this figure takes, so it is held at the nearest limit.".into()); }
+            if input.before == input.after { effect = false; }
+            format!("Temperature {} K to {} K", given_fmt(input.before), given_fmt(input.after))
+        }
+        DKind::None => unreachable!("only active disturbances are modeled"),
+    };
+    let dir2 = rx.direction(&ca, k2);
+    let mut sol2 = rx.solve(&ca, k2);
+    if dir2 == Dir::AtEq { sol2 = Sol { x: 0.0, c: rx.conc(&ca, 0.0), lo: sol2.lo, hi: sol2.hi, stuck: sol2.stuck }; }
+    let (kf2, kr2) = if input.kind == DKind::Temp { arrhenius(kf, kr, k2 / k, input.before, input.after) } else { (kf, kr) };
+    if input.kind == DKind::Temp && (kf2 / kf).max(kr2 / kr).max((kf / kf2).max(kr / kr2)) > 100.0 { n.push("The rate constants change by a factor of more than 100 with this change of temperature, so the rates are drawn relative to the largest and the earlier part of the graph is small.".into()); }
+    let sim2 = simulate(rx, &ca, kf2, kr2, &sol2);
+    let q_after = rx.q(&ca);
+    Disturbed {
+        input: input.clone(), k_before: k, before_stuck: before.stuck, c_after: ca, k_after: k2, sol: sol2,
+        dir: dir2, q_after, kf: kf2, kr: kr2, sim: sim2, effect,
+        what_s: if what_s.is_empty() { what.clone() } else { what_s }, what, clamp,
+    }
 }
 
 /// The baseline activation energy (J/mol) of the model's rate constants: both directions need at least this much.
@@ -768,50 +899,69 @@ pub fn arrhenius(kf: f64, kr: f64, rho: f64, t1: f64, t2: f64) -> (f64, f64) {
 #[derive(Clone, Copy, Debug)]
 pub struct Pt4 { pub t: f64, pub c: [f64; 4], pub q: f64, pub rf: f64, pub rr: f64 }
 
-#[derive(Clone, Debug)]
-pub struct Traj { pub p1: Vec<Pt4>, pub p2: Vec<Pt4> }
-
 const NS: usize = 400;
 
 impl Model {
     /// The end of the time axis.
-    pub fn t_end(&self) -> f64 { if self.d2.is_some() { (self.st.t_d + 10.0).ceil() } else { 8.0 } }
+    pub fn t_end(&self) -> f64 {
+        self.disturbances.last().map_or(8.0, |d| (d.input.time + 10.0).ceil())
+    }
+
+    fn has_temperature_change(&self) -> bool {
+        self.disturbances.iter().any(|d| d.input.kind == DKind::Temp)
+    }
 
     fn state(&self, c0: &[f64; 4], sol: &Sol, x: f64) -> [f64; 4] {
         if (x - sol.x).abs() <= 1e-9 * (sol.hi - sol.lo).abs() { sol.c } else { self.st.rx.conc(c0, x) }
     }
 
-    /// The curves, sampled: phase 1 from t = 0 to the disturbance (or the end), phase 2 from the disturbance on.
-    pub fn traj(&self) -> Traj {
+    /// One segment per concentration state, with separate pre- and post-event samples at the same time.
+    pub fn traj(&self) -> Vec<Vec<Pt4>> {
         let rx = &self.st.rx;
         let t_end = self.t_end();
-        let t_d = self.d2.as_ref().map(|_| self.st.t_d);
-        let mk = |t: f64, c: [f64; 4], kf: f64, kr: f64| { let (rf, rr) = rx.rates(&c, kf, kr); Pt4 { t, c, q: rx.q(&c), rf, rr } };
-        let mut p1 = Vec::new();
-        let mut p2 = Vec::new();
-        for i in 0..=NS {
-            let t = t_end * i as f64 / NS as f64;
-            if t_d.is_none_or(|d| t <= d) {
-                let c = self.state(&self.st.c0, &self.sol, self.sim.at(t * self.tpt));
-                p1.push(mk(t, c, self.kf, self.kr));
-            }
-        }
-        if let (Some(d), Some(d2)) = (t_d, self.d2.as_ref()) {
-            if p1.last().is_none_or(|p| p.t < d) {
-                let c = self.state(&self.st.c0, &self.sol, self.sim.at(d * self.tpt));
-                p1.push(mk(d, c, self.kf, self.kr));
-            }
-            let tpt2 = self.tpt;
-            p2.push(mk(d, d2.c_after, d2.kf, d2.kr));
-            for i in 0..=NS {
-                let t = t_end * i as f64 / NS as f64;
-                if t > d {
-                    let c = self.state(&d2.c_after, &d2.sol, d2.sim.at((t - d) * tpt2));
-                    p2.push(mk(t, c, d2.kf, d2.kr));
+        let multi = self.disturbances.len() > 1;
+        let mut segments = Vec::with_capacity(self.disturbances.len() + 1);
+        for i in 0..=self.disturbances.len() {
+            let previous = i.checked_sub(1).map(|j| &self.disturbances[j]);
+            let (start, c0, sol, sim, kf, kr) = previous.map_or(
+                (0.0, &self.st.c0, &self.sol, &*self.sim, self.kf, self.kr),
+                |d| (d.input.time, &d.c_after, &d.sol, &*d.sim, d.kf, d.kr),
+            );
+            let end = self.disturbances.get(i).map_or(t_end, |d| d.input.time);
+            // Each timed stress follows a plateau. Fit slow schematic approaches into five units
+            // and use the exact solved equilibrium for the plateau, including the sample before the jump.
+            let tpt = if multi { self.tpt.max(sim.tau_ok / T_OK) } else { self.tpt };
+            let fitted_extent = if multi { sim.at(T_OK * tpt) } else { 0.0 };
+            let sample = |t: f64| {
+                let elapsed = t - start;
+                let c = if previous.is_some() && t == start {
+                    *c0
+                } else if multi && elapsed >= T_OK {
+                    sol.c
+                } else {
+                    let x = sim.at(elapsed * tpt);
+                    let x = if multi && fitted_extent != 0.0 {
+                        sol.x * (x / fitted_extent).clamp(0.0, 1.0)
+                    } else { x };
+                    self.state(c0, sol, x)
+                };
+                let (rf, rr) = rx.rates(&c, kf, kr);
+                Pt4 { t, c, q: rx.q(&c), rf, rr }
+            };
+            let mut points = vec![sample(start)];
+            // Preserve the original sampling grid for existing specs.
+            for j in 1..=NS {
+                let t = t_end * j as f64 / NS as f64;
+                if t > start && t <= end {
+                    points.push(sample(t));
                 }
             }
+            if points.last().unwrap().t < end {
+                points.push(sample(end));
+            }
+            segments.push(points);
         }
-        Traj { p1, p2 }
+        segments
     }
 
     /// The largest concentration any plotted curve can reach, from the givens alone: a generous bound, so the axis is
@@ -833,14 +983,14 @@ impl Model {
             let reach = if i < 2 { c0[i] + rx.coef[i] as f64 * down } else { c0[i] + rx.coef[i] as f64 * up };
             b = b.max(reach).max(c0[i]);
         }
-        if let Some(_) = self.d2 {
-            match self.st.dk {
+        for d in &self.disturbances {
+            match d.input.kind {
                 DKind::Add => {
-                    let cs = rx.coef[self.st.d_i].max(1) as f64;
+                    let cs = rx.coef[d.input.species].max(1) as f64;
                     let m = (0..4).map(|i| rx.coef[i] as f64 / cs).fold(1.0, f64::max);
-                    b += self.st.d_amt * m;
+                    b += d.input.amount * m;
                 }
-                DKind::Volume => { if self.st.d_f < 1.0 { b /= self.st.d_f; } }
+                DKind::Volume => { if d.input.volume < 1.0 { b /= d.input.volume; } }
                 _ => {}
             }
         }
@@ -1095,7 +1245,11 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
         Task::Read => {}
     }
     v.push("Let x be the change in the amount of reaction (mol/L): each reactant falls by its coefficient times x and each product rises by it. x < 0 means the reaction ran in reverse.".into());
-    let dline = m.d2.as_ref().map(|d| format!("Disturbance at t = {}: {}{}.", given_fmt(st.t_d), if ans { &d.what } else { &d.what_s }, if st.dk == DKind::Temp { format!(", \u{394}H = {} kJ/mol", given_fmt(st.dh)) } else { String::new() }));
+    let dline = |d: &Disturbed| {
+        let what = if ans { &d.what } else { &d.what_s };
+        let heat = if d.input.kind == DKind::Temp { format!(", ΔH = {} kJ/mol", given_fmt(d.input.dh)) } else { String::new() };
+        format!("Disturbance at t = {}: {what}{heat}.", given_fmt(d.input.time))
+    };
     if !ans {
         v.push(format!("K expression: K = {BLANK}"));
         match st.task {
@@ -1104,8 +1258,8 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
             Task::Direction => v.push(format!("Q = {BLANK}   Q compared with K: {BLANK}   The reaction proceeds: {BLANK}")),
             Task::Read => { v.push(blanks(st, "eq")); v.push(format!("K = {BLANK}")); }
         }
-        if let Some(l) = dline {
-            v.push(l);
+        for d in &m.disturbances {
+            v.push(dline(d));
             v.push(format!("Q just after = {BLANK}   Q compared with K: {BLANK}   Describe the change: {BLANK}"));
             v.push(format!("New equilibrium: x = {BLANK}   {}", blanks(st, "eq")));
         }
@@ -1134,22 +1288,31 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
             }
         }
     }
-    if let (Some(d), Some(l)) = (m.d2.as_ref(), dline) {
-        v.push(l);
+    for (i, d) in m.disturbances.iter().enumerate() {
+        v.push(dline(d));
         if let Some(c) = &d.clamp { v.push(c.clone()); }
-        v.push(format!("Just before, the system is at equilibrium: Q = K = {}.", kf(m.k)));
-        if st.dk == DKind::Temp {
-            v.push(format!("van 't Hoff, with \u{394}H constant: K\u{2082} = K exp[\u{2212}(\u{394}H / R)(1/T\u{2082} \u{2212} 1/T\u{2081})] = {} exp[\u{2212}({} J/mol / 8.314 J/(mol K))(1/{} \u{2212} 1/{})] = {}.", kf(m.k), given_fmt(st.dh * 1000.0), given_fmt(st.t2), given_fmt(st.t1), kf(d.k2)));
+        if d.before_stuck {
+            v.push("Just before, the concentrations are unchanged because the previous mixture could not react.".into());
+        } else {
+            v.push(format!("Just before, the system is at equilibrium: Q = K = {}.", kf(d.k_before)));
         }
-        let cmp = cmp_qk(d.q_after, d.k2);
+        let k_sub = if d.input.kind == DKind::Temp { stress_k_subscript(i) } else { "" };
+        if d.input.kind == DKind::Temp {
+            v.push(format!("van 't Hoff, with ΔH constant: K{k_sub} = K exp[−(ΔH / R)(1/T₂ − 1/T₁)] = {} exp[−({} J/mol / 8.314 J/(mol K))(1/{} − 1/{})] = {}.", kf(d.k_before), given_fmt(d.input.dh * 1000.0), given_fmt(d.input.after), given_fmt(d.input.before), kf(d.k_after)));
+        }
+        let cmp = cmp_qk(d.q_after, d.k_after);
         if !d.effect {
-            v.push("This changes no concentration in K (or no temperature), so Q = K still and nothing shifts.".into());
+            if d.before_stuck {
+                v.push("The previous mixture stays unchanged.".into());
+            } else {
+                v.push("This changes no concentration in K (or no temperature), so Q = K still and nothing shifts.".into());
+            }
         } else {
             v.push(format!("Just after: {}.", species_list(st, |i| format!("{} M", sf(d.c_after[i], sg)))));
             let vals: [String; 4] = std::array::from_fn(|i| sft(d.c_after[i], 4));
             v.push(format!("Q = {} = {}.", k_with(st, &vals), q_text(d.q_after, sg)));
-            v.push(format!("Q {cmp} K{} ({} {cmp} {}), {}.", if st.dk == DKind::Temp { "\u{2082}" } else { "" }, if d.q_after.is_infinite() { "infinity".to_string() } else { sf(d.q_after, sg) }, kf(d.k2), shift_words(cmp)));
-            v.extend(solve_lines(st, &d.c_after, d.k2, &d.sol, d.dir));
+            v.push(format!("Q {cmp} K{k_sub} ({} {cmp} {}), {}.", if d.q_after.is_infinite() { "infinity".to_string() } else { sf(d.q_after, sg) }, kf(d.k_after), shift_words(cmp)));
+            v.extend(solve_lines(st, &d.c_after, d.k_after, &d.sol, d.dir));
             v.push(format!("New equilibrium: {}.", species_list(st, |i| format!("{} M", sf(d.sol.c[i], sg)))));
         }
     }
@@ -1174,6 +1337,10 @@ fn k_from_data_lines(m: &Model) -> Vec<String> {
     v
 }
 
+fn stress_k_subscript(event: usize) -> &'static str {
+    ["₂", "₃"][event]
+}
+
 /// The figure's description for a screen reader: ASCII, short, no number, nothing the student copy hides.
 fn describe(m: &Model, ans: bool) -> String {
     let st = &m.st;
@@ -1184,8 +1351,13 @@ fn describe(m: &Model, ans: bool) -> String {
         Mode::Rates => "Forward and reverse reaction rates against time for a reversible reaction".to_string(),
     };
     if ans && st.mode != Mode::Ice { s.push_str(", with dashed lines at the equilibrium values"); }
-    if m.d2.is_some() && st.mode != Mode::Ice { s.push_str(", and a disturbance marked part way along"); }
-    if m.d2.is_some() && st.mode == Mode::Ice { s.push_str(", and a second table for a disturbance"); }
+    match (m.disturbances.len(), st.mode) {
+        (0, _) => {}
+        (1, Mode::Ice) => s.push_str(", and a second table for a disturbance"),
+        (1, _) => s.push_str(", and a disturbance marked part way along"),
+        (_, Mode::Ice) => s.push_str(", and a table for each successive disturbance"),
+        (_, _) => s.push_str(", with successive disturbances marked on the time axis"),
+    }
     s.push('.');
     s
 }
@@ -1335,7 +1507,7 @@ pub struct Report {
     pub plateau: Option<(usize, Pt)>,
     /// The K line at the right edge (Q graph), in px, and whether the y axis is logarithmic.
     pub kpt: Option<Pt>,
-    pub dist_pt: Option<Pt>,
+    pub dist_pts: Vec<Pt>,
     pub readout: Vec<String>,
     pub notes: Vec<String>,
 }
@@ -1362,13 +1534,15 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let seen = ans || task == Task::Read;
     let show_curves = seen;
     let k_known = ans || matches!(task, Task::FindEq | Task::Direction);
-    let has_d = m.d2.is_some();
+    let has_d = !m.disturbances.is_empty();
+    let final_state = m.disturbances.last();
+    let temp = m.has_temperature_change();
     let t_end = m.t_end();
     let tr = m.traj();
     let sp: Vec<usize> = (0..4).filter(|&i| rx.plotted(i)).collect();
-    let last = tr.p2.last().copied().or(tr.p1.last().copied()).unwrap_or(Pt4 { t: 0.0, c: [0.0; 4], q: 0.0, rf: 0.0, rr: 0.0 });
+    let last = tr.last().unwrap().last().unwrap();
     // the rates are drawn relative to the largest value on the graph, so a disturbance that speeds both up stays on the axis
-    let rmax = tr.p1.iter().chain(tr.p2.iter()).fold(0.0f64, |a, p| a.max(p.rf).max(p.rr));
+    let rmax = tr.iter().flatten().fold(0.0f64, |a, p| a.max(p.rf).max(p.rr));
 
     // ---- the y axis
     let mut ylog = false;
@@ -1385,8 +1559,10 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
             // does not (that K is an answer)
             let (a, b) = if k_known {
                 let a = m.k.log10();
-                let b = if ans { m.d2.as_ref().map_or(a, |d| d.k2.log10()) } else { a };
-                (a.min(b).floor() - 4.0, a.max(b).ceil() + 4.0)
+                let (lo, hi) = if ans {
+                    m.disturbances.iter().map(|d| d.k_after.log10()).fold((a, a), |(lo, hi), k| (lo.min(k), hi.max(k)))
+                } else { (a, a) };
+                (lo.floor() - 4.0, hi.ceil() + 4.0)
             } else { (-6.0, 6.0) };
             let step = (((b - a) / 8.0).ceil()).max(1.0);
             let mut ticks = Vec::new();
@@ -1405,14 +1581,12 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
 
     // ---- the margin labels, as the key would write them, so both copies share one frame
     let mut items: Vec<Item> = Vec::new();
-    let n_pl = |tp: f64, v: f64| -> (f64, f64) { (tp, v) };
-    let _ = n_pl;
     // the y in data units of each curve's last point
     match st.mode {
         Mode::Conc => {
             for &i in &sp {
                 let yv = if show_curves { last.c[i] } else { st.c0[i] };
-                let fin_v = m.d2.as_ref().map_or(m.sol.c[i], |d| d.sol.c[i]);
+                let fin_v = final_state.map_or(m.sol.c[i], |d| d.sol.c[i]);
                 items.push(Item { feat: format!("c{i}"), y: yv, colour: col(i).into(), lines_key: vec![st.br(i), format!("= {} M", sf(fin_v, sg))], lines_shown: vec![st.br(i)], worst: vec![format!("= {} M", worst_value(sg))] });
             }
         }
@@ -1420,8 +1594,7 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
             if show_curves { items.push(Item { feat: "q".into(), y: last.q, colour: col(0).into(), lines_key: vec!["Q".into()], lines_shown: vec!["Q".into()], worst: Vec::new() }); }
             // the K after a change of temperature is an answer: the student copy has the line and the label of the
             // K it was given only
-            let kv = if ans { m.d2.as_ref().map_or(m.k, |d| d.k2) } else { m.k };
-            let temp = st.dk == DKind::Temp && has_d;
+            let kv = if ans { final_state.map_or(m.k, |d| d.k_after) } else { m.k };
             let given_k = matches!(task, Task::FindEq | Task::Direction);
             let shown = if given_k { vec!["K".to_string(), format!("= {}", kf(kv))] } else { vec!["K".to_string()] };
             let key_l = vec!["K".to_string(), format!("= {}", kf(kv))];
@@ -1435,8 +1608,8 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
                 items.push(Item { feat: "rf".into(), y: last.rf / rmax, colour: col(0).into(), lines_key: vec!["forward".into()], lines_shown: vec!["forward".into()], worst: Vec::new() });
                 items.push(Item { feat: "rr".into(), y: last.rr / rmax, colour: col(1).into(), lines_key: vec!["reverse".into()], lines_shown: vec!["reverse".into()], worst: Vec::new() });
                 if ans {
-                    let req = m.d2.as_ref().map_or(m.sol.c, |d| d.sol.c);
-                    let (kf_, kr_) = m.d2.as_ref().map_or((m.kf, m.kr), |d| (d.kf, d.kr));
+                    let req = final_state.map_or(m.sol.c, |d| d.sol.c);
+                    let (kf_, kr_) = final_state.map_or((m.kf, m.kr), |d| (d.kf, d.kr));
                     let r_eq = rx.rates(&req, kf_, kr_).0 / rmax;
                     items.push(Item { feat: "req".into(), y: r_eq, colour: ink_c.into(), lines_key: vec!["equal".into(), format!("= {}", sf(r_eq, sg))], lines_shown: vec![], worst: vec![format!("= {}", worst_value(sg))] });
                 }
@@ -1450,7 +1623,7 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let ytw = ya.ticks.iter().map(|t| text_w(&t.1, fs_ax)).fold(0.0, f64::max);
     let l = (18.0 + 1.12 * fs_t + ytw).round();
     let r = (max_key_w + 30.0).max(24.0).round();
-    let band = if has_d { 2.0 * 1.35 * fs_lab + 6.0 } else { 0.0 };
+    let band = if has_d { 2.0 * 1.35 * fs_lab * m.disturbances.len() as f64 + 6.0 } else { 0.0 };
     let t = (14.0 * lab + band).round();
     let bm = (6.0 + 1.2 * fs_ax + 10.0 + 1.1 * fs_t + 6.0).round();
     let ph = (400.0 * (1.0 + 0.3 * (lab - 1.0)) + band).round();
@@ -1473,29 +1646,30 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let mut plateau: Option<(usize, Pt)> = None;
     let mut kpt: Option<Pt> = None;
     let guide_c = |i: usize| if print { "#7a7a7a" } else { col(i) };
-    let x_d = px(st.t_d);
-    let gap_d = 0.0;
-    let _ = gap_d;
+    let stage_edges = |i: usize| {
+        let a = i.checked_sub(1).map_or(left, |j| px(m.disturbances[j].input.time));
+        let b = m.disturbances.get(i).map_or(right, |d| px(d.input.time));
+        (a, b)
+    };
+    let states = || std::iter::once((&m.sol, m.kf, m.kr))
+        .chain(m.disturbances.iter().map(|d| (&d.sol, d.kf, d.kr)));
 
     match st.mode {
         Mode::Conc => {
-            for (k, &i) in sp.iter().enumerate() {
-                let _ = k;
+            for &i in &sp {
                 let feat = format!("c{i}");
                 if show_curves {
-                    let mut pts: Vec<Pt> = tr.p1.iter().map(|p| (px(p.t), py(p.c[i]))).collect();
-                    pts.extend(tr.p2.iter().map(|p| (px(p.t), py(p.c[i]))));
+                    let pts: Vec<Pt> = tr.iter().flatten().map(|p| (px(p.t), py(p.c[i]))).collect();
                     curves.push(stroke_el(&pts, col(i), 2.6, dash(i), "curve", &feat));
                     let f = move |p: &Pt4| p.c[i];
-                    put_marks(&mut marks, &px, &mut py, &tr.p1, 0.0, i, &feat, i, col(i), &f);
-                    if has_d { put_marks(&mut marks, &px, &mut py, &tr.p2, st.t_d, i, &feat, i, col(i), &f); }
+                    for segment in &tr {
+                        put_marks(&mut marks, &px, &mut py, segment, segment[0].t, i, &feat, i, col(i), &f);
+                    }
                     if ans {
-                        let y1 = py(m.sol.c[i]);
-                        let xe = if has_d { x_d } else { right };
-                        guides.push(stroke_el(&[(left, y1), (xe, y1)], guide_c(i), 1.2, "1.5 3", "guide", &format!("g{i}")));
-                        if let Some(d) = &m.d2 {
-                            let y2 = py(d.sol.c[i]);
-                            guides.push(stroke_el(&[(x_d, y2), (right, y2)], guide_c(i), 1.2, "1.5 3", "guide", &format!("g{i}")));
+                        for (j, (sol, _, _)) in states().enumerate() {
+                            let (a, b) = stage_edges(j);
+                            let y = py(sol.c[i]);
+                            guides.push(stroke_el(&[(a, y), (b, y)], guide_c(i), 1.2, "1.5 3", "guide", &format!("g{i}")));
                         }
                     }
                 } else {
@@ -1515,51 +1689,47 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
             for a in 0..sp.len() {
                 for b in a + 1..sp.len() {
                     let (i, j) = (sp[a], sp[b]);
-                    let same = tr.p1.iter().chain(tr.p2.iter()).all(|p| (p.c[i] - p.c[j]).abs() <= 1e-9 * (1.0 + p.c[i].abs()));
+                    let same = tr.iter().flatten().all(|p| (p.c[i] - p.c[j]).abs() <= 1e-9 * (1.0 + p.c[i].abs()));
                     if same && show_curves { notes.push(format!("The curves of {} and {} lie on top of each other (the same start and the same coefficient), so only one can be seen.", pretty(&st.names[i]), pretty(&st.names[j]))); }
                 }
             }
         }
         Mode::Quot => {
             if show_curves && m.dir != Dir::Stuck {
-                let mut pts: Vec<Pt> = tr.p1.iter().map(|p| (px(p.t), py(p.q))).collect();
-                pts.extend(tr.p2.iter().map(|p| (px(p.t), py(p.q))));
+                let pts: Vec<Pt> = tr.iter().flatten().map(|p| (px(p.t), py(p.q))).collect();
                 curves.push(stroke_el(&pts, col(0), 2.6, dash(0), "curve", "q"));
                 let f = |p: &Pt4| p.q;
-                put_marks(&mut marks, &px, &mut py, &tr.p1, 0.0, 0, "q", 0, col(0), &f);
-                if has_d { put_marks(&mut marks, &px, &mut py, &tr.p2, st.t_d, 0, "q", 0, col(0), &f); }
+                for segment in &tr {
+                    put_marks(&mut marks, &px, &mut py, segment, segment[0].t, 0, "q", 0, col(0), &f);
+                }
             }
             if k_known {
-                let y1 = py(m.k);
-                let xe = if has_d { x_d } else { right };
-                curves.push(stroke_el(&[(left, y1), (xe, y1)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
-                if let Some(d) = &m.d2 {
-                    // after a change of temperature the K line is an answer: only the key draws it
-                    if ans || st.dk != DKind::Temp {
-                        let y2 = py(if ans { d.k2 } else { m.k });
-                        curves.push(stroke_el(&[(x_d, y2), (right, y2)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
-                        kpt = Some((right, y2));
-                    } else { kpt = Some((x_d, y1)); }
-                } else { kpt = Some((right, y1)); }
+                let ks = std::iter::once(m.k).chain(m.disturbances.iter()
+                    .take_while(|d| ans || d.input.kind != DKind::Temp)
+                    .map(|d| d.k_after));
+                for (i, k) in ks.enumerate() {
+                    let (a, b) = stage_edges(i);
+                    let y = py(k);
+                    curves.push(stroke_el(&[(a, y), (b, y)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
+                    kpt = Some((b, y));
+                }
             }
         }
         Mode::Rates => {
             if show_curves && rmax > 0.0 {
                 for (k, (name, f)) in [("rf", (|p: &Pt4| p.rf) as fn(&Pt4) -> f64), ("rr", (|p: &Pt4| p.rr) as fn(&Pt4) -> f64)].into_iter().enumerate() {
-                    let mut pts: Vec<Pt> = tr.p1.iter().map(|p| (px(p.t), py(f(p) / rmax))).collect();
-                    pts.extend(tr.p2.iter().map(|p| (px(p.t), py(f(p) / rmax))));
+                    let pts: Vec<Pt> = tr.iter().flatten().map(|p| (px(p.t), py(f(p) / rmax))).collect();
                     curves.push(stroke_el(&pts, col(k), 2.6, dash(k), "curve", name));
                     let g = move |p: &Pt4| f(p) / rmax;
-                    put_marks(&mut marks, &px, &mut py, &tr.p1, 0.0, k, name, k, col(k), &g);
-                    if has_d { put_marks(&mut marks, &px, &mut py, &tr.p2, st.t_d, k, name, k, col(k), &g); }
+                    for segment in &tr {
+                        put_marks(&mut marks, &px, &mut py, segment, segment[0].t, k, name, k, col(k), &g);
+                    }
                 }
                 if ans {
-                    let r1 = rx.rates(&m.sol.c, m.kf, m.kr).0 / rmax;
-                    let xe = if has_d { x_d } else { right };
-                    guides.push(stroke_el(&[(left, py(r1)), (xe, py(r1))], guide_c(0), 1.2, "1.5 3", "guide", "req"));
-                    if let Some(d) = &m.d2 {
-                        let r2 = rx.rates(&d.sol.c, d.kf, d.kr).0 / rmax;
-                        guides.push(stroke_el(&[(x_d, py(r2)), (right, py(r2))], guide_c(0), 1.2, "1.5 3", "guide", "req"));
+                    for (i, (sol, kf, kr)) in states().enumerate() {
+                        let (a, b) = stage_edges(i);
+                        let y = py(rx.rates(&sol.c, kf, kr).0 / rmax);
+                        guides.push(stroke_el(&[(a, y), (b, y)], guide_c(0), 1.2, "1.5 3", "guide", "req"));
                     }
                 }
             } else if show_curves { notes.push("Both rates are 0 from these starting concentrations, so there is nothing to draw.".into()); }
@@ -1568,27 +1738,38 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     }
 
     // ---- the disturbance: a vertical guide with its description above, and on the key the Q-against-K comparison
-    let row1_base = 6.0 + 0.86 * fs_lab;
-    let row2_base = row1_base + 1.35 * fs_lab;
     let mut ng = 0usize;
-    let mut dist_pt = None;
+    let mut dist_pts = Vec::new();
     let mut tops: Vec<String> = Vec::new();
-    if let Some(d) = &m.d2 {
+    for (i, d) in m.disturbances.iter().enumerate() {
+        let x_d = px(d.input.time);
+        // Give each event its own two rows so long labels never overlap another event's text.
+        let row1_base = 6.0 + 0.86 * fs_lab + i as f64 * 2.0 * 1.35 * fs_lab;
+        let row2_base = row1_base + 1.35 * fs_lab;
         let dwhat = if ans { &d.what } else { &d.what_s };
-        let wd = text_w(dwhat, fs_lab);
+        let title = if m.disturbances.len() > 1 {
+            format!("t = {}: {dwhat}", given_fmt(d.input.time))
+        } else { dwhat.clone() };
+        let wd = text_w(&title, fs_lab);
         let cx = x_d.clamp(wd / 2.0 + 3.0, w - wd / 2.0 - 3.0);
-        tops.push(label_el(cx, row1_base, fs_lab, "middle", ink_c, dwhat, "d", ng));
+        tops.push(label_el(cx, row1_base, fs_lab, "middle", ink_c, &title, "d", ng));
         ng += 1;
-        guides.push(stroke_el(&[(x_d, row1_base + 0.3 * fs_lab + 2.0), (x_d, bottom)], "#666666", 1.2, "5 3", "guide", "d"));
-        dist_pt = Some((x_d, top));
+        let guide_start = if m.disturbances.len() > 1 { top } else { row1_base + 0.3 * fs_lab + 2.0 };
+        guides.push(stroke_el(&[(x_d, guide_start), (x_d, bottom)], "#666666", 1.2, "5 3", "guide", "d"));
+        dist_pts.push((x_d, top));
         if ans {
-            let cmp = cmp_qk(d.q_after, d.k2);
+            let cmp = cmp_qk(d.q_after, d.k_after);
             let shift = if !d.effect { "no shift" } else { match cmp { '<' => "shifts right", '>' => "shifts left", _ => "no shift" } };
-            let after = format!("Q {} K{}: {}", if d.effect { cmp } else { '=' }, if st.dk == DKind::Temp { "\u{2082}" } else { "" }, shift);
-            tops.push(label_el((x_d - 6.0).max(text_w("Q = K", fs_lab) + 3.0), row2_base, fs_lab, "end", ink_c, "Q = K", "d", ng));
+            let k_sub = if d.input.kind == DKind::Temp { stress_k_subscript(i) } else { "" };
+            let after = format!("Q {} K{k_sub}: {shift}", if d.effect || d.before_stuck { cmp } else { '=' });
+            let before = if d.before_stuck { "No reaction" } else { "Q = K" };
+            let leftmost = text_w(before, fs_lab) + 9.0;
+            let label_x = if m.disturbances.len() > 1 {
+                x_d.clamp(leftmost, w - text_w(&after, fs_lab) - 9.0)
+            } else { x_d.max(leftmost) };
+            tops.push(label_el(label_x - 6.0, row2_base, fs_lab, "end", ink_c, before, "d", ng));
             ng += 1;
-            let xa_ = (x_d + 6.0).min(w - text_w(&after, fs_lab) - 3.0).max(x_d + 6.0 * 0.0);
-            tops.push(label_el(xa_.max(x_d + 6.0).min((w - text_w(&after, fs_lab) - 3.0).max(x_d + 6.0)), row2_base, fs_lab, "start", ink_c, &after, "d", ng));
+            tops.push(label_el(if m.disturbances.len() > 1 { label_x } else { x_d } + 6.0, row2_base, fs_lab, "start", ink_c, &after, "d", ng));
             ng += 1;
         }
     }
@@ -1617,14 +1798,14 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
 
     // ---- notes on what the picture cannot show
     if clipped { notes.push("Part of a curve goes beyond the range of the axis and is held at its edge.".into()); }
-    if let Some(d) = &m.d2 {
+    if let Some(d) = final_state {
         if show_curves && st.mode == Mode::Conc {
             let span = m.c_bound();
             if sp.iter().any(|&i| (last.c[i] - d.sol.c[i]).abs() > 2e-3 * span) { notes.push("The new equilibrium is not quite reached in the time shown, because the approach is slow here.".into()); }
         }
     }
     if st.mode == Mode::Quot && show_curves && m.dir != Dir::Stuck && m.dir != Dir::AtEq {
-        let kk = m.d2.as_ref().map_or(m.k, |d| d.k2);
+        let kk = final_state.map_or(m.k, |d| d.k_after);
         if last.q.is_finite() && last.q > 0.0 && (last.q / kk - 1.0).abs() > 0.05 { notes.push("Q has not quite reached K in the time shown: when K is very large or very small the last of the approach is slow.".into()); }
     }
 
@@ -1632,9 +1813,10 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let mut caption = String::new();
     if show_curves {
         caption = "The curves are schematic mass-action kinetics in arbitrary time units; only the equilibrium values are exact.".to_string();
-        if has_d && st.dk == DKind::Temp { caption.push_str(" Both rate constants change with temperature by the Arrhenius equation."); }
+        if m.disturbances.len() > 1 { caption.push_str(" Each approach is drawn to reach its plateau before the next disturbance."); }
+        if temp { caption.push_str(" Both rate constants change with temperature by the Arrhenius equation."); }
         notes.push("The curves are schematic mass-action kinetics on arbitrary time units; only the equilibrium values are exact.".into());
-        if has_d && st.dk == DKind::Temp { notes.push(format!("For a change of temperature both rate constants follow the Arrhenius equation, with a forward activation energy of max(\u{394}H, 0) + {} kJ/mol and a reverse one of max(\u{2212}\u{394}H, 0) + {} kJ/mol, so both rise when the temperature rises and both fall when it falls; the new K is from the van 't Hoff equation.", EA_BASE / 1000.0, EA_BASE / 1000.0)); }
+        if temp { notes.push(format!("For a change of temperature both rate constants follow the Arrhenius equation, with a forward activation energy of max(\u{394}H, 0) + {} kJ/mol and a reverse one of max(\u{2212}\u{394}H, 0) + {} kJ/mol, so both rise when the temperature rises and both fall when it falls; the new K is from the van 't Hoff equation.", EA_BASE / 1000.0, EA_BASE / 1000.0)); }
     }
 
     // ---- assemble
@@ -1680,7 +1862,7 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     for (k, line) in wrapped.iter().enumerate() { d.raw(&text_el(20.0, y + 0.76 * fs_ro + k as f64 * ro_lh, fs_ro, "start", ink_c, line, "note")); }
     y += 0.0;
     let _ = y;
-    let rep = Report { frame: fr, mode: st.mode, model: m.clone(), starts, plateau, kpt, dist_pt, readout: ro_lines, notes };
+    let rep = Report { frame: fr, mode: st.mode, model: m.clone(), starts, plateau, kpt, dist_pts, readout: ro_lines, notes };
     (d.finish(), rep)
 }
 
@@ -1714,11 +1896,14 @@ fn ice_tables(m: &Model, ans: bool) -> Vec<Tbl> {
     };
     let first = mk("Initial (M)", &|i| given_fmt(st.c0[i]), &|i| st.c0[i] == 0.0, &|i| sf(m.sol.c[i], sg), if st.task == Task::FindK { Some(st.eq_i) } else { None });
     let mut v = vec![Tbl { title: None, head: head.clone(), rows: first }];
-    if let Some(d) = &m.d2 {
-        // the starting row of the second table is the equilibrium just disturbed: the answer to the first, so it is blank on the student copy
+    for d in &m.disturbances {
+        // Each starting row depends on a previous answer, so leave it blank on the student copy.
         let shown = |i: usize| if ans { sf(d.c_after[i], sg) } else { String::new() };
-        let second = mk("Just after (M)", &shown, &|i| d.c_after[i] == 0.0 && ans, &|i| sf(d.sol.c[i], sg), None);
-        v.push(Tbl { title: Some(format!("{}{}", if ans { &d.what } else { &d.what_s }, if st.dk == DKind::Temp { format!(" (\u{394}H = {} kJ/mol)", given_fmt(st.dh)) } else { String::new() })), head, rows: second });
+        let rows = mk("Just after (M)", &shown, &|i| d.c_after[i] == 0.0 && ans, &|i| sf(d.sol.c[i], sg), None);
+        let what = if ans { &d.what } else { &d.what_s };
+        let heat = if d.input.kind == DKind::Temp { format!(" (ΔH = {} kJ/mol)", given_fmt(d.input.dh)) } else { String::new() };
+        let title = if m.disturbances.len() > 1 { format!("t = {}: {what}{heat}", given_fmt(d.input.time)) } else { format!("{what}{heat}") };
+        v.push(Tbl { title: Some(title), head: head.clone(), rows });
     }
     v
 }
@@ -1734,7 +1919,7 @@ fn draw_ice(m: &Model, ans: bool, lab: f64, print: bool, notes: Vec<String>, wit
     let key_tables = ice_tables(m, true);
     let given_tables = ice_tables(m, false);
     let sg = st.sig;
-    let worst = text_w(&worst_value(sg), fs_c).max(if m.d2.is_some() { text_w(&format!("{} + 4x", worst_value(sg)), fs_c) } else { 0.0 });
+    let worst = text_w(&worst_value(sg), fs_c).max(if !m.disturbances.is_empty() { text_w(&format!("{} + 4x", worst_value(sg)), fs_c) } else { 0.0 });
     let label_w = key_tables.iter().flat_map(|t| t.rows.iter().map(|r| text_w(&r.0, fs_c))).fold(0.0, f64::max) + 20.0;
     let col_w = given_tables.iter().flat_map(|t| t.rows.iter().flat_map(|r| r.1.iter()).chain(t.head.iter()).map(|s| text_w(s, fs_c))).fold(0.0, f64::max).max(54.0).max(worst) + 24.0;
     let ncol = tables[0].head.len() as f64;
@@ -1778,7 +1963,7 @@ fn draw_ice(m: &Model, ans: bool, lab: f64, print: bool, notes: Vec<String>, wit
     d.raw(&body);
     for (k, line) in wrapped.iter().enumerate() { d.raw(&text_el(20.0, y + 0.76 * fs_ro + k as f64 * ro_lh, fs_ro, "start", ink_c, line, "note")); }
     let fr = Frame { w, h, l: 0.0, r: 0.0, t: 0.0, b: 0.0, x0: 0.0, x1: 1.0, y0: 0.0, y1: 1.0 };
-    let rep = Report { frame: fr, mode: Mode::Ice, model: m.clone(), starts: Vec::new(), plateau: None, kpt: None, dist_pt: None, readout: ro_lines, notes };
+    let rep = Report { frame: fr, mode: Mode::Ice, model: m.clone(), starts: Vec::new(), plateau: None, kpt: None, dist_pts: Vec::new(), readout: ro_lines, notes };
     (d.finish(), rep)
 }
 
@@ -1845,13 +2030,22 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
             }));
         }
     }
-    if let (Some(pos), true) = (rep.kpt, m.st.task != Task::FindK && m.st.dk != DKind::Temp) {
+    if let (Some(pos), true) = (rep.kpt, m.st.task != Task::FindK && !m.has_temperature_change()) {
         let cur = m.k;
         hs.push(Handle::knob(pos, "Drag the K line up or down to change K", move |q, pt| { let e = vy(pt.1); if e.is_finite() { set(q, "k", 10f64.powf(e.clamp(-31.0, 31.0)), cur, K_LO, K_HI); } }));
     }
-    if let Some(pos) = rep.dist_pt {
-        let cur = m.st.t_d;
-        hs.push(Handle::knob((pos.0, pos.1 + 10.0), "Drag the disturbance left or right to change when it happens", move |q, pt| set(q, "dist_time", vx(pt.0), cur, T_D_LO, T_D_HI)));
+    for (i, pos) in rep.dist_pts.into_iter().enumerate() {
+        let d = &m.disturbances[i];
+        let keys = [&FIRST, &SECOND][i];
+        let lower = if i == 0 { keys.min_time } else { second_time_min(m.disturbances[i - 1].input.time) };
+        let upper = m.disturbances.get(i + 1).map_or(keys.max_time, |next| keys.max_time.min(next.input.time - STRESS_GAP));
+        let cur = d.input.time;
+        let label = if m.disturbances.len() == 1 {
+            "Drag the disturbance left or right to change when it happens".to_string()
+        } else {
+            format!("Drag disturbance {} left or right to change when it happens", i + 1)
+        };
+        hs.push(Handle::knob((pos.0, pos.1 + 10.0), &label, move |q, pt| set(q, keys.time, vx(pt.0), cur, lower, upper)));
     }
     Some(hs)
 }
@@ -1869,6 +2063,14 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Le Chatelier: add reactant", params: vec![f("init_a", 1.0), f("init_b", 1.0), f("k", 50.0), s("dist", DISTS[1]), s("dist_species", "A"), f("dist_amount", 1.0), f("dist_time", 8.0)] },
         Example { name: "Fe\u{b3}\u{207a} + SCN\u{207b}: an ICE table with charges", params: vec![s("mode", MODES[1]), i("coef_a", 1), i("coef_b", 1), i("coef_c", 1), i("coef_d", 0), s("name_a", "Fe3+"), s("name_b", "SCN-"), s("name_c", "FeSCN2+"), s("phase_a", PHASES[1]), s("phase_b", PHASES[1]), s("phase_c", PHASES[1]), f("init_a", 0.002), f("init_b", 0.002), f("init_c", 0.0), f("k", 890.0)] },
         Example { name: "Q against K: which way does it go?", params: vec![s("mode", MODES[2]), s("task", TASKS[2]), f("init_a", 0.5), f("init_b", 0.5), f("init_c", 1.5), f("k", 50.0)] },
+        Example {
+            name: "Le Chatelier: add hydrogen, then halve the volume",
+            params: vec![
+                f("init_b", 0.8), f("k", 10.0),
+                s("dist", DISTS[1]), f("dist_amount", 0.5), f("dist_time", 8.0),
+                s("dist2", DISTS[3]), f("dist2_factor", 0.5), f("dist2_time", 16.0),
+            ],
+        },
     ])
 }
 
