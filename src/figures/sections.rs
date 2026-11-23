@@ -1233,8 +1233,24 @@ static HALF_LIFE: [RefSection; 9] = [
     s("Grid", &["minor_grid"], ""),
 ];
 
+static CHROMATOGRAPHY: [RefSection; 4] = [
+    s("Run", &["n", "front"], "Enter each ink's dyes as comma-separated color and distance pairs, such as blue 5.6, yellow 2.4."),
+    items("Ink"),
+    s("Diagram", &["before", "beaker", "measurements", "parts", "style"], ""),
+    s("Title and answers", &["title_style", "title", "show_answers"], ""),
+];
+
+static ELECTROCHEMICAL_CELLS: [RefSection; 4] = [
+    s("Cell", &["left", "right", "voltage_source", "voltage"], "These are standard galvanic half-cells. Use the lower reduction potential to identify the anode."),
+    s("Meter", &["meter", "give_reading"], ""),
+    s("Labels", &["names", "electrodes", "flow", "style"], ""),
+    s("Title and answers", &["title_style", "title", "show_answers"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
+        "chromatography" => &CHROMATOGRAPHY,
+        "electrochemical-cells" => &ELECTROCHEMICAL_CELLS,
         "half-life-graph" => &HALF_LIFE,
         "angles" => &FIG_0,
         "histogram" => &HISTOGRAM,

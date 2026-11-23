@@ -40,6 +40,8 @@ pub mod boltzmann;
 pub mod vsepr;
 pub mod periodic;
 pub mod spectra;
+mod chromatography;
+mod electrochemical;
 
 pub const INK: &str = "#111";
 pub const GLASS: &str = "#f3f8fb";
@@ -420,6 +422,8 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| boltzmann::examples(id))
         .or_else(|| vsepr::examples(id))
         .or_else(|| periodic::examples(id))
+        .or_else(|| chromatography::examples(id))
+        .or_else(|| electrochemical::examples(id))
 }
 
 /// Handles are laid out in the figure's own coordinates; the chart-title band the wrapper adds
@@ -500,6 +504,8 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(boltzmann::defs());
     v.extend(vsepr::defs());
     v.extend(periodic::defs());
+    v.extend(chromatography::defs());
+    v.extend(electrochemical::defs());
     v
 }
 

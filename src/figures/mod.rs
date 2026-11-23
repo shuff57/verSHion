@@ -821,6 +821,9 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
     if id == sequences::ID { return sequences::relevant(key,p); }
     if id == complex::ID { return complex::relevant(key, p); }
     match id {
+        "chromatography" | "electrochemical-cells" if key == "title" => p.s("title_style") == "Text",
+        "electrochemical-cells" if key == "voltage" => p.s("voltage_source") == "Custom",
+        "electrochemical-cells" if key == "give_reading" => p.s("meter") != "Coil of wire",
         "pulley" => physics::pulley_relevant(key, p),
         segment::ID => segment::relevant(key, p),
         nets::ID => nets::relevant(key, p),

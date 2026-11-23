@@ -45,6 +45,8 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "osmosis" => OSMOSIS,
         "xylem-phloem" => XYLEM_PHLOEM,
         // chemistry
+        "chromatography" => CHROMATOGRAPHY,
+        "electrochemical-cells" => ELECTROCHEMICAL_CELLS,
         "bohr-model" => BOHR_MODEL,
         "nuclide-notation" => NUCLIDE_NOTATION,
         "dot-and-cross" => DOT_AND_CROSS,
@@ -222,6 +224,28 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         _ => &[],
     }
 }
+
+const CHROMATOGRAPHY: &[Faq] = &[
+    Faq {
+        q: "How do I enter the dyes for an ink?",
+        a: "Type up to five color and distance pairs such as blue 5.6, yellow 2.4. Available colors are black, blue, red, yellow, green, purple, orange, pink and brown. Distances run from the origin to the center of each spot in cm. The figure bounds distances to the origin and solvent front and skips unrecognized entries.",
+    },
+    Faq {
+        q: "How do I find Rf?",
+        a: "Divide the dye's distance from the origin by the solvent front's distance from the same line. Show answers prints the resulting ratios. In Print, matching hatch patterns indicate the same dye.",
+    },
+];
+
+const ELECTROCHEMICAL_CELLS: &[Faq] = &[
+    Faq {
+        q: "Which electrode supplies electrons?",
+        a: "The metal with the lower standard reduction potential is oxidized at the negative anode. Electrons travel through the external circuit toward the positive cathode, where metal ions are reduced.",
+    },
+    Faq {
+        q: "What voltage does the figure use?",
+        a: "Table voltage is the cathode's standard reduction potential minus the anode's. A custom reading changes the meter only. Clear Give meter reading to make a student copy with a blank meter.",
+    },
+];
 
 const CONIC_SECTIONS: &[Faq] = &[
     Faq {
