@@ -682,10 +682,13 @@ fn second_time_min(first: f64) -> f64 {
 }
 
 pub fn panel_changed(key: &str, p: &mut Params) {
-    if !matches!(key, "dist" | "dist_time" | "dist2" | "dist2_time")
-        || disturbance_kind(p, &FIRST) == DKind::None
-        || disturbance_kind(p, &SECOND) == DKind::None
-    {
+    if matches!(key, "dist" | "dist_time" | "dist2" | "dist2_time") {
+        normalize_disturbance_times(p);
+    }
+}
+
+pub(crate) fn normalize_disturbance_times(p: &mut Params) {
+    if disturbance_kind(p, &FIRST) == DKind::None || disturbance_kind(p, &SECOND) == DKind::None {
         return;
     }
     let earliest = second_time_min(sig4(p.f(FIRST.time)));

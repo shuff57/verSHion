@@ -2069,3 +2069,26 @@ fn single_stress_keeps_the_pinned_render_without_second_stress_fields() {
     });
     assert_eq!(hash, 0xecb5e27fcac735ee);
 }
+
+#[test]
+fn imported_second_stress_reexports_its_drawn_time() {
+    use crate::figures::spec::{params_from_spec, spec_for};
+
+    let p = raw(&[
+        s("dist", DISTS[1]),
+        f("dist_time", 22.0),
+        s("dist2", DISTS[3]),
+        f("dist2_time", 12.0),
+    ]);
+    let def = defs().remove(0);
+    let loaded = params_from_spec(&def, &spec_for(ID, &p));
+    assert_eq!(loaded.f("dist_time"), 22.0);
+    assert_eq!(loaded.f("dist2_time"), 28.0);
+    assert_eq!(model_of(&loaded).disturbances[1].input.time, 28.0);
+
+    let baseline = crate::figures::start_params(&def);
+    let link = crate::figures::share::encode(ID, &p, &baseline);
+    let (_, changed) = crate::figures::share::decode(&link).unwrap();
+    let reopened = crate::figures::share::link_params(&def, changed, crate::figures::share::version(&link));
+    assert_eq!(spec_for(ID, &reopened).params["dist2_time"].as_f64(), Some(28.0));
+}
