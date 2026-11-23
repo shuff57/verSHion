@@ -827,6 +827,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "pulley" => physics::pulley_relevant(key, p),
         segment::ID => segment::relevant(key, p),
         nets::ID => nets::relevant(key, p),
+        "lever" | "pendulum" | "roller-coaster" | "spring" | "torque" => physics::mechanics_relevant(id, key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
         "circle" if key == "join_from" || key == "poly_names" => false,
         // the reference has no "Show resultant" box (the arrow's "Left off" does it) and no bold switch
@@ -897,6 +898,9 @@ pub fn live_intro(id: &str, p: &Params) -> Option<String> {
 /// Follow-up after the panel changed param `key` of figure `id` from `old` (a pulley's load
 /// label follows a switch to or from the block and tackle).
 pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
+    if (id, key) == ("lever", "class") {
+        physics::lever_class_changed(p);
+    }
     // typing an x-axis range on the titration takes the axis off "fit to the titration"
     if id == "titration-curve" && key.starts_with("xaxis_") && key != "xaxis_fit" && p.b("xaxis_fit") {
         p.set_b("xaxis_fit", false);

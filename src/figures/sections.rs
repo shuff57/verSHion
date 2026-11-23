@@ -1247,10 +1247,53 @@ static ELECTROCHEMICAL_CELLS: [RefSection; 4] = [
     s("Title and answers", &["title_style", "title", "show_answers"], ""),
 ];
 
+static LEVER: &[RefSection] = &[
+    s("Lever", &["class", "effort_arm", "load_arm", "length_units"], ""),
+    s("Load", &["load", "load_units", "load_shape"], ""),
+    s("Labels", &["show_arms", "effort_arm_label", "load_arm_label", "load_label", "effort_label", "load_name", "effort_name", "fulcrum_name"], ""),
+    s("Worksheet", &["title", "show_answers", "mirror", "style", "label_size"], ""),
+];
+
+static PENDULUM: &[RefSection] = &[
+    s("Pendulum", &["picture", "side", "angle"], ""),
+    s("Labels and marks", &["show_path", "show_angle", "angle_label", "length_label", "show_height", "height_label", "show_letters", "bob_label"], ""),
+    s("Motion and forces", &["show_velocity", "velocity_label", "forces", "weight_label", "tension_label", "radial_label", "tangent_label"], ""),
+    s("Worksheet", &["title", "style", "label_size"], ""),
+];
+
+static COASTER: &[RefSection] = &[
+    s("Track", &["n", "units", "show_ground"], "Heights are measured from the ground line. Each point has its own labels and the option of a rough stretch to the next point."),
+    items("Point"),
+    s("Loop", &["loop_at", "loop_radius", "radius_label", "loop_top_label"], ""),
+    s("Object", &["object", "object_on_loop", "object_at", "object_label", "object_size", "velocity"], ""),
+    s("Worksheet", &["title", "mirror", "style", "label_size"], ""),
+];
+
+static SPRING: &[RefSection] = &[
+    s("Spring", &["orientation", "picture", "arrangement", "extension", "amplitude", "coil"], ""),
+    s("Object", &["shape", "masses", "object_label"], ""),
+    s("Labels and marks", &["spring_label", "show_extension", "extension_label", "show_natural", "show_equilibrium", "show_applied"], ""),
+    s("Motion", &["motion_arrows", "motion_direction", "velocity_label", "acceleration_label"], ""),
+    s("Worksheet", &["title", "style", "label_size"], ""),
+];
+
+static TORQUE: &[RefSection] = &[
+    s("Beam and supports", &["support", "length", "length_units", "pivot", "support_a", "support_b", "cable", "cable_at", "cable_angle", "cable_angle_label", "beam_weight"], "Positions use the selected distance unit and are measured from the beam’s left end before mirroring."),
+    s("Loads", &["load_units", "gravity", "n", "balance"], ""),
+    items("Load"),
+    s("Marks and forces", &["show_arms", "show_length", "show_weights", "show_reactions"], ""),
+    s("Worksheet", &["title", "show_answers", "mirror", "style", "label_size"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
         "chromatography" => &CHROMATOGRAPHY,
         "electrochemical-cells" => &ELECTROCHEMICAL_CELLS,
+        "lever" => LEVER,
+        "pendulum" => PENDULUM,
+        "roller-coaster" => COASTER,
+        "spring" => SPRING,
+        "torque" => TORQUE,
         "half-life-graph" => &HALF_LIFE,
         "angles" => &FIG_0,
         "histogram" => &HISTOGRAM,

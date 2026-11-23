@@ -5212,6 +5212,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn mechanics_figures_open_and_export_from_workspace() {
+        let ctx = egui::Context::default();
+        theme::setup(&ctx);
+        for id in ["lever", "pendulum", "roller-coaster", "spring", "torque"] {
+            let (i, def) = find_def(id).expect("registered physics figure");
+            assert_eq!(def.subject, Subject::Physics);
+            let mut ws = Workspace::new(false);
+            ws.select(i);
+            assert_eq!(reg()[ws.sel.unwrap()].id, id);
+            for _ in 0..3 {
+                let mut out = ctx.run_ui(egui::RawInput::default(), |ui| { let _ = ws.show(ui); });
+                out.textures_delta.clear();
+            }
+            assert!(ws.shown.is_some(), "{id} has a preview");
+            let draft = format!(r#"{{"vershion":"figure","id":"{id}","params":{{"title":"Worksheet & review","style":"Colour"}}}}"#);
+            ws.apply_spec_text(&draft).unwrap();
+            let output = ws.output().unwrap();
+            let saved = output.spec.unwrap();
+            assert_eq!(saved.id, id);
+            assert_eq!(saved.params["title"], "Worksheet & review");
+            let restored = Workspace::from_spec(&saved, true).unwrap();
+            assert_eq!(restored.output().unwrap().svg, output.svg);
+            assert_eq!(restored.params.s("style"), "Colour");
+            assert_eq!(restored.has_answers(), matches!(id, "lever" | "torque"));
+        }
+    }
+
     /// The Computing demo uses Kind::Data, style and show_answers: it opens in the generic (unskinned)
     /// workspace, its data box and Generate popover draw, and the pair export differs as expected.
     #[test]

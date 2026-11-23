@@ -20,6 +20,11 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "motion-map" => MOTION_MAP,
         "ray-diagram" => RAY_DIAGRAM,
         "spring-scale" => SPRING_SCALE,
+        "lever" => LEVER,
+        "pendulum" => PENDULUM,
+        "roller-coaster" => COASTER,
+        "spring" => SPRING,
+        "torque" => TORQUE,
         "waves" => WAVES,
         "circuit-diagram" => CIRCUIT_DIAGRAM,
         // biology
@@ -4889,4 +4894,30 @@ const SLOPE_FIELDS: &[Faq] = &[
         q: "How do I make a student copy?",
         a: "Turn off Show answers and choose the copy: the field and the starting points to sketch the solutions on; dots at the grid points for students to draw the segments (the AP \u{2018}sketch at the nine points\u{2019}); a blank line for the equation; or four equations A to D to match the field to, with the right one boxed on the key. Student + key exports both copies; Answer key line under the graph sums up Euler's values, the solution and the equilibria.",
     },
+];
+
+
+const LEVER: &[Faq] = &[
+    Faq { q: "What distinguishes the lever classes?", a: "In class 1 the fulcrum sits between the forces. In class 2 the load lies closer to the fulcrum. In class 3 the effort lies closer." },
+    Faq { q: "How is the effort found?", a: "For a light beam in equilibrium, the moments balance. Multiply the load force by its arm and divide by the effort arm. The key gives both the effort and the mechanical advantage." },
+];
+
+const PENDULUM: &[Faq] = &[
+    Faq { q: "What does the height mark measure?", a: "It measures the vertical rise from the bottom to the release point. For a string of length L released at angle θ from vertical, this is L(1 − cos θ)." },
+    Faq { q: "When is the tension equal to the radial component of the weight?", a: "At release from rest, the speed is zero. During the swing, the tension must also provide the acceleration toward the pivot." },
+];
+
+const COASTER: &[Faq] = &[
+    Faq { q: "Which distances use a common scale?", a: "Point heights and the loop radius use a single scale. Horizontal point spacing is schematic. Enter your own distance labels for rough stretches." },
+    Faq { q: "Can the track show an energy question?", a: "Set the points and object, then give the initial speed and any energy losses in the question. The editor draws the track and leaves the energy and speed calculations to students." },
+];
+
+const SPRING: &[Faq] = &[
+    Faq { q: "How do I draw compression?", a: "Choose Horizontal and enter a negative change in length. In Three positions, set the amplitude to choose the displacement on either side of equilibrium." },
+    Faq { q: "What do the arrows in the three positions mean?", a: "At either extreme, instantaneous velocity is zero and acceleration points back to equilibrium. At equilibrium the acceleration is zero and the moving mass has its greatest speed." },
+];
+
+const TORQUE: &[Faq] = &[
+    Faq { q: "How are the support reactions determined?", a: "Use vertical force balance and take moments about the pivot, first support, or wall. A negative result for a contact support means contact would be lost." },
+    Faq { q: "How do I set a load as the unknown?", a: "For a pivot, select its number under Solve for load. Its position and direction stay as given. The student copy has a blank value and the key shows the balancing force in newtons." },
 ];

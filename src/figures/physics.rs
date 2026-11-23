@@ -7,6 +7,8 @@ mod common;
 mod graphs;
 mod instr;
 mod mech;
+mod mechanics_figures;
+pub(crate) use mechanics_figures::{lever_class_changed, relevant as mechanics_relevant};
 mod vector_b8;
 #[cfg(test)]
 mod vector_b8_tests;
@@ -120,7 +122,7 @@ pub fn incline_objects(p: &Params) -> usize {
 
 /// "Start from an example" entries for this subject's figures.
 pub fn examples(id: &str) -> Option<Vec<super::Example>> {
-    examples::examples(id)
+    examples::examples(id).or_else(|| mechanics_figures::examples(id))
 }
 
 /// "Add a force / vector / segment / part / object" chips for the figures that keep a numbered list of items.
@@ -216,6 +218,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(graphs::defs());
     v.extend(instr::defs());
     v.extend(optics::defs());
+    v.extend(mechanics_figures::defs());
     v
 }
 
@@ -460,10 +463,11 @@ mod tests {
     }
 
     #[test]
-    fn eleven_physics_generators() {
-        let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 11);
-        assert!(defs().iter().all(|d| d.subject == Subject::Physics));
+    fn physics_generators_have_unique_ids() {
+        let figures = defs();
+        assert!(figures.iter().all(|d| d.subject == Subject::Physics));
+        let ids: std::collections::BTreeSet<_> = figures.iter().map(|d| d.id).collect();
+        assert_eq!(ids.len(), figures.len());
     }
 
     /// Defaults, every choice option, and min/max of every numeric param render validly.
