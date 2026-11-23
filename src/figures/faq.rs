@@ -239,6 +239,14 @@ const CHROMATOGRAPHY: &[Faq] = &[
         q: "How do I find Rf?",
         a: "Divide the dye's distance from the origin by the solvent front's distance from the same line. Show answers prints the resulting ratios. In Print, matching hatch patterns indicate the same dye.",
     },
+    Faq {
+        q: "What does the before view show?",
+        a: "It shows the original inks on the origin line before the dyes separate.",
+    },
+    Faq {
+        q: "Where does the solvent start?",
+        a: "The solvent level is below the origin. The solvent front marks how far the solvent has traveled up the paper.",
+    },
 ];
 
 const ELECTROCHEMICAL_CELLS: &[Faq] = &[
@@ -249,6 +257,14 @@ const ELECTROCHEMICAL_CELLS: &[Faq] = &[
     Faq {
         q: "What voltage does the figure use?",
         a: "Table voltage is the cathode's standard reduction potential minus the anode's. A custom reading changes the meter only. Clear Give meter reading to make a student copy with a blank meter.",
+    },
+    Faq {
+        q: "Can I change the instrument?",
+        a: "Choose a digital voltmeter, dial voltmeter, or coil of wire in the Meter section.",
+    },
+    Faq {
+        q: "What happens with identical half-cells?",
+        a: "The standard voltage is zero. There is no net reaction or preferred electron-flow direction under the standard conditions shown.",
     },
 ];
 
@@ -4900,24 +4916,64 @@ const SLOPE_FIELDS: &[Faq] = &[
 const LEVER: &[Faq] = &[
     Faq { q: "What distinguishes the lever classes?", a: "In class 1 the fulcrum sits between the forces. In class 2 the load lies closer to the fulcrum. In class 3 the effort lies closer." },
     Faq { q: "How is the effort found?", a: "For a light beam in equilibrium, the moments balance. Multiply the load force by its arm and divide by the effort arm. The key gives both the effort and the mechanical advantage." },
+    Faq {
+        q: "Which distance is the effort arm?",
+        a: "It is the distance from the fulcrum to the effort on the beam. The load arm is measured from the same fulcrum to the load.",
+    },
+    Faq {
+        q: "What does the student copy leave blank?",
+        a: "It leaves the calculated effort for the student. Show answers displays it with the mechanical advantage.",
+    },
 ];
 
 const PENDULUM: &[Faq] = &[
     Faq { q: "What does the height mark measure?", a: "It measures the vertical rise from the bottom to the release point. For a string of length L released at angle θ from vertical, this is L(1 − cos θ)." },
     Faq { q: "When is the tension equal to the radial component of the weight?", a: "At release from rest, the speed is zero. During the swing, the tension must also provide the acceleration toward the pivot." },
+    Faq {
+        q: "Why are the two end positions at the same height?",
+        a: "In the Swing view their angles have equal magnitude on opposite sides of vertical and the string length is constant.",
+    },
+    Faq {
+        q: "How do I show the forces at release?",
+        a: "Choose One bob, then choose the force arrows or components in the Forces section.",
+    },
 ];
 
 const COASTER: &[Faq] = &[
     Faq { q: "Which distances use a common scale?", a: "Point heights and the loop radius use a single scale. Horizontal point spacing is schematic. Enter your own distance labels for rough stretches." },
     Faq { q: "Can the track show an energy question?", a: "Set the points and object, then give the initial speed and any energy losses in the question. The editor draws the track and leaves the energy and speed calculations to students." },
+    Faq {
+        q: "How do I place the cart at the top of a loop?",
+        a: "Choose the point that sets the loop bottom, then select the loop-top position for the cart.",
+    },
+    Faq {
+        q: "How do I mark a stretch as rough?",
+        a: "Turn on the rough mark for the stretch between the two points and enter its distance label.",
+    },
 ];
 
 const SPRING: &[Faq] = &[
     Faq { q: "How do I draw compression?", a: "Choose Horizontal and enter a negative change in length. In Three positions, set the amplitude to choose the displacement on either side of equilibrium." },
     Faq { q: "What do the arrows in the three positions mean?", a: "At either extreme, instantaneous velocity is zero and acceleration points back to equilibrium. At equilibrium the acceleration is zero and the moving mass has its greatest speed." },
+    Faq {
+        q: "What position is at the center of the three-position view?",
+        a: "The middle position is the loaded equilibrium, with the two extreme positions drawn on either side.",
+    },
+    Faq {
+        q: "What does a negative change in length mean?",
+        a: "It shortens the spring in the before-and-after view, representing compression.",
+    },
 ];
 
 const TORQUE: &[Faq] = &[
     Faq { q: "How are the support reactions determined?", a: "Use vertical force balance and take moments about the pivot, first support, or wall. A negative result for a contact support means contact would be lost." },
     Faq { q: "How do I set a load as the unknown?", a: "For a pivot, select its number under Solve for load. Its position and direction stay as given. The student copy has a blank value and the key shows the balancing force in newtons." },
+    Faq {
+        q: "How do I see the clockwise and counterclockwise totals?",
+        a: "Enable Show answers to read the directional totals and any support results.",
+    },
+    Faq {
+        q: "What does a force applied at the pivot contribute?",
+        a: "The perpendicular moment arm is zero, so it contributes no torque about that pivot.",
+    },
 ];

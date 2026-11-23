@@ -42,6 +42,8 @@ chi-square-fit__defaults cd5784ea1d11d1cf
 chi-square-fit__start cd5784ea1d11d1cf
 chi-square-table__defaults 8dc81457797c2815
 chi-square-table__start 8dc81457797c2815
+chromatography__defaults edbd2b4e3e889d42
+chromatography__start edbd2b4e3e889d42
 circle-of-fifths__defaults f7e8a8b83655c15c
 circle-of-fifths__start f7e8a8b83655c15c
 circle__defaults 2a6da1f284f2a4dc
@@ -102,6 +104,8 @@ elasticity__defaults f12af64ea90eafaf
 elasticity__start f12af64ea90eafaf
 electric-field__defaults f5477ca3f656ac36
 electric-field__start f5477ca3f656ac36
+electrochemical-cells__defaults d665fbf836a95c62
+electrochemical-cells__start d665fbf836a95c62
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
 energy-pyramid__defaults b241c17c237731d9
@@ -172,6 +176,8 @@ leaf-cross-section__defaults 818e771eed2286b2
 leaf-cross-section__start c21ff54b681c9a96
 length-reading__defaults 6f537c7a8a3fef24
 length-reading__start 453f02e67ba5f037
+lever__defaults 7191bc372aa2416f
+lever__start 7191bc372aa2416f
 lewis-structures__defaults a66516d92e06586f
 lewis-structures__start a66516d92e06586f
 limits-discontinuities__defaults f630aa668b36b5d6
@@ -242,6 +248,8 @@ particle-diagram__defaults 0caa5b4c903bb9c2
 particle-diagram__start 9575a1521722cc97
 pedigree__defaults fafbaa542594d64c
 pedigree__start fafbaa542594d64c
+pendulum__defaults 4b77db3f76a724e1
+pendulum__start 4b77db3f76a724e1
 periodic-table__defaults f118cda5d266d974
 periodic-table__start f118cda5d266d974
 perspective-grid__defaults d910310cb83e197f
@@ -316,6 +324,8 @@ riemann-sums__defaults dcf0e6995d2be198
 riemann-sums__start dcf0e6995d2be198
 right-triangle-trig__defaults 04ee5345d24965e7
 right-triangle-trig__start 04ee5345d24965e7
+roller-coaster__defaults 03f80d37db5be1a9
+roller-coaster__start 03f80d37db5be1a9
 ruler-reading__defaults 3f6161466de39320
 ruler-reading__start 3740bf21470e8d6b
 sampling-distribution__defaults 0ce8cab36065a2f8
@@ -346,6 +356,8 @@ sphere__defaults 026a80b5e0fb10f8
 sphere__start 6714de163741fd83
 spring-scale__defaults d4a110f294568190
 spring-scale__start d4a110f294568190
+spring__defaults 70d0015cf0295d2b
+spring__start 70d0015cf0295d2b
 standing-wave__defaults 4909ba2d202c55f5
 standing-wave__start 4909ba2d202c55f5
 state-machine__defaults 86f2a2e454e4d447
@@ -376,6 +388,8 @@ titration-curve__defaults 5e358d9aef096531
 titration-curve__start 5e358d9aef096531
 topo-contours__defaults 356733365d4c64e8
 topo-contours__start 356733365d4c64e8
+torque__defaults c1162f9475564b97
+torque__start c1162f9475564b97
 trace-table__defaults 1c044bd7dbc96a96
 trace-table__start 1c044bd7dbc96a96
 transformations__defaults 0a93f7051e212d0f
