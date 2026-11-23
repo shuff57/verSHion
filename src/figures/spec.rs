@@ -45,6 +45,9 @@ pub fn params_from_spec(def: &FigureDef, spec: &FigureSpec) -> Params {
     }
     super::migrate(def.id, spec, &mut p);
     p.normalize(&defs, false);
+    if def.id == super::chemistry::equilibrium::ID {
+        super::chemistry::equilibrium::normalize_disturbance_times(&mut p);
+    }
     p
 }
 

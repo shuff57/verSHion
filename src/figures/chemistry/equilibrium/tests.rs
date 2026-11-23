@@ -867,12 +867,12 @@ fn edge_cases_are_noted_not_panicked() {
     }
     // a disturbance that would make a concentration negative
     let d = mdl(&[f("init_a", 1.0), f("init_b", 1.0), f("k", 50.0), s("dist", "Remove a species"), s("dist_species", "C"), f("dist_amount", 900.0)]);
-    let d2 = d.d2.as_ref().unwrap();
+    let d2 = d.disturbances.first().unwrap();
     assert_eq!(d2.c_after[2], 0.0);
     assert!(warnings(&with(&[f("init_a", 1.0), f("init_b", 1.0), f("k", 50.0), s("dist", "Remove a species"), s("dist_species", "C"), f("dist_amount", 900.0)])).iter().any(|w| w.contains("would make its concentration negative")));
     // adding a solid does nothing
     let sd = mdl(&[s("phase_a", "solid (s)"), s("dist", "Add a species"), s("dist_species", "A"), f("dist_amount", 5.0), f("k", 3.0)]);
-    assert!(!sd.d2.as_ref().unwrap().effect);
+    assert!(!sd.disturbances.first().unwrap().effect);
     // a reaction of solids and liquids only is refused
     let allsol = warnings(&raw(&[s("phase_a", "solid (s)"), s("phase_b", "solid (s)"), s("phase_c", "liquid (l)"), s("phase_d", "solid (s)")]));
     assert!(allsol.iter().any(|w| w.contains("leaves nothing in K")), "{allsol:?}");
@@ -928,7 +928,7 @@ fn the_curves_converge_to_the_exact_equilibrium_and_agree_with_an_rk4_run() {
         }
         // the curve on the plot reaches the plateau (no disturbance): within the thickness of a line
         let tr = m.traj();
-        let last = tr.p1.last().unwrap();
+        let last = tr[0].last().unwrap();
         for j in 0..4 {
             if m.st.rx.ink(j) { assert!((last.c[j] - m.sol.c[j]).abs() <= 2e-3 * m.c_bound(), "[{j}] {} vs {} in {}", last.c[j], m.sol.c[j], show(&l)); }
         }
@@ -942,11 +942,11 @@ fn the_time_unit_makes_the_first_approach_finish_at_five() {
         let tr = m.traj();
         // within 0.1 % of the way by t = 5, whatever K
         let span = m.sol.x.abs();
-        let at5 = tr.p1.iter().find(|p| p.t >= 5.0).unwrap();
+        let at5 = tr[0].iter().find(|p| p.t >= 5.0).unwrap();
         let x5 = (at5.c[2] - m.st.c0[2]) / 2.0;
         assert!((x5 - m.sol.x).abs() <= 2e-3 * span, "K = {k}: {x5} vs {}", m.sol.x);
         // and not long before: the curve is still moving at t = 1
-        let at1 = tr.p1.iter().find(|p| p.t >= 1.0).unwrap();
+        let at1 = tr[0].iter().find(|p| p.t >= 1.0).unwrap();
         assert!(((at1.c[2] - m.st.c0[2]) / 2.0 - m.sol.x).abs() > 1e-3 * span, "K = {k}: finished by t = 1");
     }
 }
@@ -966,7 +966,7 @@ fn answer_strings(m: &Model) -> Vec<String> {
     let n = st.sig;
     let mut v = vec![sf(m.sol.x, n), sf(m.k, n)];
     for j in 0..4 { if st.rx.ink(j) { v.push(sf(m.sol.c[j], n)); } }
-    if let Some(d) = &m.d2 {
+    for d in &m.disturbances {
         v.push(sf(d.sol.x, n));
         for j in 0..4 { if st.rx.ink(j) { v.push(sf(d.sol.c[j], n)); } }
         v.push(sf(d.q_after, n));
@@ -1570,11 +1570,11 @@ fn both_rate_constants_rise_with_temperature_and_fall_with_cooling() {
     for dh in [-900.0, -50.0, 0.0, 50.0, 900.0] {
         for (t1, t2) in [(298.0, 350.0), (350.0, 298.0), (200.0, 1500.0), (1500.0, 200.0), (298.0, 299.0)] {
             let m = mdl(&[s("dist", "Change the temperature"), f("dist_dh", dh), f("dist_t1", t1), f("dist_t2", t2), f("k", 50.0)]);
-            let d = m.d2.as_ref().expect("a disturbance");
+            let d = m.disturbances.first().expect("a disturbance");
             let (ff, fr) = (d.kf / m.kf, d.kr / m.kr);
             if t2 > t1 { assert!(ff > 1.0 && fr > 1.0, "dH {dh}, {t1} -> {t2}: factors {ff} {fr}"); } else { assert!(ff < 1.0 && fr < 1.0, "dH {dh}, {t1} -> {t2}: factors {ff} {fr}"); }
-            if d.k2 > K_LO * 1.001 && d.k2 < K_HI * 0.999 {
-                let want = d.k2 / m.k;
+            if d.k_after > K_LO * 1.001 && d.k_after < K_HI * 0.999 {
+                let want = d.k_after / m.k;
                 assert!(((ff / fr) / want - 1.0).abs() < 1e-9, "kf/kr must follow K2/K: {} vs {want}", ff / fr);
             }
             let svg = svg_of(&[s("mode", RATES), s("dist", "Change the temperature"), f("dist_dh", dh), f("dist_t1", t1), f("dist_t2", t2)]);
@@ -1668,7 +1668,7 @@ fn the_student_copy_draws_no_curve_and_no_plateau_unless_the_graph_is_the_given(
         // the plateau guides are named g<i> (concentration) and req (rates); neither may be on any student copy
         assert!(!g.strokes.iter().any(|x| x.0 == "guide" && (x.1.starts_with('g') || x.1 == "req")), "a plateau guide on the student copy of {}", show(&l));
         // a K line after a temperature change is K2, the answer: not drawn
-        if m.st.dk == DKind::Temp && m.st.mode == Mode::Quot {
+        if m.has_temperature_change() && m.st.mode == Mode::Quot {
             let ks: Vec<_> = g.paths.iter().filter(|p| p.0 == "kline").collect();
             let x_d = path_of_kind(&svg_of(&ls), "guide", "d");
             for k in ks { assert!(k.2.iter().all(|p| p.0 <= x_d[0].0 + 0.01), "K2 line on the student copy of {}", show(&l)); }
@@ -1842,18 +1842,18 @@ fn independent_disturbance_sentences_and_numbers() {
     let mut checked = 0;
     for l in disturbance_cases() {
         let m = mdl(&l);
-        let Some(d) = m.d2.as_ref() else { continue };
+        let Some(d) = m.disturbances.first() else { continue };
         let st = &m.st;
         let k = m.k;
         let c1 = ind_c(&m, &st.c0, k);
         let mut ca = c1;
         let mut k2 = k;
-        let di = st.d_i;
-        match st.dk {
-            DKind::Add => { if st.rx.ink(di) { ca[di] += st.d_amt; } }
-            DKind::Remove => { if st.rx.ink(di) { ca[di] = (ca[di] - st.d_amt).max(0.0); } }
-            DKind::Volume => { for j in 0..4 { ca[j] = c1[j] / st.d_f; } }
-            DKind::Temp => { k2 = k * (-st.dh * 1000.0 / 8.314 * (1.0 / st.t2 - 1.0 / st.t1)).exp(); }
+        let di = d.input.species;
+        match d.input.kind {
+            DKind::Add => { if st.rx.ink(di) { ca[di] += d.input.amount; } }
+            DKind::Remove => { if st.rx.ink(di) { ca[di] = (ca[di] - d.input.amount).max(0.0); } }
+            DKind::Volume => { for j in 0..4 { ca[j] = c1[j] / d.input.volume; } }
+            DKind::Temp => { k2 = k * (-d.input.dh * 1000.0 / 8.314 * (1.0 / d.input.after - 1.0 / d.input.before)).exp(); }
             DKind::None => {}
         }
         if !d.effect { continue; }
@@ -1861,10 +1861,10 @@ fn independent_disturbance_sentences_and_numbers() {
         let cmp = if (q / k2 - 1.0).abs() < 1e-9 { '=' } else if q < k2 { '<' } else { '>' };
         let lines = readout(&m, true);
         let all = lines.join("\n");
-        let sub = if st.dk == DKind::Temp { "\u{2082}" } else { "" };
+        let sub = if d.input.kind == DKind::Temp { "\u{2082}" } else { "" };
         let want = format!("Q {cmp} K{sub} ({} {cmp} {}), {}.", sf(q, 4), kf(k2), words(cmp));
         assert!(all.contains(&want), "missing\n{want}\nin\n{all}\nfor {}", show(&l));
-        if st.dk == DKind::Temp { assert!(all.contains(&format!("= {}.", kf(k2))) || all.contains(&format!("] = {}.", kf(k2))), "K2 {} in\n{all}", kf(k2)); }
+        if d.input.kind == DKind::Temp { assert!(all.contains(&format!("= {}.", kf(k2))) || all.contains(&format!("] = {}.", kf(k2))), "K2 {} in\n{all}", kf(k2)); }
         // just after, and the new equilibrium
         let after = lines.iter().find(|x| x.starts_with("Just after: ")).unwrap_or_else(|| panic!("no just-after in {all}"));
         for (got, want) in parse_species_line(after, st).into_iter().zip((0..4).filter(|&j| st.rx.ink(j)).map(|j| ca[j])) {
@@ -1935,4 +1935,160 @@ fn every_drawn_character_is_in_the_figure_font() {
     let allowed = |c: char| c == '\u{394}' || ('\u{2070}'..='\u{209f}').contains(&c) || c == '\u{b2}' || c == '\u{b3}' || c == '\u{b9}';
     let bad: String = missing.iter().filter(|&&c| !allowed(c)).collect();
     assert!(bad.is_empty(), "characters that are not in the figure font and not known to fall back well: {bad}");
+}
+
+#[test]
+fn consecutive_stresses_match_the_reference_plateaus_and_curve_jumps() {
+    let p = with(&[
+        f("init_b", 0.8), f("k", 10.0), s("dist", DISTS[1]), f("dist_amount", 0.5),
+        s("dist2", DISTS[3]), f("dist2_factor", 0.5),
+    ]);
+    let (svg, rep) = build(&p);
+    let m = &rep.model;
+    // For H₂ + I₂ ⇌ 2HI and K = 10, use the smaller root of
+    // 6x² − (10(a+b) + 4c)x + (10ab − c²) = 0 for each equilibrium.
+    let plateau = |[a, b, c, _]: [f64; 4]| {
+        let lin = 10.0 * (a + b) + 4.0 * c;
+        let cons = 10.0 * a * b - c * c;
+        let x = (lin - (lin * lin - 24.0 * cons).sqrt()) / 12.0;
+        [a - x, b - x, c + 2.0 * x, 0.0]
+    };
+    let first = plateau([1.0, 0.8, 0.0, 0.0]);
+    let added = [first[0] + 0.5, first[1], first[2], 0.0];
+    let second = plateau(added);
+    let doubled = second.map(|c| c * 2.0);
+    let tr = m.traj();
+
+    assert_eq!(tr.len(), 3);
+    let close = |actual: [f64; 4], expected: [f64; 4]| {
+        for (a, b) in actual.into_iter().zip(expected) { assert!((a - b).abs() < 1e-10, "{a} vs {b}"); }
+    };
+    close(tr[0].last().unwrap().c, first);
+    close(tr[1][0].c, added);
+    close(tr[1].last().unwrap().c, second);
+    close(tr[2][0].c, doubled);
+    assert!(tr[2].iter().all(|p| p.c == tr[2][0].c));
+    close(m.disturbances[1].sol.c, doubled);
+    assert_eq!(m.disturbances[1].dir, Dir::AtEq);
+    let q = |c: [f64; 4]| c[2].powi(2) / (c[0] * c[1]);
+    assert!((m.disturbances[0].q_after - q(added)).abs() < 1e-10);
+    assert!((q(doubled) - q(second)).abs() < 1e-10);
+    assert!((m.disturbances[1].q_after - 10.0).abs() < 1e-10);
+    let pre = tr[1].last().unwrap();
+    let post = tr[2][0];
+    assert!((post.rf / pre.rf - 4.0).abs() < 1e-10);
+    assert!((post.rr / pre.rr - 4.0).abs() < 1e-10);
+
+    // Check the actual SVG's step geometry and axis units against the independent values.
+    for (i, (time, before, after)) in [(8.0, first, added), (16.0, second, doubled)].into_iter().enumerate() {
+        assert_eq!(tr[i].last().unwrap().t, time);
+        assert_eq!(tr[i + 1][0].t, time);
+        let x = rep.frame.px(time);
+        assert!((rep.dist_pts[i].0 - x).abs() < 1e-10);
+        for j in 0..3 {
+            let curve = path_of_kind(&svg, "curve", &format!("c{j}"));
+            let y0 = rep.frame.py(before[j]);
+            let y1 = rep.frame.py(after[j]);
+            assert!(curve.windows(2).any(|pts| {
+                (pts[0].0 - x).abs() < 0.01 && (pts[1].0 - x).abs() < 0.01
+                    && (pts[0].1 - y0).abs() < 0.01 && (pts[1].1 - y1).abs() < 0.01
+            }), "missing step at {time} for species {j}");
+        }
+    }
+    let drawn = all_text(&svg);
+    for expected in ["Time (arbitrary units)", "Concentration (M)", "t = 8: Add 0.5 M H₂",
+        "t = 16: Volume × 0.5", "Q = K: no shift", "= 1.75 M", "= 0.354 M", "= 2.49 M"]
+    {
+        assert!(drawn.contains(expected), "{expected}");
+    }
+}
+
+#[test]
+fn consecutive_stresses_keep_order_and_carry_temperature_and_k_forward() {
+    let mut p = raw(&[
+        s("dist", DISTS[4]), f("dist_t1", 300.0), f("dist_t2", 350.0), f("dist_dh", 10.0),
+        s("dist2", DISTS[4]), f("dist2_t2", 400.0), f("dist2_t1", 240.0), f("dist2_dh", -90.0),
+        f("dist_time", 18.0), f("dist2_time", 6.0), f("k", 5.0),
+    ]);
+    let (_, rep) = build(&p);
+    let d = &rep.model.disturbances;
+    assert_eq!(d[1].input.time, 24.0);
+    assert!(rep.notes.iter().any(|n| n.contains("second disturbance is drawn at t = 24")));
+    assert_eq!(d[1].input.before, 350.0);
+    assert_eq!(d[1].c_after, d[0].sol.c);
+    let expected_k = 5.0 * (-10_000.0 / 8.314 * (1.0_f64 / 400.0 - 1.0 / 300.0)).exp();
+    assert!((d[1].k_after - expected_k).abs() < 1e-11);
+    assert!((d[1].kf / d[1].kr - expected_k).abs() < 1e-11);
+    assert!((ind_q(&rep.model, &d[1].sol.c) - expected_k).abs() < 1e-10);
+
+    p.set_f("dist2_time", 26.0);
+    let (_, rep) = build(&p);
+    let hs = handles(ID, &p, (0.0, 0.0)).unwrap();
+    let first = hs.iter().find(|h| h.tip.starts_with("Drag disturbance 1")).unwrap();
+    let second = hs.iter().find(|h| h.tip.starts_with("Drag disturbance 2")).unwrap();
+    first.drag.as_ref().unwrap()(&mut p, (rep.frame.px(23.0), first.pos.1));
+    assert_eq!((p.f("dist_time"), p.f("dist2_time")), (20.0, 26.0));
+    let hs = handles(ID, &p, (0.0, 0.0)).unwrap();
+    second.drag.as_ref().unwrap()(&mut p, (rep.frame.px(29.0), second.pos.1));
+    assert_eq!((p.f("dist_time"), p.f("dist2_time")), (20.0, 29.0));
+    let second = hs.iter().find(|h| h.tip.starts_with("Drag disturbance 2")).unwrap();
+    second.drag.as_ref().unwrap()(&mut p, (rep.frame.px(10.0), second.pos.1));
+    assert_eq!((p.f("dist_time"), p.f("dist2_time")), (20.0, 26.0));
+    p.set_f("dist_time", 21.0);
+    crate::figures::after_panel_change(ID, "dist_time", &Value::F(20.0), &mut p);
+    assert_eq!(p.f("dist2_time"), 27.0);
+
+
+    // Volume applied after changing K retains the new K, and unequal gas mole counts cause a shift.
+    p.set_i("coef_b", 0);
+    p.set_s("dist2", DISTS[3]);
+    p.set_f("dist2_factor", 0.5);
+    let m = model_of(&p);
+    let d = &m.disturbances;
+    assert_eq!(d[1].k_after, d[0].k_after);
+    assert!((d[1].q_after / d[0].k_after - 2.0).abs() < 1e-10);
+    assert_eq!(d[1].dir, Dir::Reverse);
+    assert!((ind_q(&m, &d[1].sol.c) - d[0].k_after).abs() < 1e-10);
+    p.set_s("mode", QUOT);
+    let (student, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+    assert_eq!(geo(&key).paths.iter().filter(|p| p.0 == "kline").count(), 3);
+    assert_eq!(geo(&student).paths.iter().filter(|p| p.0 == "kline").count(), 1);
+
+}
+
+#[test]
+fn single_stress_keeps_the_pinned_render_without_second_stress_fields() {
+    let legacy_json = serde_json::json!({
+        "init_b": 0.8, "k": 10.0, "dist": "Add a species", "dist_amount": 0.5, "dist_time": 8.0
+    });
+    let p = crate::figures::params_from_json(&def(), &legacy_json);
+    let svg = (def().render)(&p);
+    // FNV-1a of the council's pinned local/equilibrium-graph-single-stress.svg at 260684a3.
+    let hash = svg.bytes().fold(0xcbf29ce484222325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100000001b3)
+    });
+    assert_eq!(hash, 0xecb5e27fcac735ee);
+}
+
+#[test]
+fn imported_second_stress_reexports_its_drawn_time() {
+    use crate::figures::spec::{params_from_spec, spec_for};
+
+    let p = raw(&[
+        s("dist", DISTS[1]),
+        f("dist_time", 22.0),
+        s("dist2", DISTS[3]),
+        f("dist2_time", 12.0),
+    ]);
+    let def = defs().remove(0);
+    let loaded = params_from_spec(&def, &spec_for(ID, &p));
+    assert_eq!(loaded.f("dist_time"), 22.0);
+    assert_eq!(loaded.f("dist2_time"), 28.0);
+    assert_eq!(model_of(&loaded).disturbances[1].input.time, 28.0);
+
+    let baseline = crate::figures::start_params(&def);
+    let link = crate::figures::share::encode(ID, &p, &baseline);
+    let (_, changed) = crate::figures::share::decode(&link).unwrap();
+    let reopened = crate::figures::share::link_params(&def, changed, crate::figures::share::version(&link));
+    assert_eq!(spec_for(ID, &reopened).params["dist2_time"].as_f64(), Some(28.0));
 }

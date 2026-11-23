@@ -842,6 +842,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "chromatography" | "electrochemical-cells" if key == "title" => p.s("title_style") == "Text",
         "electrochemical-cells" if key == "voltage" => p.s("voltage_source") == "Custom",
         "electrochemical-cells" if key == "give_reading" => p.s("meter") != "Coil of wire",
+        chemistry::equilibrium::ID => chemistry::equilibrium::relevant(key, p),
         "pulley" => physics::pulley_relevant(key, p),
         segment::ID => segment::relevant(key, p),
         nets::ID => nets::relevant(key, p),
@@ -931,6 +932,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     }
     if id == chemistry::bond_energy::ID {
         chemistry::bond_energy::panel_changed(key, old, p);
+    }
+    if id == chemistry::equilibrium::ID {
+        chemistry::equilibrium::panel_changed(key, p);
     }
     if id == "transformations" {
         transform::panel_changed(key, p);

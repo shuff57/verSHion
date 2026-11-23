@@ -6534,7 +6534,7 @@ mod tests {
     fn click_nth(ctx: &egui::Context, ws: &mut Workspace, label: &str, n: usize) {
         let out = tall_frame(ctx, ws, vec![]);
         let tree = out.platform_output.accesskit_update.expect("accesskit tree");
-        let mut hits: Vec<_> = tree.nodes.iter().filter(|(_, nd)| nd.label().is_some_and(|l| l == label)).filter_map(|(_, nd)| nd.bounds()).filter(|b| b.x0 < 700.0).collect();
+        let mut hits: Vec<_> = tree.nodes.iter().filter(|(_, nd)| nd.label() == Some(label) || (nd.role() == egui::accesskit::Role::ComboBox && nd.value() == Some(label))).filter_map(|(_, nd)| nd.bounds()).filter(|b| b.x0 < 700.0).collect();
         hits.sort_by(|a, b| a.y0.total_cmp(&b.y0));
         let b = hits.get(n).unwrap_or_else(|| panic!("no widget #{n} named {label:?} ({} found)", hits.len()));
         let p = egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
@@ -6543,6 +6543,87 @@ mod tests {
         ev.extend(btn(p, false));
         tall_frame(ctx, ws, ev);
         tall_frame(ctx, ws, vec![]);
+    }
+
+    #[test]
+    fn equilibrium_consecutive_stresses_in_the_editor() {
+        let id = figures::chemistry::equilibrium::ID;
+        let (ctx, mut ws) = open_tall(id);
+        let tree = tall_frame(&ctx, &mut ws, vec![]).platform_output.accesskit_update.unwrap();
+        assert!(!tree.nodes.iter().any(|(_, node)| node.label() == Some("Second disturbance") || node.value() == Some("Second disturbance")));
+        open_section(&ctx, &mut ws, "First disturbance");
+        click_nth(&ctx, &mut ws, "None", 0);
+        click_nth(&ctx, &mut ws, "Add a species", 0);
+        assert_eq!(ws.params.s("dist"), "Add a species");
+        assert_eq!(count_text(&ctx, &mut ws, "Species added or removed"), 1);
+        open_section(&ctx, &mut ws, "Second disturbance");
+        click_nth(&ctx, &mut ws, "None", 0);
+        click_nth(&ctx, &mut ws, "Change the volume", 0);
+        assert_eq!(ws.params.s("dist2"), "Change the volume");
+        assert_eq!(count_text(&ctx, &mut ws, "Volume changes by a factor of"), 1);
+        assert_eq!(count_text(&ctx, &mut ws, "Time"), 2);
+        assert_eq!(count_text(&ctx, &mut ws, "(arbitrary units)"), 2);
+
+        ws.step_history(true);
+        assert_eq!(ws.params.s("dist2"), "None");
+        ws.step_history(false);
+        assert_eq!(ws.params.s("dist2"), "Change the volume");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn equilibrium_consecutive_stresses_round_trip_and_export() {
+        use crate::store::{Backend, FsBackend};
+
+        let id = figures::chemistry::equilibrium::ID;
+        let (i, def) = find_def(id).unwrap();
+        let mut ws = Workspace::new(false);
+        ws.select(i);
+        // Open a pre-feature spec directly, as a user would via Paste spec.
+        ws.apply_spec_text(r#"{"id":"equilibrium-graphs","params":{"init_b":0.8,"k":10,"dist":"Add a species","dist_time":8}}"#).unwrap();
+        assert_eq!(ws.params.s("dist2"), "None");
+        let single = ws.output().unwrap();
+        assert!(single.svg.as_ref().unwrap().contains("Disturbance at t = 8"));
+        assert!(!single.svg.as_ref().unwrap().contains("Volume"));
+        ws.params.set_s("dist2", "Change the volume");
+        ws.params.set_f("dist2_factor", 0.5);
+        ws.params.set_f("dist2_time", 16.0);
+        ws.params.set_s("style", "Print");
+        let expected = ws.output().unwrap();
+
+        let mut reopened = Workspace::new(false);
+        reopened.apply_spec_text(&ws.spec_json().unwrap()).unwrap();
+        assert_eq!(reopened.output().unwrap().svg, expected.svg);
+        reopened.back();
+        reopened.apply_link(&ws.share_link().unwrap()).unwrap();
+        assert_eq!(reopened.output().unwrap().svg, expected.svg);
+
+        // Use the same serialized preset record and spec loader as Save preset, in isolated storage.
+        let scratch = std::env::temp_dir().join(format!("vershion-equilibrium-preset-{}", std::process::id()));
+        let storage = FsBackend::new(&scratch);
+        let preset = PresetEntry { name: "Add hydrogen then compress".into(), params: expected.spec.unwrap().params };
+        let file = PresetFile::from([(id.to_string(), vec![preset])]);
+        storage.write_doc("figure-presets.json", &serde_json::to_vec(&file).unwrap()).unwrap();
+        let saved: PresetFile = serde_json::from_slice(&storage.read_doc("figure-presets.json").unwrap()).unwrap();
+        std::fs::remove_dir_all(scratch).unwrap();
+        let spec = FigureSpec { id: id.into(), params: saved[id][0].params.clone() };
+        reopened.set_params_with_history(params_from_spec(def, &spec));
+        assert_eq!(reopened.output().unwrap().png, expected.png);
+
+        for mode in figures::chemistry::equilibrium::MODES {
+            reopened.params.set_s("mode", mode);
+            let (student, key) = figures::answer_pair(def, &reopened.params).unwrap();
+            for svg in [&student, &key] {
+                assert!(svg.contains("Volume × 0.5"));
+                let png = flatten_white(&figures::to_png(svg, 2.0).unwrap()).unwrap();
+                let img = image::load_from_memory(&png).unwrap().into_rgb8();
+                assert!(img.pixels().all(|p| p[0] == p[1] && p[1] == p[2]), "{mode}");
+            }
+            assert!(key.contains("1.75 M") && key.contains("0.354 M") && key.contains("2.49 M"), "{mode}");
+            for answer in ["1.75 M", "0.354 M", "2.49 M", "no shift", "shifts right", "Just after:"] {
+                assert!(!student.contains(answer), "{mode}: {answer}");
+            }
+        }
     }
 
     /// Side-panel text labels (section titles, control captions) reading exactly `text`.
