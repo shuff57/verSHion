@@ -269,11 +269,9 @@ fn render_vertical(p: &Params) -> String {
         let y = CY - inward * R;
         let tangent = if clockwise { inward } else { -inward };
         d.raw(&format!("<g><title>{position}</title>"));
-        if pull.is_some() {
-            d.line(x, y, x, CY, path, 1.6);
-        } else {
-            d.path(&format!("M{x},{y} Q{},{} {x},{CY}", x + 44.0, (y + CY) / 2.0), "none", path, 1.6);
-        }
+        // The slack case depicts the instant the string loses tension, with the bob still
+        // one string length from the pivot. Its subsequent free motion is outside this diagram.
+        d.line(x, y, x, CY, path, 1.6);
         d.arrow_with(x + tangent * 11.0, y, x + tangent * 65.0, y, vel, 2.2, "6 3", false);
         d.raw(&text_el(x + tangent * (69.0 + 6.0 * lab), y + fs * 0.32, fs, "middle", vel, "v"));
 
@@ -510,8 +508,11 @@ mod tests {
                 assert_eq!((dx, dy), (0.0, vertical_sign));
             }
         }
-        let slack = render_of(&[s("setup", VERTICAL), s("position", TOP), f("speed", 0.2), b(SHOW_ANSWERS, true)]);
-        assert!(slack.contains("<path") && slack.contains(SLACK));
+        let slack = render_of(&[s("setup", VERTICAL), s("position", TOP), s("label_size", "Medium"), f("speed", 0.2), b(SHOW_ANSWERS, true)]);
+        let x = W / 2.0;
+        let y = CY - R;
+        assert!(slack.contains(&format!(r#"<line x1="{x:.2}" y1="{y:.2}" x2="{x:.2}" y2="{CY:.2}""#)));
+        assert!(!slack.contains("<path") && slack.contains(SLACK));
         assert!(slack.contains("Tension at the top  0 N") && !slack.contains(">T</text>") && !slack.contains(">a<tspan"));
         let threshold_speed = 9.81_f64.sqrt();
         let threshold = render_of(&[s("setup", VERTICAL), s("position", TOP), f("radius", 1.0), f("speed", threshold_speed)]);
