@@ -37,6 +37,7 @@ pub mod gaslaws;
 pub mod equilibrium;
 pub mod buffercurves;
 pub mod boltzmann;
+pub mod bond_energy;
 pub mod vsepr;
 pub mod periodic;
 pub mod spectra;
@@ -97,6 +98,7 @@ pub fn liquid(name: &str) -> (&'static str, &'static str) {
 /// structure's central atom, the instruments' reading ranges.
 pub fn live_help(id: &str, title: &str, p: &Params) -> Option<String> {
     match (id, title) {
+        (bond_energy::ID, "Bonds") => Some(bond_energy::readout(p)),
         ("lewis-structures", "Structure") => Some(lewis::central_note(p)),
         ("lewis-structures", "Changes") if p.s("question") != "Full structure" && !lewis::has_changes(p) => {
             Some("Changes need the full structure. Set Question to Full structure to make a \u{201c}find the mistake\u{201d} question.".to_string())
@@ -418,6 +420,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| equilibrium::examples(id))
         .or_else(|| buffercurves::examples(id))
         .or_else(|| boltzmann::examples(id))
+        .or_else(|| bond_energy::examples(id))
         .or_else(|| vsepr::examples(id))
         .or_else(|| periodic::examples(id))
 }
@@ -491,6 +494,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(lewis::defs());
     v.extend(spectra::defs());
     v.extend(reactionenergy::defs());
+    v.extend(bond_energy::defs());
     v.extend(ratesgraph::defs());
     v.extend(phasediagram::defs());
     v.extend(solubilitycurves::defs());

@@ -151,6 +151,9 @@ pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
     if fig == "circle" {
         return circle::control_label(key, p);
     }
+    if fig == chemistry::bond_energy::ID {
+        return chemistry::bond_energy::control_label(key, p);
+    }
     if fig != "predator-prey" {
         return None;
     }
@@ -468,6 +471,19 @@ const ANSWER: AnswerRule = AnswerRule { student: &[("answer", &[], AV::B(false))
 /// under the figure); the rest map the controls that blank the working.
 pub fn answer_rule(id: &str) -> Option<AnswerRule> {
     Some(match id {
+        chemistry::bond_energy::ID => AnswerRule {
+            student: &[
+                ("answer", &[], AV::B(false)),
+                ("hide_names", &[], AV::B(true)),
+                ("guide_labels", &[AV::S("Values")], AV::S("Blank lines")),
+            ],
+            key: &[
+                ("answer", &[], AV::B(true)),
+                ("hide_names", &[], AV::B(true)),
+                ("guide_labels", &[AV::S("Blank lines")], AV::S("Values")),
+                ("regions", &[AV::S("Blank lines")], AV::S("Words")),
+            ],
+        },
         "spring-scale" | "micropipette-reading" | "gel-electrophoresis" | "volume-reading" | "volume-by-displacement"
         | "gas-syringe" | "length-reading" | "mass-reading" | "temperature-reading" | "ph-reading" | "titration-curve"
         | "lewis-structures" | "line-spectrum" | "photoelectron-spectrum" | "mass-spectrum" | "ruler-reading" => ANSWER,
@@ -735,6 +751,7 @@ pub fn card_keys(id: &str) -> &'static [&'static str] {
 /// ranges also take a fraction or mixed number (-7/2, 3 1/2), which numbers that axis in fractions.
 pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f64> {
     match fig {
+        chemistry::bond_energy::ID => chemistry::bond_energy::typed_float(key, text, p),
         "coordinate-grid" => math::grid_typed_float(key, text, p),
         "derivative-graphs" => math::derivative_graphs::typed(text).map(|t| t.v),
         _ => text.trim().parse::<f64>().ok(),
@@ -744,6 +761,7 @@ pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f
 /// How a figure shows a number box's value when it has its own way (None: the usual decimal).
 pub fn float_text(fig: &str, key: &str, p: &Params) -> Option<String> {
     match fig {
+        chemistry::bond_energy::ID => chemistry::bond_energy::float_text(key, p),
         "coordinate-grid" => math::grid_float_text(key, p),
         _ => None,
     }
@@ -816,6 +834,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "enzyme-kinetics" => biology::enzyme::relevant(key, p),
         // only the chosen setup's controls: two or three steps' valleys, the catalysed path's, the typed axis range
         "reaction-energy-diagram" => chemistry::reactionenergy::relevant(key, p),
+        chemistry::bond_energy::ID => chemistry::bond_energy::relevant(key, p),
         // only the chosen instrument's controls: the ruler's, the caliper's or the micrometer's
         "length-reading" => chemistry::length_relevant(key, p) && cards::relevant(id, key, p),
         // the ions' layout only for an ionic compound, picked or typed
@@ -868,6 +887,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     // unticking the half-life graph's "Fit the axes" fills the range boxes with the fitted axes
     if id == chemistry::halflife::ID {
         chemistry::halflife::panel_changed(key, old, p);
+    }
+    if id == chemistry::bond_energy::ID {
+        chemistry::bond_energy::panel_changed(key, old, p);
     }
     if id == "transformations" {
         transform::panel_changed(key, p);
@@ -1717,6 +1739,7 @@ mod answer_rule_tests {
         ("punnett-square", &[], "Genotype ratio: 1 TT : 2 Tt : 1 tt"),
         ("population-growth", &[], "Carrying capacity (K)"),
         ("heating-cooling-curve", &[], "Solid + liquid"),
+        ("bond-energy-curve", &[], "Bond A = Bond X"),
     ];
 
     #[test]

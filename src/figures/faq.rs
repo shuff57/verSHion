@@ -58,6 +58,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "mass-reading" => MASS_READING,
         "mass-spectrum" => MASS_SPECTRUM,
         "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
+        "bond-energy-curve" => BOND_ENERGY_CURVE,
         "reaction-rate-graph" => REACTION_RATE_GRAPH,
         "phase-diagram" => PHASE_DIAGRAM,
         "solubility-curves" => SOLUBILITY_CURVES,
@@ -4390,6 +4391,21 @@ const GAS_LAW_GRAPHS: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the axes, the curves, the givens, the first state's point and a guide at the second state's known value, and turns the missing value, the readings, the slope, n and the name of the law into blank lines. It never writes the equation, and its description names no law and no value. The answer point, the guides to the axes and the open circle at absolute zero are drawn on the key only, so the student copy's drawing is the same whatever the answer is.",
+    },
+];
+
+const BOND_ENERGY_CURVE: &[Faq] = &[
+    Faq {
+        q: "How do I read bond length and bond energy from the curve?",
+        a: "The minimum's distance is the equilibrium bond length. The energy needed to separate the atoms is the difference between the minimum and zero. A minimum at −400 kJ/mol represents a bond energy of 400 kJ/mol.",
+    },
+    Faq {
+        q: "Why does the curve rise on both sides of the minimum?",
+        a: "At shorter distances the atoms repel. At longer distances they attract, and the potential energy approaches zero as they separate. The graph uses a Morse potential with a fixed width relative to each bond length.",
+    },
+    Faq {
+        q: "How can students match the curves to bond names?",
+        a: "Hide bond names to label the curves Bond A, B and C. Student + key exports the lettered curves and a key that matches each letter to its name, length and energy.",
     },
 ];
 
