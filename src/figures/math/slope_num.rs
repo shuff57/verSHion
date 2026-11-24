@@ -193,8 +193,9 @@ pub(crate) fn open_guards(n: &Node, out: &mut Vec<Node>) {
         Pow(a, e) => {
             open_guards(a, out);
             open_guards(e, out);
-            let k = if has_x(e) || has_y(e) { None } else { ex::exact(e, None).and_then(|v| v.rational()) };
-            if !k.is_some_and(|(p, _)| p >= 0) { factors(a, out); }
+            // (a constant power above 0, rational or not, has a value at a base of 0: 0^π = 0)
+            let positive = !has_x(e) && !has_y(e) && ev(e, 0.0, 0.0) > 0.0;
+            if !positive { factors(a, out); }
         }
         LogB(bs, a) => { open_guards(bs, out); open_guards(a, out); out.push((**a).clone()); out.push((**bs).clone()); }
         Func(f, a) => {
@@ -562,18 +563,39 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     let x_try = [pick(0.381_966), pick(0.618_034)];
     // every y with f(x, y) = 0 for the x tried, by sign changes and by touching minima of |f|
     let opens = { let mut v = vec![]; open_guards(&f.tree, &mut v); v };
-    // an open guard 0 at (x, y), to within its rounding: f has no value there, however close to 0 its float comes beside it
-    let open_at = |x: f64, y: f64| opens.iter().any(|q| { let v = ev(q, x, y); !v.is_finite() || v.abs() <= 1e-7 * (1.0 + y.abs()) });
-    // f runs to 0 as y comes to the edge b from the side it has values on (`side` points into it): its values a ten-thousandth,
-    // a millionth and a hundred-millionth away shrink toward 0, as √(2 − y²) does at √2, where rounding leaves no float on
-    // the line with a value; and no open guard is 0 there ((2 − y) ln(2 − y) at 2 shrinks too, but has no value at 2)
-    let edge_zero = |x: f64, b: f64, side: f64| -> bool {
-        if open_at(x, b) { return false; }
+    // A value runs to 0 as y comes to b from one side (`side` points into it): its values 10⁻⁴, 10⁻⁶ and 10⁻⁸ away fall
+    // steadily, by the same factor or faster each time, as any power of the distance does (√, ∛, a fourth root, y^π); a
+    // pole's grow, a jump's and a constant's stay, and a log's slow fall slows down. None where it has no value there.
+    let shrinks = |g: &dyn Fn(f64) -> Option<f64>, b: f64, side: f64| -> Option<bool> {
         let u = 1.0 + b.abs();
-        let vs: Vec<Option<f64>> = [1e-4, 1e-6, 1e-8].iter().map(|d| f.at(x, b + side * d * u)).collect();
-        match (vs[0], vs[1], vs[2]) {
-            (Some(v1), Some(v2), Some(v3)) => (v3 == 0.0 && v2 == 0.0) || (v3.abs() <= 0.5 * v2.abs() && v2.abs() <= 0.5 * v1.abs() && v3.abs() <= 1e-2 * scale),
-            _ => false,
+        let a = [g(b + side * 1e-4 * u)?.abs(), g(b + side * 1e-6 * u)?.abs(), g(b + side * 1e-8 * u)?.abs()];
+        // (values that are exactly 0 this close are underflow (e^(−1/y) just right of 0), not a value running to 0)
+        if a[1] == 0.0 || a[2] == 0.0 { return Some(false); }
+        if !(a[0] > a[1] && a[1] > a[2]) { return Some(false); }
+        let (r1, r2) = (a[1] / a[0], a[2] / a[1]);
+        Some(r1 <= 0.9 && r2 <= 0.9 && r2 <= r1 + 0.05)
+    };
+    // an open guard (a denominator, a log's inside, a base to a negative power, …) is 0 at (x, y): f has no value there,
+    // however close to 0 its float comes beside it. Decided by the guard itself running to 0 there, from the side given (0:
+    // from both), or its float being 0 or not finite there: ∛y under ln at y = 0, (1 − y²)^(1/4) under a quotient at ±1
+    let open_at = |x: f64, y: f64, side: f64| opens.iter().any(|q| {
+        let v = ev(q, x, y);
+        if !v.is_finite() || v.abs() <= 1e-12 * (1.0 + y.abs()) { return true; }
+        let gq = |t: f64| { let w = ev(q, x, t); w.is_finite().then_some(w) };
+        if side != 0.0 { shrinks(&gq, y, side) == Some(true) } else { shrinks(&gq, y, -1.0) == Some(true) && shrinks(&gq, y, 1.0) == Some(true) }
+    });
+    // f runs to 0 as y comes to the edge b of its domain from the side it has values on, and no open guard is 0 there
+    // (√(2 − y²) at √2, where rounding leaves no float on the line with a value; (2 − y) ln(2 − y) at 2 runs to 0 too, but
+    // has no value at 2)
+    let edge_zero = |x: f64, b: f64, side: f64| -> bool { !open_at(x, b, side) && shrinks(&|t| f.at(x, t), b, side) == Some(true) };
+    // f is 0 at the height r found inside its domain: its float is 0 to within its size, or it runs to 0 there from each side
+    // it has values on (∛y at 0, whose float at the bracket's end is 10⁻⁵); a pole's sign change grows instead
+    let zero_near = |x: f64, r: f64| -> Option<bool> {
+        if let Some(v) = f.at(x, r) { if v.abs() <= 1e-9 * scale { return Some(true); } }
+        match (shrinks(&|t| f.at(x, t), r, -1.0), shrinks(&|t| f.at(x, t), r, 1.0)) {
+            (Some(false), _) | (_, Some(false)) => Some(false),
+            (None, None) => None,
+            _ => Some(true),
         }
     };
     let roots_at = |xr: f64| -> Vec<(f64, f64)> {
@@ -583,8 +605,11 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         let mut out: Vec<(f64, f64)> = vec![];
         let bis = |mut a: f64, mut c: f64| { let ga = f.at(xr, a).unwrap_or(0.0); for _ in 0..200 { let m = 0.5 * (a + c); match f.at(xr, m) { Some(gm) if gm == 0.0 => return m, Some(gm) if (gm > 0.0) == (ga > 0.0) => a = m, _ => c = m } if c - a <= 1e-15 * (1.0 + a.abs()) { break; } } 0.5 * (a + c) };
         for j in 0..=n {
+            // (a sample exactly 0 is a root, unless its neighbour is 0 too: a run of zeros is a value underflowing, e^(−y³) for
+            // y past 9, e^(−1/y) just right of 0, not a line of roots)
             match g[j] {
-                Some(v) if v == 0.0 => out.push((ys[j], 0.0)),
+                Some(v) if v == 0.0 && !(j > 0 && g[j - 1] == Some(0.0)) && !(j < n && g[j + 1] == Some(0.0))
+                    && [-1.0, 1.0].iter().all(|sd: &f64| f.at(xr, ys[j] + sd * 1e-4 * (1.0 + ys[j].abs())) != Some(0.0)) => out.push((ys[j], 0.0)),
                 _ => {}
             }
             // a root at the edge of f's domain (√y at y = 0, √(2 − y²) at ±√2, √(cos y) at ±π/2): no sign change and no sample
@@ -601,8 +626,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                 if let (Some(a), Some(c)) = (g[j], g[j + 1]) {
                     if a != 0.0 && c != 0.0 && (a > 0.0) != (c > 0.0) {
                         let r = bis(ys[j], ys[j + 1]);
-                        // a sign change across a pole is no root
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-9 * scale) { out.push((r, 0.0)); }
+                        // a sign change across a pole or a jump is no root
+                        if zero_near(xr, r) == Some(true) { out.push((r, 0.0)); }
                     }
                 }
             }
@@ -647,17 +672,15 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     // (and at any height: a root where a denominator, a log's inside or a negative power's base is 0 is no root, (y − 0.15)²/
     // (y − 0.15) at 0.15, (y − e)²/(y − e) at e, whatever the window)
     // (an edge root is no gap: at an irrational edge, √2, the float of the exact value has no value, but the line does)
-    let found: Vec<(f64, f64)> = found.into_iter().filter(|r| !(r.1 == 0.0 && gap(r.0)) && !open_at(xr, r.0)).collect();
+    let found: Vec<(f64, f64)> = found.into_iter().filter(|r| !(r.1 == 0.0 && gap(r.0)) && !open_at(xr, r.0, r.1)).collect();
     let mut lines = vec![];
     for &(r, side) in &found {
         // f is 0 on the line y = r at every x where it is defined (and defined at most of them); on an edge, f runs to 0 there
         let ok_at = |x: f64| -> Option<bool> {
             // (an edge's own float is a rounding inside it, where √ of the rounding is about 10⁻⁸: the approach decides)
             if side != 0.0 { return f.at(x, r + side * 1e-4 * (1.0 + r.abs())).map(|_| edge_zero(x, r, side)); }
-            match f.at(x, r) {
-                Some(v) if !open_at(x, r) => Some(v.abs() <= 1e-9 * scale),
-                _ => None,
-            }
+            if open_at(x, r, 0.0) { return None; }
+            zero_near(x, r)
         };
         let vals: Vec<Option<bool>> = xs.iter().map(|x| ok_at(*x)).collect();
         let defined = vals.iter().filter(|v| v.is_some()).count();
@@ -672,7 +695,7 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         let mut start: Option<f64> = None;
         for i in 0..=n {
             let x = x0 + w * i as f64 / n as f64;
-            let ok = f.at(x, yv).is_some() || (side != 0.0 && edge_zero(x, r, side));
+            let ok = f.at(x, yv).is_some() || (side != 0.0 && edge_zero(x, r, side)) || (side == 0.0 && zero_near(x, r) == Some(true));
             match (ok, start) { (true, None) => start = Some(x), (false, Some(s)) => { runs.push((s, x0 + w * (i as f64 - 1.0) / n as f64)); start = None; } _ => {} }
         }
         if let Some(s) = start { runs.push((s, x1)); }

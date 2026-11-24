@@ -1471,6 +1471,15 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
         ("(y - 0.15)^2/(y - 0.15)", -3.0, 3.0, vec![]), ("(y - 0.15)^2/(y - 0.15)", -3.7, 4.1, vec![]), ("(y - e)^2/(y - e)", -3.7, 4.1, vec![]),
         ("x(y - 0.0625)^2/(y - 0.0625)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.7, 4.1, vec![]),
         ("(e^y - 2)^2/(e^y - 2)", -1.0, 5.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -4.0, 4.0, vec![]), ("1/sqrt(2 - y^2)", -3.0, 3.0, vec![]),
+        // check 9: roots of any order inside the domain (∛y at 0, ∛(y − 1) at 1), edges reached more slowly than a square root
+        // ((1 − y²)^(1/4) at ±1, √(arccos y) at 1 where arccos 1 = 0, y^(1/6), y^(1/8)), irrational powers (0^π = 0); no line
+        // where f has no value though it runs to 0 (ln ∛y at 0, quotients by a fourth root), and none from underflow
+        ("y^(1/3)", -1.0, 5.0, vec![0.0]), ("y^(1/3)", -3.7, 4.1, vec![0.0]), ("y^(1/3)", -1.3, 6.2, vec![0.0]), ("(y - 1)^(1/3)", -3.0, 3.0, vec![1.0]),
+        ("(1 - y^2)^(1/4)", -3.0, 3.0, vec![-1.0, 1.0]), ("(4 - y^2)^(1/4)", -3.7, 4.1, vec![-2.0, 2.0]), ("sqrt(arccos(y))", -3.0, 3.0, vec![1.0]),
+        ("y^(1/6)", -1.0, 5.0, vec![0.0]), ("y^(1/8)", -1.3, 6.2, vec![0.0]),
+        ("y^pi", -1.0, 5.0, vec![0.0]), ("y^sqrt(2)", -3.7, 4.1, vec![0.0]), ("y^e", -1.0, 5.0, vec![0.0]),
+        ("y ln(y^(1/3))", -1.0, 5.0, vec![1.0]), ("(1 - y^2)/(1 - y^2)^(1/4)", -3.0, 3.0, vec![]), ("y/y^(1/4)", -1.0, 5.0, vec![]),
+        ("e^(-y^3)", -10.0, 10.0, vec![]), ("e^(-1/y)", -1.0, 5.0, vec![]),
         // still found: a true root beside a pole, and a polynomial
         ("y/(x + y)", -3.7, 4.1, vec![0.0]), ("y(4 - y)", -3.7, 4.1, vec![0.0, 4.0]), ("(y - 1)^2", -3.7, 4.1, vec![1.0]),
     ];
