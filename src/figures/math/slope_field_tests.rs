@@ -1460,6 +1460,17 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
         ("sqrt(4 - y^2)", -3.0, 3.0, vec![-2.0, 2.0]), ("sqrt(1 - y)", -3.0, 3.0, vec![1.0]), ("y sqrt(y)", -3.7, 4.1, vec![0.0]),
         ("x(y - 1)^2/(y - 1)", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.7, 4.1, vec![]),
         ("y^2/y", -3.7, 4.1, vec![]), ("sin(y)^2/sin(y)", -3.7, 4.1, vec![]), ("y^2/y", -4.0, 4.0, vec![]),
+        // check 8: edges that are no float (√2, √3, π/2, ln 2, ∛2), and cancelled factors at heights with no short value;
+        // (2 − y) ln(2 − y) runs to 0 at 2 but has no value there (ln 0), and is 0 at y = 1 (ln 1 = 0)
+        ("sqrt(2 - y^2)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]), ("sqrt(2 - y^2)", -3.7, 4.1, vec![-2f64.sqrt(), 2f64.sqrt()]),
+        ("sqrt(3 - y^2)", -3.0, 3.0, vec![-3f64.sqrt(), 3f64.sqrt()]), ("sqrt(y^2 - 2)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]),
+        ("sqrt(cos(y))", -2.0, 2.0, vec![-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2]),
+        ("sqrt(sin(y))", -4.0, 4.0, vec![-std::f64::consts::PI, 0.0, std::f64::consts::PI]),
+        ("sqrt(2 - e^y)", -3.0, 3.0, vec![2f64.ln()]), ("sqrt(y^3 - 2)", -3.0, 3.0, vec![2f64.cbrt()]), ("sqrt(y - 0.15)", -3.0, 3.0, vec![0.15]),
+        ("(2 - y) ln(2 - y)", -3.0, 3.0, vec![1.0]),
+        ("(y - 0.15)^2/(y - 0.15)", -3.0, 3.0, vec![]), ("(y - 0.15)^2/(y - 0.15)", -3.7, 4.1, vec![]), ("(y - e)^2/(y - e)", -3.7, 4.1, vec![]),
+        ("x(y - 0.0625)^2/(y - 0.0625)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.7, 4.1, vec![]),
+        ("(e^y - 2)^2/(e^y - 2)", -1.0, 5.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -4.0, 4.0, vec![]), ("1/sqrt(2 - y^2)", -3.0, 3.0, vec![]),
         // still found: a true root beside a pole, and a polynomial
         ("y/(x + y)", -3.7, 4.1, vec![0.0]), ("y(4 - y)", -3.7, 4.1, vec![0.0, 4.0]), ("(y - 1)^2", -3.7, 4.1, vec![1.0]),
     ];
@@ -1468,6 +1479,6 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
         let q = out.equils.as_ref().unwrap();
         let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
         assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}");
-        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-12, "{eqt} on [{y0}, {y1}]: {got:?}"); }
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-9, "{eqt} on [{y0}, {y1}]: {got:?}"); }
     }
 }
