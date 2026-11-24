@@ -28,6 +28,8 @@ mod round11;
 #[cfg(test)]
 mod round12;
 #[cfg(test)]
+mod round14;
+#[cfg(test)]
 mod round7;
 #[cfg(test)]
 mod round6;
@@ -927,8 +929,26 @@ impl Model {
                     // (a zero found numerically at a small fraction or a table angle, where the derivative is exactly 0 by exact
                     // arithmetic: that exact value; never a guess)
                     let pv = if pv.ex.is_none() && e.k == EvK::Zero { sxn.as_ref().and_then(|ex| exact_zero_near(ex, e.x)).map(Pv::of).unwrap_or(pv) } else { pv };
+                    // (a zero or a point with no value found a rounding away from an exact zero of a fractional power's base, an
+                    // |u| or a denominator in the derivative, where exact arithmetic shows that base is 0: that exact place.
+                    // sin(x)^(5/3)″ has sin(x)^(−1/3) in it, so its inflection is at 0, never at 9.18·10⁻⁴¹)
+                    let (pv, kind) = if pv.ex.is_none() {
+                        let mut bases = vec![];
+                        if let Some(ex) = self.fexpr(pi, n) { sym::singular_bases(ex, &mut bases); }
+                        match bases.iter().find_map(|u| exact_zero_near(u, e.x).filter(|c| (c.f() - e.x).abs() <= 1e-10 * (1.0 + e.x.abs()))) {
+                            Some(c) => {
+                                // (there the derivative is 0 only if it shrinks toward the place; one that grows toward it, as
+                                // (sin 2x)^(5/3)″ at π/2, has no value there, whatever sign change the samples read as a zero)
+                                let cx = c.f();
+                                let dl = 1e-6 * (1.0 + cx.abs());
+                                let grows = [-1.0, 1.0].iter().any(|sd: &f64| match (g(cx + sd * dl), g(cx + sd * dl * 1e-3)) { (Some(far), Some(near)) => near.abs() > far.abs(), _ => true });
+                                (Pv::of(c), if e.k == EvK::Zero && grows { EvK::Undef } else { e.k })
+                            }
+                            None => (pv, e.k),
+                        }
+                    } else { (pv, e.k) };
                     let x = pv.ex.as_ref().map(|v| v.f()).unwrap_or(e.x);
-                    here.push(Mark { x, k: e.k, pv });
+                    here.push(Mark { x, k: kind, pv });
                 }
                 // an exact zero the samples missed (a touching zero), when it is truly one
                 if let Some(z) = &exact_z { for c in z { if !here.iter().any(|m| (m.x - c.f()).abs() < 1e-6 * (1.0 + c.f().abs())) && g(c.f()).is_some_and(|v| v.abs() < 1e-7) { here.push(Mark { x: c.f(), k: EvK::Zero, pv: Pv::of(c.clone()) }); } } }
@@ -1885,8 +1905,12 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     // (a derivative at the tracer that neither exact algebra nor the expansions can settle, and whose float is a residue
     // near 0: not written as a value, and said)
     let undecided: std::cell::Cell<[bool; 3]> = std::cell::Cell::new([false; 3]);
+    // (a value settled by its two one-sided limits meeting, at a zero of a root's base typed exactly: (x³)^(1/3) at 0 has
+    // f′(0) = 1 from both sides, though its plain formula underflows to no value at the neighbouring floats)
+    let settled: std::cell::Cell<bool> = std::cell::Cell::new(false);
     let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
+        settled.set(false);
         if !m.has_value(t.v, te.as_ref()) { return None; }
         // (f′ and f″ exist only where f is continuous: at a jump, whatever the slopes on its two sides, they do not; x for
         // x < 1 and x + 1 after has no f′(1), though both pieces have slope 1)
@@ -1958,7 +1982,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     match sides(fi).filter(|_| f_meets) {
                         // (a float beside 0 that neither exact algebra nor the expansions settle: undecided)
                         Some((v, None)) if v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
-                        Some((v, e)) => (Some(v), e),
+                        Some((v, e)) => { settled.set(true); (Some(v), e) }
                         None => (None, None),
                     }
                 }
@@ -2009,7 +2033,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let steady = |g: &dyn Fn(f64) -> Option<f64>, v: f64| [t.v.next_down(), t.v.next_up()].iter().all(|&y| g(y).is_some_and(|w| (w - v).abs() <= 1e-4 * (v.abs() + 1e-300) || (w - v).abs() <= 1e-12));
         let v = match v {
             // (a point typed on its own takes its neighbours' common limit: no plain form there to condition)
-            Some(w) if fi > 0 && ve.is_none() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) =>
+            Some(w) if fi > 0 && ve.is_none() && !settled.get() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) =>
                 // (a rational piece's expanded form ruined by cancellation beside a pole: its typed form, if steady there)
                 typed_d(m, fi, t.v).filter(|&w2| steady(&|y| typed_d(m, fi, y), w2)),
             other => other,
