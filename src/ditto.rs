@@ -620,18 +620,25 @@ pub fn label_number(label: &str) -> Option<u32> {
     let t = label.trim().trim_end_matches([':', '.']).trim();
     let lower = t.to_ascii_lowercase();
     let mut t = t;
-    for word in ["question", "problem", "exercise", "q", "#"] {
+    let mut part = false;
+    for word in ["question", "problem", "exercise", "part", "q", "#"] {
         if lower.starts_with(word) && t.len() > word.len() {
             let rest = &t[word.len()..];
             // A word prefix needs a separator or a digit/bracket after it: "Question 13", "Q13", "Q[13]".
             if rest.starts_with([' ', '.', '[', '(']) || rest.starts_with(|c: char| c.is_ascii_digit()) {
                 t = rest.trim_start_matches(['.', ' ']);
+                part = word == "part";
                 break;
             }
         }
     }
     let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).or_else(|| t.strip_prefix('(').and_then(|s| s.strip_suffix(')'))).unwrap_or(t);
     let t = t.trim_end_matches(['.', ')']).trim();
+    // "Part 1i", "Part 1vi": a part of printed item 1 (holdout v17, TERRA sets) answers to 1.
+    if part && let Some(split) = t.find(|c: char| !c.is_ascii_digit()).filter(|&i| i > 0)
+        && t[split..].trim_start_matches(['(', ' ']).trim_end_matches(')').chars().all(|c| c.is_ascii_lowercase()) {
+        return t[..split].parse().ok();
+    }
     t.parse().ok().or_else(|| number_word(t))
 }
 
@@ -1849,6 +1856,17 @@ mod tests {
         assert_eq!(got.items[0].status, "saved_continued");
         assert!(matches!(&got.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
         assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+    }
+
+    #[test]
+    fn part_labels_answer_to_their_printed_item() {
+        // Holdout v17, TERRA sets: six parts saved as "Part 1i" ... "Part 1vi".
+        for (label, n) in [("Part 1i", Some(1)), ("Part 1vi", Some(1)), ("Part 2", Some(2)), ("Part 3(b)", Some(3)), ("part 12a", Some(12))] {
+            assert_eq!(label_number(label), n, "{label}");
+        }
+        assert_eq!(label_number("2a"), None, "only a Part label drops its suffix");
+        assert_eq!(label_number("Part A"), None);
+        assert_eq!(label_number("Question 7"), Some(7));
     }
 
     #[test]
