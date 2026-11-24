@@ -174,7 +174,7 @@ fn every_kind_labelled_and_listed() {
     let labels = words_in(&s, "labels");
     let under = words_in(&s, "block");
     for (x, k, n) in [(1, "removable", 1), (2, "jump", 2), (5, "infinite", 1)] {
-        assert!(labels.matches(k).count() == n || under.contains(&format!("On the graph: x = {x} ({k})")) || under.contains(&format!("; x = {x} ({k})")) || labels.matches(k).count() + under.matches(&format!("({k})")).count() >= n, "{k}: {labels} / {under}");
+        assert!(labels.matches(k).count() == n || under.contains(&format!("graph (no clear room): x = {x} ({k})")) || under.contains(&format!("; x = {x} ({k})")) || labels.matches(k).count() + under.matches(&format!("({k})")).count() >= n, "{k}: {labels} / {under}");
     }
     let key = words_in(&s, "block");
     assert!(key.contains("x = 1 (removable)") && key.contains("x = 2 (jump)") && key.contains("x = 4 (jump)") && key.contains("x = 5 (infinite)"), "{key}");
@@ -355,5 +355,23 @@ fn every_kind_labelled_on_the_plot_with_room() {
     let s = svg(&with(kv));
     let labels = words_in(&s, "labels");
     assert_eq!((labels.matches("removable").count(), labels.matches("jump").count(), labels.matches("infinite").count()), (1, 2, 1), "{labels}");
-    assert!(!words_in(&s, "block").contains("On the graph"));
+    assert!(!words_in(&s, "block").contains("Not labelled on the graph"));
+}
+
+/// Check 4: where there is room beside a break, its kind is on the graph, at every size: the roomy example, a hole at
+/// (1, 2) beside a jump at 1.5, a hole at (1, −1) beside a vertical asymptote at 2 ((x − 1)/((x − 1)(x − 2)) = 1/(x − 2)
+/// off 1), and (x² − 1)/(x² − 3x + 2) = (x + 1)/(x − 2) off 1 (a hole at (1, −2)).
+#[test]
+fn kinds_with_room_are_on_the_graph() {
+    let cases = [
+        (ROOMY, -5.0, 9.0, -6.0, 6.0, "Medium"), (ROOMY, -5.0, 9.0, -6.0, 6.0, "Large"),
+        ("y = (x^2 - 1)/(x - 1), x < 1.5; y = 5, x >= 1.5", -3.0, 4.0, -1.0, 6.0, "Medium"),
+        ("y = (x - 1)/((x - 1)(x - 2))", -4.0, 6.0, -5.0, 5.0, "Medium"),
+        ("y = (x^2 - 1)/(x^2 - 3x + 2)", -4.0, 6.0, -6.0, 8.0, "Medium"),
+    ];
+    for (eq, a, b, c, d, size) in cases {
+        let s = svg(&with(json!({"equations": eq, "xmin": a, "xmax": b, "ymin": c, "ymax": d, "lim_kinds": true, "label_size": size})));
+        assert!(!words_in(&s, "block").contains("Not labelled"), "{eq} at {size}: {}", words_in(&s, "block"));
+        assert!(words_in(&s, "labels").contains("removable"), "{eq} at {size}: {}", words_in(&s, "labels"));
+    }
 }

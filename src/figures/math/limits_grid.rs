@@ -284,6 +284,17 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
                     for (dx, dy) in [(1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] { tries.push((an.0 + dx * (w / 2.0 - 6.0), an.1 + dy * hy)); }
                 }
             }
+            // (and then a ring around each of the break's marks: every 15°, from 2 px to 60 px clear of it, so the open side of a
+            // hole is reached where the spots above are all refused)
+            let hh = 0.5 * size;
+            for gap in [2.0, 5.0, 9.0, 14.0, 20.0, 28.0, 38.0, 48.0, 60.0] {
+                for an in &anchors {
+                    for k in 0..24 {
+                        let t = k as f64 * std::f64::consts::PI / 12.0;
+                        tries.push((an.0 + t.cos() * (w / 2.0 + cr + gap), an.1 - t.sin() * (hh + cr + gap)));
+                    }
+                }
+            }
             // (a label is read as belonging to the break whose x it is nearest: tries nearer another break's x are dropped)
             let others: Vec<f64> = discs.iter().filter(|o| o.kind != UNSURE && (o.x - d.x).abs() > 1e-12 * (1.0 + d.x.abs())).map(|o| sx(o.x)).collect();
             let near_own: Vec<Pt> = tries.iter().copied().filter(|t| others.iter().all(|ox| (t.0 - x).abs() + 4.0 < (t.0 - ox).abs())).collect();
@@ -359,7 +370,7 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
 
     // the questions and the key, under the graph
     let mut brows = block(&lp, &m, &discs, discs_complete, stu, &mut dr, &mut lnotes);
-    if !beside.is_empty() { brows.push(vec![Item::Text(format!("On the graph: {}", beside.join("; ")))]); }
+    if !beside.is_empty() { brows.push(vec![Item::Text(format!("Not labelled on the graph (no clear room): {}", beside.join("; ")))]); }
     let pad = 16.0;
     let avail = gw.max(420.0) - 2.0 * pad;
     let (block_svg, block_h, block_w) = lay_rows(&brows, pad, gh + 6.0, avail, size, ink.text);
