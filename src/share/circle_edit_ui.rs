@@ -139,7 +139,7 @@ pub(super) fn row_name(row: &super::partial_send::SendRow) -> String {
 fn tick_box(ui: &mut Ui, row: &super::partial_send::SendRow, on: &mut bool) -> bool {
     let resp = ui.checkbox(on, theme::text(row_tag(row)));
     let name = row_name(row);
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *on, &name));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::CheckBox, ui.is_enabled(), *on, &name));
     resp.changed()
 }
 

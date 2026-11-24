@@ -1395,7 +1395,7 @@ fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: us
         let seg = Rect::from_min_size(rect.min + Vec2::new(i as f32 * half, 0.0), Vec2::new(half, rect.height())).shrink(3.0);
         let resp = ui.interact(seg, ids[i], Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         let on = *bank_tab == is_bank;
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, format!("{title}, {note}")));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, format!("{title}, {note}")));
         // A tab, not a toggle button: screen readers announce "tab, selected" / "tab".
         ui.ctx().accesskit_node_builder(ids[i], |n| {
             n.set_role(egui::accesskit::Role::Tab);
@@ -5827,7 +5827,7 @@ fn draw_shelf_inner(
         });
     ui.spacing_mut().scroll = saved_scroll;
     let view = out.inner_rect;
-    let below = cards_below(&out.inner, out.state.offset.y + view.height());
+    let below = cards_below(&out.inner, out.state.offset().y + view.height());
     st.shelf_seen.view = Some(view);
     st.shelf_seen.below = if overflow { below } else { 0 };
     st.shelf_seen.foot = list_top + list_h - if overflow { SHELF_CUE_H } else { 0.0 };

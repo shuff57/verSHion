@@ -633,7 +633,12 @@ fn load_fonts() -> FontDefinitions {
     defs.families.insert(fam, fonts);
     // Phosphor icons: registered as a named family and as a proportional fallback, so icon
     // glyphs can also appear in ordinary labels.
-    egui_phosphor::add_font_bytes_to_fonts(&mut defs, ICON_FAMILY, &icons::regular::FONT);
+    // Prototype: egui-phosphor 0.14's helper is typed on egui 0.36; do its two steps here.
+    defs.font_data.insert(ICON_FAMILY.into(), std::sync::Arc::new(egui::FontData::from_static(&icons::regular::FONT)));
+    defs.families.insert(egui::FontFamily::Name(ICON_FAMILY.into()), vec![ICON_FAMILY.into()]);
+    if let Some(keys) = defs.families.get_mut(&egui::FontFamily::Proportional) {
+        keys.insert(keys.len().min(1), ICON_FAMILY.into());
+    }
     // Every named family must reach the icon face too, or an icon inside a bold/serif label
     // renders as tofu.
     for fonts in defs.families.values_mut() {

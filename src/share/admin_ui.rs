@@ -285,10 +285,10 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
         });
     ui.ctx().data_mut(|d| {
         d.insert_temp(ends_id, card_ends);
-        d.insert_temp(off_id, out.state.offset.y);
+        d.insert_temp(off_id, out.state.offset().y);
     });
     let (bar, _) = ui.allocate_exact_size(egui::vec2(col_w, 24.0), egui::Sense::hover());
-    let seen_to = out.state.offset.y + out.inner_rect.height() + 2.0;
+    let seen_to = out.state.offset().y + out.inner_rect.height() + 2.0;
     if out.content_size.y > seen_to {
         // name what waits: the applications whose name row is below the viewport's edge (a card
         // already begun on screen is not "below")
