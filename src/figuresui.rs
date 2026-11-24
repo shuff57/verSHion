@@ -6286,10 +6286,11 @@ mod tests {
         comp_frame(ctx, ws, vec![]);
     }
 
-    /// The `k`-th shading swatch (blue, red, green, yellow) of the canvas' area `area`: its colour
-    /// buttons are the ones with no text.
+    /// The `k`-th shading swatch (blue, red, green, yellow) of the canvas' area `area`: the colour
+    /// buttons, found by their accessible names (egui 0.37 names them by their hover text).
     fn comp_swatch(ctx: &egui::Context, ws: &mut Workspace, area: &str, k: usize) -> egui::Pos2 {
-        let sw: Vec<egui::Pos2> = comp_widgets(ctx, ws, area).into_iter().filter(|w| w.0 == egui::accesskit::Role::Button && w.1.is_empty()).map(|w| w.2).collect();
+        const COLOURS: [&str; 4] = ["Blue", "Red", "Green", "Yellow"];
+        let sw: Vec<egui::Pos2> = comp_widgets(ctx, ws, area).into_iter().filter(|w| w.0 == egui::accesskit::Role::Button && COLOURS.contains(&w.1.as_str())).map(|w| w.2).collect();
         assert_eq!(sw.len(), 4, "four shading swatches in {area}");
         sw[k]
     }

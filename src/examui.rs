@@ -1818,7 +1818,9 @@ fn draw_crumb_and_name_w(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, 
             .text_color(theme::ink())
             .frame(egui::Frame::NONE)
             .desired_width(name_w),
-    );
+    )
+    // named for screen readers (the hint goes once a name is typed)
+    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Exam name"));
     if name != before {
         if let Some(e) = app.store.exam_mut(exam_id) {
             e.name = name;
@@ -3036,7 +3038,8 @@ fn draw_page_article(
             .text_color(Color32::from_rgb(0x33, 0x33, 0x33))
             .frame(egui::Frame::NONE)
             .desired_width(cw),
-    );
+    )
+    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Page header"));
     if header != before {
         if let Some(e) = app.store.exam_mut(exam_id) {
             e.header = header;
@@ -9577,7 +9580,8 @@ mod system_pass_tests {
             let d = model::Exam::default();
             let one = "Page 1 of 1 · 9 questions · 99 pts";
             let one_fit = strip_fit(ui, &d, INNER_1280, Some(zoom), one, one.split_once(" · ").unwrap().1);
-            let one_laid = lay_row(ui, &d, &one_fit);
+            // A second strip in the same frame: its own id scope, or egui 0.37 flags an id clash.
+            let one_laid = ui.push_id("one_page", |ui| lay_row(ui, &d, &one_fit)).inner;
             (Some(fit), need, laid, Some(one_fit), one_laid)
         });
         let (worst_fit, one_fit) = (worst_fit.unwrap(), one_fit.unwrap());
