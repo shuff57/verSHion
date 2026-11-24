@@ -1315,7 +1315,7 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
     let started = std::time::Instant::now();
     let mut first = run_redraws(&jobs, cfg).await;
     #[cfg(not(target_arch = "wasm32"))]
-    retry_failed_siblings(&jobs, &mut first, started.elapsed().as_secs_f64(), cfg).await;
+    retry_failed_redraws(&jobs, &mut first, started.elapsed().as_secs_f64(), cfg).await;
     let mut results: Vec<Option<_>> = first.into_iter().map(|(out, _secs)| Some(out)).collect();
     for slot in slots {
         let trace = match slot {
@@ -1344,13 +1344,18 @@ async fn finish_page_async(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize,
 
 type RedrawOutcome = (Option<(crate::model::ImageRef, crate::model::FigureSpec)>, FigureImportTrace);
 
-/// Redraw phases at most this long may spend one more wave on retries (seconds).
+/// A retry wave runs only when the page so far plus the slowest retried picture's own first run
+/// stays within this many seconds (the harness gives each page 1200 s; holdout v15: Broward and
+/// CU option pictures failed beside redrawn siblings on pages well inside that, but past the old
+/// fixed 240 s redraw-phase gate).
 #[cfg(not(target_arch = "wasm32"))]
-const RETRY_PHASE_SECS: f64 = 240.0;
-/// A failed redraw is retried only when its own first run took at most this long, which bounds the
-/// extra wait (a document runs under one 20-minute budget in the harness).
+const RETRY_PAGE_BUDGET_SECS: f64 = 900.0;
+
 #[cfg(not(target_arch = "wasm32"))]
-const RETRY_JOB_SECS: f64 = 180.0;
+thread_local! {
+    /// When the page being converted on this thread started (set by `convert_page_in_async`).
+    static PAGE_STARTED: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
 
 /// Which printed item a picture belongs to: a question split into one saved question per
 /// sub-figure keeps its printed label, so its sub-figures are siblings.
@@ -1358,22 +1363,26 @@ fn sibling_key(job: &RedrawJob) -> String {
     job.printed_label.clone().unwrap_or_else(|| format!("#{}", job.question))
 }
 
-/// Failed redraws whose siblings (other pictures of the same printed item) were redrawn: the
-/// figure type is drawable, so a failure there is often a one-off reading or judging slip. One
-/// wave of them is asked once more when the page's redraws were quick enough (holdout v11: five
-/// items kept one crop among redrawn siblings).
-fn sibling_retries(jobs: &[RedrawJob], results: &[(RedrawOutcome, f64)], phase_secs: f64, phase_limit: f64, job_limit: f64) -> Vec<usize> {
-    if phase_secs > phase_limit { return Vec::new(); }
+/// Failed redraws asked once more, one wave of at most three, while the page stays within its
+/// budget. A failure is most often a one-off reading or judging slip that a fresh attempt does
+/// not repeat (rounds 39-41: two or three different figures of 119 failed each run, a different
+/// set every time). Failures whose siblings (other pictures of the same printed item) were
+/// redrawn go first: their figure type is known to be drawable (holdout v11, v15).
+fn failed_retries(jobs: &[RedrawJob], results: &[(RedrawOutcome, f64)], page_secs: f64, budget: f64) -> Vec<usize> {
     let drawn: std::collections::HashSet<String> = jobs.iter().zip(results).filter(|(_, r)| r.0.0.is_some()).map(|(j, _)| sibling_key(j)).collect();
-    (0..jobs.len())
-        .filter(|&i| results[i].0.0.is_none() && results[i].1 <= job_limit && drawn.contains(&sibling_key(&jobs[i])))
-        .take(3)
-        .collect()
+    let mut failed: Vec<usize> = (0..jobs.len())
+        .filter(|&i| results[i].0.0.is_none() && page_secs + results[i].1 <= budget)
+        .collect();
+    failed.sort_by_key(|&i| (!drawn.contains(&sibling_key(&jobs[i])), i));
+    failed.truncate(3);
+    failed.sort();
+    failed
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn retry_failed_siblings(jobs: &[RedrawJob], results: &mut [(RedrawOutcome, f64)], phase_secs: f64, cfg: &AiCfg) {
-    let retry = sibling_retries(jobs, results, phase_secs, RETRY_PHASE_SECS, RETRY_JOB_SECS);
+async fn retry_failed_redraws(jobs: &[RedrawJob], results: &mut [(RedrawOutcome, f64)], phase_secs: f64, cfg: &AiCfg) {
+    let page_secs = PAGE_STARTED.with(|s| s.get()).map(|t| t.elapsed().as_secs_f64()).unwrap_or(phase_secs).max(phase_secs);
+    let retry = failed_retries(jobs, results, page_secs, RETRY_PAGE_BUDGET_SECS);
     if retry.is_empty() { return; }
     let again: Vec<RedrawJob> = retry.iter().map(|&i| jobs[i].clone()).collect();
     for (&i, (out, secs)) in retry.iter().zip(run_redraws(&again, cfg).await) {
@@ -1381,7 +1390,7 @@ async fn retry_failed_siblings(jobs: &[RedrawJob], results: &mut [(RedrawOutcome
         let (_, first) = &results[i].0;
         let why = first.failure.as_ref().map(|f| f.detail.clone()).or_else(|| first.error.clone()).unwrap_or_else(|| first.note.clone());
         let (redraw, mut trace) = out;
-        trace.note = format!("Second attempt, made because the item's other pictures were redrawn; the first failed: {why}. {}", trace.note).trim_end().to_string();
+        trace.note = format!("Second attempt; the first failed: {why}. {}", trace.note).trim_end().to_string();
         results[i] = ((redraw, trace), results[i].1 + secs);
     }
 }
@@ -1795,6 +1804,8 @@ pub async fn convert_page_chat_async(bytes: &[u8], mime: &str, hint: &str, cfg: 
 /// One page read together with the directions earlier pages of the same document printed. `None` reads the
 /// page on its own (a single photo, or the page-only ablation).
 pub async fn convert_page_in_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize, context: Option<&crate::ditto::DocContext>) -> Result<Converted, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    PAGE_STARTED.with(|s| s.set(Some(std::time::Instant::now())));
     let prompt = page_prompt(hint, context, page_no);
     let raw = crate::ditto::split_part_figures(&transcribe_checked_async(bytes, mime, cfg, &prompt).await?);
     let (raw, direction_review) = directions::review(raw,bytes,mime,cfg,page_no,context).await;
@@ -2086,7 +2097,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn only_a_quick_failed_picture_with_a_redrawn_sibling_is_retried() {
+    fn failed_pictures_get_one_more_wave_within_the_page_budget_siblings_first() {
         let job = |question: usize, label: Option<&str>| RedrawJob { question, choice: None, crop: Vec::new(), context: String::new(), printed_label: label.map(str::to_string), label: String::new() };
         let ok = |q: usize, secs: f64| ((Some((crate::model::ImageRef::default(), crate::model::FigureSpec { id: "x".into(), params: Default::default() })), figure_run(q)), secs);
         let bad = |q: usize, secs: f64| ((None, figure_run(q)), secs);
@@ -2094,9 +2105,14 @@ pub(crate) mod tests {
         // question 3's own picture redrew but its slow choice picture failed.
         let jobs = vec![job(0, Some("1")), job(1, Some("1")), job(2, Some("1")), job(3, Some("2")), job(4, None), job(4, None)];
         let results = vec![ok(0, 40.0), bad(1, 60.0), ok(2, 50.0), bad(3, 30.0), ok(4, 20.0), bad(4, 200.0)];
-        assert_eq!(sibling_retries(&jobs, &results, 120.0, 240.0, 180.0), [1]);
-        assert!(sibling_retries(&jobs, &results, 300.0, 240.0, 180.0).is_empty(), "a slow page spends no more time");
-        assert_eq!(sibling_retries(&jobs, &results, 120.0, 240.0, 600.0), [1, 5]);
+        // Page at 400 s of a 900 s budget: all three failures fit (question 2's lone picture too).
+        assert_eq!(failed_retries(&jobs, &results, 400.0, 900.0), [1, 3, 5]);
+        assert_eq!(failed_retries(&jobs, &results, 750.0, 900.0), [1, 3], "only retries that still fit the page budget");
+        assert!(failed_retries(&jobs, &results, 880.0, 900.0).is_empty(), "a page near its budget spends no more time");
+        // More than three failures: the wave keeps the ones with redrawn siblings first.
+        let jobs = vec![job(0, Some("7")), job(1, Some("8")), job(2, Some("9")), job(3, Some("10")), job(4, Some("10")), job(5, Some("10"))];
+        let results = vec![bad(0, 10.0), bad(1, 10.0), bad(2, 10.0), bad(3, 10.0), ok(4, 10.0), bad(5, 10.0)];
+        assert_eq!(failed_retries(&jobs, &results, 100.0, 900.0), [0, 3, 5]);
     }
 
     #[test]
