@@ -1,0 +1,2 @@
+# renewed hashes (row, saved spec, links v1 v4 v5 v6 v7) of the frozen rows on fixed axes far below K whose carrying-capacity words the page's top edge cut in half: they now leave the words off (round 410 follow-up)
+2104	ab806a912d3271ba	ab806a912d3271ba	ab806a912d3271ba	ab806a912d3271ba	ab806a912d3271ba	ab806a912d3271ba

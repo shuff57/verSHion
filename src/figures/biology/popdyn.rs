@@ -475,11 +475,19 @@ pub fn growth_render(p: &Params) -> String {
             (br, by)
         };
         let k_text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
+        // the K line's words are left off where the page's top edge would cut them in half: a fixed axis far below K
+        // puts them above the plot, and the phase brackets' room up there showed their lower half (words that fit above
+        // the plot, among the brackets, or lie wholly off the page, and the blank line, draw exactly as before)
+        let k_cut = kstyle != "Blank line" && kstyle != "None" && {
+            let (y, size) = (a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+            y - size * 0.95 < 0.0 && y + size * 0.3 > 0.0
+        };
+        let k_labelled = has_k && p.b("mark_k") && !k_cut;
         // what the phases' blank lines keep clear of: the K line's label (or its blank line) as drawn on this graph, `dx`
         // along from where it starts (a fixed axis can put it up among the brackets), and the chart's title
         let phase_avoid = |dx: f64| -> Vec<(f64, f64, f64, f64)> {
             let mut avoid = vec![];
-            if has_k && p.b("mark_k") {
+            if k_labelled {
                 match kstyle {
                     "None" => {}
                     "Blank line" => avoid.push((a.x + 8.0 + dx, a.py(k) + 18.0, a.x + 170.0 + dx, a.py(k) + 22.0)),
@@ -503,13 +511,13 @@ pub fn growth_render(p: &Params) -> String {
         // Blank line phases only: where the K label up among the brackets covers a bracket so that no leader can leave it
         // clear of the words, the label slides right along its row to the first place where every phase's line is clear
         // (Text and None phases keep it where it always was)
-        let k_dx = if phases && matches!(pk, Panel::TimeN) && p.s("phase_label_style") == "Blank line" && has_k && p.b("mark_k") && kstyle != "None" {
+        let k_dx = if phases && matches!(pk, Panel::TimeN) && p.s("phase_label_style") == "Blank line" && k_labelled && kstyle != "None" {
             let (br, by) = phase_brackets();
             let kw = if kstyle == "Blank line" { 162.0 } else { bold_width(k_text, 14.7 * growth_b9::label_scale(p)) * 1.25 };
             let ok = |dx: f64| growth_b9::phase_blanks(&mut Doc::new(w, h), &br, by, (a.x, a.x + a.w), w, &phase_avoid(dx));
             if ok(0.0) { 0.0 } else { (1..).map(|j| j as f64 * 8.0).take_while(|dx| a.x + 8.0 + dx + kw <= a.x + a.w - 8.0).find(|dx| ok(*dx)).unwrap_or(0.0) }
         } else { 0.0 };
-        if has_k && matches!(pk, Panel::TimeN) && p.b("mark_k") {
+        if k_labelled && matches!(pk, Panel::TimeN) {
             match kstyle {
                 "None" => {}
                 "Blank line" => { d.line(a.x + 8.0 + k_dx, a.py(k) + 20.0, a.x + 170.0 + k_dx, a.py(k) + 20.0, INK, 1.3); }
@@ -536,7 +544,7 @@ pub fn growth_render(p: &Params) -> String {
                     [(ti + (n0 - k / 2.0) / slope).max(0.0), ti + (k / 2.0) / slope].into_iter().filter(|t| *t > a.x0 && *t < a.x1).map(|t| a.px(t)).collect()
                 } else { vec![] };
                 let kd = has_k && p.b("mark_k");
-                let k_label = (kd && kstyle != "None").then(|| {
+                let k_label = (k_labelled && kstyle != "None").then(|| {
                     let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
                     let (x, y, size) = (a.x + 8.0 + k_dx, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
                     (x - 2.0, y - size * 0.95 - 2.0, x + (bold_width(text, size) * 1.25).max(162.0) + 2.0, y + size * 0.3 + 2.0)

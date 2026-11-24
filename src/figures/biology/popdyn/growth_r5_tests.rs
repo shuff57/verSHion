@@ -152,3 +152,43 @@ fn narrow_bracket_leaders_have_a_gap_at_their_feet() {
     assert!(pairs >= 20, "{pairs} close pairs");
     assert!(close.is_empty(), "{close:?}");
 }
+
+/// A fixed axis far below K once left the K label's words across the page's top edge, cut in half where the phase
+/// brackets gave them room there (the round 410 checker's find). Now no word is cut by the top edge (words wholly off the
+/// page, which no one sees, draw as before, so old saved figures keep their bytes); K's words that fit above the plot,
+/// among the brackets, are still drawn; and the panel says when K's line is off the graph.
+#[test]
+fn k_label_is_never_cut_off_at_the_page_top() {
+    let d = def(PG);
+    let mut cases = fixed_axes(0x4_10, 480);
+    for (ym, ph, ks) in [(800.0, true, "Text"), (800.0, true, "Blank line"), (800.0, false, "Text"), (300.0, true, "Text"), (700.0, true, "Blank line")] {
+        cases.push(vec![("fit", b(false)), ("y_max", f(ym)), ("mark_phases", b(ph)), ("k_label_style", s(ks))]);
+    }
+    let (mut n_k_kept, mut n_k_dropped) = (0, 0);
+    let mut bad: Vec<String> = vec![];
+    for c in &cases {
+        let p = params(PG, c);
+        let svg = d.svg(&p);
+        for (t, bx) in ink_texts(&svg) {
+            if bx.1 < -0.5 && bx.3 > 0.5 { bad.push(format!("{t:?} cut by the page top ({:.1} to {:.1}) in {c:?}", bx.1, bx.3)); }
+        }
+        let has_k = p.b("mark_k") && p.s("growth") != "Exponential (J-curve)" && p.s("k_label_style") == "Text";
+        let k_text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)".to_string() } else { p.s("k_label").trim().to_string() };
+        if has_k {
+            // kept: drawn on the page (wholly off it counts as left off, as no one sees it)
+            if ink_texts(&svg).iter().any(|(t, bx)| *t == k_text && bx.3 > 0.5) { n_k_kept += 1; } else { n_k_dropped += 1; }
+        }
+    }
+    eprintln!("{} fixed-axes figures: K's words kept in {n_k_kept}, left off in {n_k_dropped}; {} cut off", cases.len(), bad.len());
+    assert!(bad.is_empty(), "{:?}", &bad[..bad.len().min(20)]);
+    assert!(n_k_kept >= 40 && n_k_dropped >= 20, "kept {n_k_kept}, dropped {n_k_dropped}");
+    // the checker's figure: K = 1000 above a 0 to 800 axis with the phases on draws no K words; the panel says why
+    let p = params(PG, &[("fit", b(false)), ("y_max", f(800.0)), ("mark_phases", b(true))]);
+    assert!(!ink_texts(&d.svg(&p)).iter().any(|(t, _)| t == "Carrying capacity (K)"));
+    let notes = super::growth_warnings(&p);
+    assert!(notes.iter().any(|n| n.starts_with("The carrying capacity (K = 1000) lies above the top")), "{notes:?}");
+    // K on the graph: no note, the label drawn as before
+    let p = params(PG, &[]);
+    assert!(super::growth_warnings(&p).is_empty());
+    assert!(ink_texts(&d.svg(&p)).iter().any(|(t, _)| t == "Carrying capacity (K)"));
+}
