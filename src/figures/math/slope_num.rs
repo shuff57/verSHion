@@ -668,7 +668,9 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                         let r = 0.5 * (lo + hi);
                         // (a root of fractional order touches without a sign change too, √|y| at 0: its float at the minimum is about
                         // 10⁻⁸, and it runs to 0 from both sides)
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-12 * scale) || zero_near(xr, r) == Some(true) { out.push((r, 0.0)); }
+                        // (but not merely a tiny minimum: y² + 10⁻⁷ is never 0, though its minimum is small beside a large scale)
+                        let falls = shrinks(&|t| f.at(xr, t), r, -1.0) == Some(true) && shrinks(&|t| f.at(xr, t), r, 1.0) == Some(true);
+                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-12 * scale) || falls { out.push((r, 0.0)); }
                     }
                 }
             }
@@ -711,9 +713,9 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                 return near[0].map(|_| edge_zero(x, r, side));
             }
             if open_at(x, r, 0.0) { return None; }
-            // (an x where f is exactly 0 on and around the line, x(y − 1)^(1/3) at x = 0, is no evidence against it)
-            let u = 1.0 + r.abs();
-            if [0.0, -1e-4, 1e-4, -1e-8, 1e-8].iter().all(|d| f.at(x, r + d * u) == Some(0.0)) { return Some(true); }
+            // (an x where f is exactly 0 on the line is on it: x(y − 1)^(1/3) and x√(1 − y²) at x = 0, whether or not the line
+            // is an edge that fell on a sampled height; the underflow guard is the search's, at the x it searches)
+            if f.at(x, r) == Some(0.0) { return Some(true); }
             zero_near(x, r)
         };
         let vals: Vec<Option<bool>> = xs.iter().map(|x| ok_at(*x)).collect();

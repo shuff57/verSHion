@@ -1491,7 +1491,13 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
     // (windows that start at x = 0, the usual ones for time: f is 0 along x = 0 when it has a factor x)
     for (eqt, xa, xb, y0, y1, want) in [("x sqrt(y)", 0.0, 6.0, -1.0, 5.0, vec![0.0]), ("x sqrt(4 - y^2)", 0.0, 6.0, -3.0, 3.0, vec![-2.0, 2.0]),
                                         ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.5, vec![-1.0, 1.0]), ("(x - 1) sqrt(1 - y^2)", 1.0, 5.0, -2.0, 2.5, vec![-1.0, 1.0]),
-                                        ("x(y - 1)^(1/3)", 0.0, 5.0, -3.0, 3.0, vec![1.0]), ("sqrt(x y)", 0.0, 10.0, -1.0, 5.0, vec![0.0])] {
+                                        ("x(y - 1)^(1/3)", 0.0, 5.0, -3.0, 3.0, vec![1.0]), ("sqrt(x y)", 0.0, 10.0, -1.0, 5.0, vec![0.0]),
+                                        // (check 11: whole-number windows, whose edges fall on sampled heights)
+                                        ("x sqrt(1 - y^2)", 0.0, 5.0, -2.0, 2.0, vec![-1.0, 1.0]), ("x sqrt(y)", 0.0, 5.0, 0.0, 5.0, vec![0.0]),
+                                        ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.0, vec![-1.0, 1.0]), ("(x - 2) sqrt(y)", 2.0, 6.0, 0.0, 4.0, vec![0.0]),
+                                        ("x sqrt(4 - y^2)", 0.0, 5.0, -4.0, 4.0, vec![-2.0, 2.0]), ("x sqrt(1 - y^2)", 0.0, 10.0, -1.3, 6.2, vec![-1.0, 1.0]),
+                                        // (and no line where a tiny minimum is no root)
+                                        ("y^2 + 0.0000001", 0.0, 5.0, -100.0, 100.0, vec![]), ("(y - 1)^2 + 0.00001", 0.0, 5.0, -1000.0, 1000.0, vec![])] {
         let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("xmin", f(xa)), ("xmax", f(xb)), ("ymin", f(y0)), ("ymax", f(y1))]));
         let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
         assert_eq!(got.len(), want.len(), "{eqt} on x [{xa}, {xb}], y [{y0}, {y1}]: {got:?}");
