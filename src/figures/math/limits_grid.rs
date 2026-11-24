@@ -307,9 +307,9 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     let mut labels_svg = String::new();
     let mut beside: Vec<String> = vec![];
     // Each break's marks, in px: its one-sided limits' heights and its value at x (the circles and dots drawn there), or its
-    // whole upright for an infinite one. A kind label beside its break is accepted only where its box is nearer its own
-    // break's marks than any other break's, by a margin; one on a leader only where the leader slants clearly (never along a
-    // gridline). Otherwise the placer, shared with the limits figure, is asked again with the refused spot blocked.
+    // whole upright for an infinite one. A kind label is accepted only where its box is nearer its own break's marks than any
+    // other break's, by a margin, and, on a leader, only where the leader slants clearly (never along a gridline). Otherwise
+    // the placer, shared with the limits figure, is asked again with the refused spot blocked.
     let marks_of = |d: &Disc| -> Vec<(Pt, Pt)> {
         let x = sx(d.x);
         if d.kind == "infinite" { return vec![((x, rect[1]), (x, rect[3]))]; }
@@ -321,7 +321,9 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     let acceptable = |kind: char, r: &Req, spot: &Spot| -> bool {
         // (a leader ties the label to its own mark, wherever the label sits, so long as it can be seen: clearly slanting, at
         // least about 14° off upright and level, never along a gridline)
-        let c = match spot { Spot::Beside(c) => *c, Spot::Leader(_, s, e) => { let (dx, dy) = ((s.0 - e.0).abs(), (s.1 - e.1).abs()); return dx >= 0.25 * dy && dy >= 0.25 * dx; } Spot::Off => return true };
+        // (and its text, at the leader's end, is held to the same rule as a label beside its break: a reader matches a word to
+        // the mark it sits by, whatever line runs to it)
+        let c = match spot { Spot::Beside(c) => *c, Spot::Leader(c, s, e) => { let (dx, dy) = ((s.0 - e.0).abs(), (s.1 - e.1).abs()); if !(dx >= 0.25 * dy && dy >= 0.25 * dx) { return false; } *c } Spot::Off => return true };
         if kind != 'k' { return true; }
         let Some(i) = owner(r) else { return true };
         let b = label_box_for(c, &r.text, size);

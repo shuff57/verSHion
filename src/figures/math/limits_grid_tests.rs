@@ -169,10 +169,13 @@ fn every_kind_labelled_and_listed() {
     let md = model(kv.clone());
     assert_eq!(kinds(&md), vec!["1 removable", "2 jump", "4 jump", "5 infinite"]);
     let s = svg(&with(kv.clone()));
+    // (crowded: the hole at (1, 2) is hemmed in by the y-axis, the curve and x = 2's jump, so its label may be written under
+    // the graph instead; every kind is on the plot or under it)
     let labels = words_in(&s, "labels");
-    assert_eq!(labels.matches("removable").count(), 1, "{labels}");
-    assert_eq!(labels.matches("jump").count(), 2, "{labels}");
-    assert_eq!(labels.matches("infinite").count(), 1, "{labels}");
+    let under = words_in(&s, "block");
+    for (x, k, n) in [(1, "removable", 1), (2, "jump", 2), (5, "infinite", 1)] {
+        assert!(labels.matches(k).count() == n || under.contains(&format!("On the graph: x = {x} ({k})")) || under.contains(&format!("; x = {x} ({k})")) || labels.matches(k).count() + under.matches(&format!("({k})")).count() >= n, "{k}: {labels} / {under}");
+    }
     let key = words_in(&s, "block");
     assert!(key.contains("x = 1 (removable)") && key.contains("x = 2 (jump)") && key.contains("x = 4 (jump)") && key.contains("x = 5 (infinite)"), "{key}");
     // the student copy leaves the kinds and the list off
@@ -286,9 +289,11 @@ fn kind_labels_sit_by_their_own_break() {
             let (x, y) = (num("x"), num("y"));
             let word: String = { let mut w = String::new(); let mut inside = true; for c in part.chars() { match c { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(c), _ => {} } } w.trim().to_string() };
             let b = [x, y - 0.75 * fs, x + super::limits::tw(&word, fs), y + 0.25 * fs];
-            // (a label on a leader belongs to the mark its leader starts at)
-            let lead = leaders.iter().find(|(_, e)| e.0 >= b[0] - 6.0 && e.0 <= b[2] + 6.0 && e.1 >= b[1] - 6.0 && e.1 <= b[3] + 6.0);
-            let b = match lead { Some((st, _)) => [st.0, st.1, st.0, st.1], None => b };
+            // (a label on a leader starts at its own mark, and its text, too, is nearest its own break's marks)
+            if let Some((st, _)) = leaders.iter().find(|(_, e)| e.0 >= b[0] - 6.0 && e.0 <= b[2] + 6.0 && e.1 >= b[1] - 6.0 && e.1 <= b[3] + 6.0) {
+                let from = marks.iter().min_by(|a, c| dist([st.0, st.1, st.0, st.1], &a.2).partial_cmp(&dist([st.0, st.1, st.0, st.1], &c.2)).unwrap()).unwrap();
+                assert_eq!(from.1, word, "{size}: the {word} label's leader starts at the {} at x = {}", from.1, from.0);
+            }
             let nearest = marks.iter().min_by(|a, c| dist(b, &a.2).partial_cmp(&dist(b, &c.2)).unwrap()).unwrap();
             assert_eq!(nearest.1, word, "{size}: the {word} label {b:?} is nearest the {} at x = {}", nearest.1, nearest.0);
             placed.push(nearest.0);
@@ -310,7 +315,45 @@ fn kind_labels_sit_by_their_own_break() {
 fn dump_kind_label_pngs() {
     let dir = std::env::var("GRID_LIM_OUT").unwrap_or_else(|_| "/tmp/cgl".into());
     for size in ["Medium", "Large"] {
-        let s = svg(&with(json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true, "label_size": size})));
-        std::fs::write(format!("{dir}/kinds_{size}.png"), crate::figures::to_png(&s, 1.0).unwrap()).unwrap();
+        for (name, eq, x0) in [("every", EVERY, -3.0), ("roomy", ROOMY, -5.0)] {
+            let s = svg(&with(json!({"equations": eq, "xmin": x0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true, "label_size": size})));
+            std::fs::write(format!("{dir}/{name}_{size}.png"), crate::figures::to_png(&s, 1.0).unwrap()).unwrap();
+        }
     }
+}
+
+/// Check 3: a hole at x = 1 beside a jump at x = 1.5 ((x² − 1)/(x − 1) = x + 1 for x < 1.5, so the hole is at (1, 2) and the
+/// left limit at 1.5 is 2.5; 5 after): "removable" is never by the jump's open circle at (1.5, 2.5), on a leader or not.
+#[test]
+fn a_leadered_label_is_not_by_another_break() {
+    for (lo, hi) in [(-3.0, 4.0), (-5.0, 5.0)] {
+        let kv = json!({"equations": "y = (x^2 - 1)/(x - 1), x < 1.5; y = 5, x >= 1.5", "xmin": lo, "xmax": hi, "ymin": -1.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true});
+        let s = svg(&with(kv.clone()));
+        let g = super::grid_layout(&with(kv));
+        let (sx, sy) = (|x: f64| g.ml + (x - g.x0) * g.ux, |y: f64| g.mt + g.ph - (y - g.y0) * g.uy);
+        let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
+        let body = &body[..body.find("</g>").unwrap()];
+        for part in body.split("<text").skip(1).filter(|p| !p.contains(r##"fill="#fff""##) && p.contains("removable")) {
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            let b = [num("x"), num("y") - 11.0, num("x") + super::limits::tw("removable", 15.0), num("y") + 4.0];
+            let d = |px: f64, py: f64| { let dx = (b[0] - px).max(px - b[2]).max(0.0); let dy = (b[1] - py).max(py - b[3]).max(0.0); dx.hypot(dy) };
+            let (own, jump) = (d(sx(1.0), sy(2.0)), d(sx(1.5), sy(2.5)).min(d(sx(1.5), sy(5.0))));
+            assert!(own + 6.0 <= jump, "[{lo}, {hi}]: removable is {own} px from its hole and {jump} px from the jump");
+        }
+    }
+}
+
+const ROOMY: &str = "y = (x^2 - 4)/(x + 2), x < 1; y = 4 - x, 1 <= x < 3; y = 3/(x - 5), x >= 3";
+
+/// The checklist's example for the kind labels, with room: (x² − 4)/(x + 2) = x − 2 off −2, a hole at (−2, −4); at 1,
+/// 1 − 2 = −1 from the left and 4 − 1 = 3 from the right (jump); at 3, 4 − 3 = 1 and 3/(3 − 5) = −3/2 (jump); at 5,
+/// 3/(x − 5) is infinite. Every label is on the plot, by its own break.
+#[test]
+fn every_kind_labelled_on_the_plot_with_room() {
+    let kv = json!({"equations": ROOMY, "xmin": -5.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true});
+    assert_eq!(kinds(&model(kv.clone())), vec!["-2 removable", "1 jump", "3 jump", "5 infinite"]);
+    let s = svg(&with(kv));
+    let labels = words_in(&s, "labels");
+    assert_eq!((labels.matches("removable").count(), labels.matches("jump").count(), labels.matches("infinite").count()), (1, 2, 1), "{labels}");
+    assert!(!words_in(&s, "block").contains("On the graph"));
 }
