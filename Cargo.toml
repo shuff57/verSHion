@@ -36,7 +36,7 @@ num-bigint = "0.4.8"
 num-rational = "0.4.2"
 num-traits = "0.2.19"
 
-egui = "0.36"
+egui = "0.37"
 log = "0.4"
 # std clocks panic on wasm32; this is std's clock natively and the browser's in a page.
 web-time = "1"
@@ -50,11 +50,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 sha2 = "0.10"
 zip = { version = "3", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"  # already in the tree via resvg/usvg; DOM reader for Moodle XML, QTI and .xlsx
-equashion-math = { git = "https://github.com/shuff57/equaSHion", rev = "3d3b840c65d7b6e0e7933c6cd95e171384fdfb54" }
-equashion-layout = { git = "https://github.com/shuff57/equaSHion", rev = "3d3b840c65d7b6e0e7933c6cd95e171384fdfb54", features = ["extra-fonts"] }
-equashion-render = { git = "https://github.com/shuff57/equaSHion", rev = "3d3b840c65d7b6e0e7933c6cd95e171384fdfb54", features = ["raster", "extra-fonts"] }
-equashion-egui = { git = "https://github.com/shuff57/equaSHion", rev = "3d3b840c65d7b6e0e7933c6cd95e171384fdfb54" }
-equashion-font = { git = "https://github.com/shuff57/equaSHion", rev = "3d3b840c65d7b6e0e7933c6cd95e171384fdfb54" }  # already in the tree via equashion-layout; its bundled STIX Two Math is the PDF's fallback face (src/fonts.rs)
+equashion-math = { git = "https://github.com/shuff57/equaSHion", rev = "1df2f69" }
+equashion-layout = { git = "https://github.com/shuff57/equaSHion", rev = "1df2f69", features = ["extra-fonts"] }
+equashion-render = { git = "https://github.com/shuff57/equaSHion", rev = "1df2f69", features = ["raster", "extra-fonts"] }
+equashion-egui = { git = "https://github.com/shuff57/equaSHion", rev = "1df2f69" }
+equashion-font = { git = "https://github.com/shuff57/equaSHion", rev = "1df2f69" }  # already in the tree via equashion-layout; its bundled STIX Two Math is the PDF's fallback face (src/fonts.rs)
 resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts"] }
 ttf-parser = "0.25"  # already in the tree via resvg/fontdb; PDF font metrics + subsetting (src/fonts.rs)
 flate2 = "1"         # already in the tree via zip/png; FlateDecode for embedded PDF fonts
@@ -72,12 +72,12 @@ getrandom = "0.2"   # the throwaway password a sign-up sends (the person chooses
 # model types and the real figure registry. Native tests only; the app itself does not link it yet.
 share-core = { path = "server/share-core" }
 # figuresui tests (data_entry, graph canvas): drive the real controls with simulated typing, paste, clicks and drags.
-egui_kittest = "0.36"
+egui_kittest = "0.37"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
 hayro = { version = "0.8", default-features = false, features = ["embed-fonts"] }
-eframe ={ version = "0.36", default-features = false, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11", "links"] }
+eframe ={ version = "0.37", default-features = false, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11", "links"] }
 rfd = "0.17"
 ureq = { version = "3", features = ["platform-verifier"] }
 # Shared-pool refresh and device tokens live in the OS keychain (src/share/vault.rs): macOS Keychain,
@@ -88,7 +88,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "async-
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # getrandom (pulled in by the dependency graph) needs its JS backend on wasm32-unknown-unknown.
 getrandom = { version = "0.2", features = ["js"] }
-eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "links"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "links"] }
 wasm-bindgen = "=0.2.128"
 wasm-bindgen-futures = "0.4"
 rexie = "0.6"

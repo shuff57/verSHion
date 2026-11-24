@@ -2839,7 +2839,7 @@ impl Workspace {
                     // cue is that card's own foot (its sides and rounded bottom continue under the
                     // edge), so the card ends closed instead of open on the page background.
                     let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
-                    let more = out.state.offset.y + out.inner_rect.height() < out.content_size.y - 4.0;
+                    let more = out.state.offset().y + out.inner_rect.height() < out.content_size.y - 4.0;
                     if more {
                         let edge = out.inner_rect.bottom();
                         let cut = chem_shell::card_rects(ui.ctx()).into_iter().find(|c| c.top() < edge - 4.0 && c.bottom() > edge + 1.0);

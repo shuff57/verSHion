@@ -50,7 +50,7 @@ fn growth_classic_setups_load_from_the_dropdown_and_stay_editable() {
         let mut at = item[0];
         for _ in 0..i {
             tall_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(over)]);
-            tall_frame(&ctx, &mut ws, vec![egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta: egui::vec2(0.0, -1.0), phase: egui::TouchPhase::Move, modifiers: egui::Modifiers::NONE }]);
+            tall_frame(&ctx, &mut ws, vec![egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Line, source: egui::MouseWheelSource::Wheel, delta: egui::vec2(0.0, -1.0), phase: egui::TouchPhase::Move, modifiers: egui::Modifiers::NONE }]);
             for _ in 0..3 { tall_frame(&ctx, &mut ws, vec![]); }
             at = named_or_valued(&ctx, &mut ws, e.name).into_iter().filter(|b| !before.contains(b)).next().unwrap();
         }
