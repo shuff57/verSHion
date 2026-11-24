@@ -2033,9 +2033,15 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let steady = |g: &dyn Fn(f64) -> Option<f64>, v: f64| [t.v.next_down(), t.v.next_up()].iter().all(|&y| g(y).is_some_and(|w| (w - v).abs() <= 1e-4 * (v.abs() + 1e-300) || (w - v).abs() <= 1e-12));
         let v = match v {
             // (a point typed on its own takes its neighbours' common limit: no plain form there to condition)
-            Some(w) if fi > 0 && ve.is_none() && !settled.get() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) =>
+            Some(w) if fi > 0 && ve.is_none() && !settled.get() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) => {
                 // (a rational piece's expanded form ruined by cancellation beside a pole: its typed form, if steady there)
-                typed_d(m, fi, t.v).filter(|&w2| steady(&|y| typed_d(m, fi, y), w2)),
+                let typed_v = typed_d(m, fi, t.v).filter(|&w2| steady(&|y| typed_d(m, fi, y), w2));
+                // (otherwise the value is a cancellation the floats cannot settle, as (cos(2x)³)^(1/3)″ at 0.7854 beside the base's
+                // zero at π/4, where f″ = −4 cos 2x ≈ 1.5·10⁻⁵ is lost in terms of size 10⁵: a corner was already refused above, so
+                // the derivative is not said not to exist; it is said to be undecided here)
+                if typed_v.is_none() { let mut u = undecided.get(); u[fi] = true; undecided.set(u); }
+                typed_v
+            }
             other => other,
         };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))

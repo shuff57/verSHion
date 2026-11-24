@@ -41,3 +41,18 @@ fn the_tracer_at_a_base_zero_where_both_sides_meet() {
         }
     }
 }
+
+/// Check 15: at a decimal typed beside an irrational zero of a root's base, where f is smooth, the tracer never says f″ does
+/// not exist: (cos(2x)³)^(1/3) = cos 2x has f″ = −4 cos 2x, about 1.5·10⁻⁵ at 0.7854; ((x² − 2)³)^(1/3) = x² − 2 has f″ = 2
+/// at 1.414213; ((e^x − 2)³)^(1/3) = e^x − 2 has f″ = e^x ≈ 2 at 0.693147. Where the floats cannot settle the value it is
+/// said to be undecided, never absent; where they can, it is the value.
+#[test]
+fn the_tracer_beside_an_irrational_base_zero_never_says_absent() {
+    for (fx, tx) in [("(cos(2x)^3)^(1/3)", "0.7854"), ("(cos(2x)^3)^(1/3)", "0.78539"), ("(cos(2x)^3)^(1/3)", "0.785398"), ("((x^2 - 2)^3)^(1/3)", "1.414213"),
+                     ("((x^2 - 2)^3)^(1/3)", "1.414214"), ("((x^3 - 2)^3)^(1/3)", "1.259921"), ("((e^x - 2)^3)^(1/3)", "0.693147"), ("(sin(x)^3)^(1/3)", "3.141592")] {
+        let x = typed(tx).unwrap().v;
+        let p = with(&[("f", s(fx)), ("xmin", f(x - 2.0)), ("xmax", f(x + 2.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let reads: Vec<String> = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+        for r in &reads[1..] { assert!(!r.contains("does not exist"), "{fx} at {tx}: {r}"); }
+    }
+}
