@@ -1445,3 +1445,29 @@ fn round7_checks_the_approach_even_in_the_first_cell() {
         assert!(matches!(result, nm::Along::Fails(x) if x > 0. && x < 0.01));
     }
 }
+
+/// Check 7, cap-10. (1) An equilibrium at the edge of dy/dx's domain is found whatever the window: √y is 0 at y = 0 and
+/// undefined below it, √(1 − y²) is 0 at ±1, √(4 − y²) at ±2, √(1 − y) at 1, y√y at 0 (each f(x, c) = √0 = 0 for every x).
+/// (2) A height where dy/dx has no value is never an equilibrium, however close to 0 f comes beside it: x(y − 1)²/(y − 1)
+/// is undefined on y = 1 (0/0) and is x(y − 1) elsewhere, nonzero for y ≠ 1 and x ≠ 0; (y² − 2y)/(y − 2) − 2 = y − 2 off
+/// y = 2, undefined on it; y²/y = y off 0; sin²y/sin y = sin y off the multiples of π, undefined on them. Neither depends
+/// on whether a sample height lands on the point.
+#[test]
+fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
+    let cases: Vec<(&str, f64, f64, Vec<f64>)> = vec![
+        ("sqrt(y)", -1.0, 5.0, vec![0.0]), ("sqrt(y)", -4.0, 4.0, vec![0.0]), ("sqrt(y)", -2.0, 6.0, vec![0.0]),
+        ("sqrt(1 - y^2)", -3.0, 3.0, vec![-1.0, 1.0]), ("sqrt(1 - y^2)", -1.5, 1.5, vec![-1.0, 1.0]),
+        ("sqrt(4 - y^2)", -3.0, 3.0, vec![-2.0, 2.0]), ("sqrt(1 - y)", -3.0, 3.0, vec![1.0]), ("y sqrt(y)", -3.7, 4.1, vec![0.0]),
+        ("x(y - 1)^2/(y - 1)", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.7, 4.1, vec![]),
+        ("y^2/y", -3.7, 4.1, vec![]), ("sin(y)^2/sin(y)", -3.7, 4.1, vec![]), ("y^2/y", -4.0, 4.0, vec![]),
+        // still found: a true root beside a pole, and a polynomial
+        ("y/(x + y)", -3.7, 4.1, vec![0.0]), ("y(4 - y)", -3.7, 4.1, vec![0.0, 4.0]), ("(y - 1)^2", -3.7, 4.1, vec![1.0]),
+    ];
+    for (eqt, y0, y1, want) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}");
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-12, "{eqt} on [{y0}, {y1}]: {got:?}"); }
+    }
+}

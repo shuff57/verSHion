@@ -543,6 +543,18 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                 Some(v) if v == 0.0 => out.push(ys[j]),
                 _ => {}
             }
+            // a root at the edge of f's domain (√y at y = 0, √(1 − y²) at ±1): no sign change and no sample need land on it.
+            // The edge is found by halving between a height where f is defined and one where it is not; a short exact value
+            // there (a fraction, a fraction of √n or of π) is a root when f is defined at it and 0 there.
+            if j < n && g[j].is_some() != g[j + 1].is_some() {
+                let (mut a, mut c) = if g[j].is_some() { (ys[j], ys[j + 1]) } else { (ys[j + 1], ys[j]) };
+                for _ in 0..200 { let m = 0.5 * (a + c); if f.at(xr, m).is_some() { a = m; } else { c = m; } if (c - a).abs() <= 1e-15 * (1.0 + a.abs()) { break; } }
+                for cand in candidates(a) {
+                    let Some(cv) = ex::exact(&cand, None).map(|e| e.value()) else { continue };
+                    if (cv - a).abs() > 1e-9 * (1.0 + a.abs()) { continue; }
+                    if f.at(xr, cv).is_some_and(|v| v.abs() <= 1e-12 * scale) { out.push(cv); break; }
+                }
+            }
             if j < n {
                 if let (Some(a), Some(c)) = (g[j], g[j + 1]) {
                     if a != 0.0 && c != 0.0 && (a > 0.0) != (c > 0.0) {
@@ -579,6 +591,17 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     let flat = |xr: f64| (0..=40).all(|j| f.at(xr, y0 + hy * (j as f64 + 0.41) / 41.0) == Some(0.0));
     let Some(xr) = x_try.into_iter().find(|x| !flat(*x)) else { return Equils { lines: vec![], complete: false, everywhere: false } };
     let found = roots_at(xr);
+    // a "root" a rounding away from a height where f has no value at the exact x tried is no root: f only comes close to 0
+    // there through a factor that cancels (x(y − 1)²/(y − 1), y²/y, sin²y/sin y), and the line itself has no values
+    let xe = Q::of_f64(xr).map(|q| Ex::rat(R(q.0, q.1)));
+    let gap = |r: f64| -> bool {
+        candidates(r).into_iter().any(|c| {
+            let Some(cv) = ex::exact(&c, None).map(|e| e.value()) else { return false };
+            // (cancellation beside the gap leaves f's float near 0 up to about 10⁻⁸ away: (y² − 2y)/(y − 2) − 2 at 2 + 1.5·10⁻⁸)
+            (cv - r).abs() <= 1e-6 * (1.0 + r.abs()) && (f.at(xr, cv).is_none() || xe.as_ref().is_some_and(|x| ex::zero_at(&subst(&f.tree, None, Some(&c)), x)))
+        })
+    };
+    let found: Vec<f64> = found.into_iter().filter(|r| !gap(*r)).collect();
     let mut lines = vec![];
     for &r in &found {
         // f is 0 on the line y = r at every x where it is defined (and defined at most of them)
