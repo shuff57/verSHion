@@ -1497,7 +1497,13 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
                                         ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.0, vec![-1.0, 1.0]), ("(x - 2) sqrt(y)", 2.0, 6.0, 0.0, 4.0, vec![0.0]),
                                         ("x sqrt(4 - y^2)", 0.0, 5.0, -4.0, 4.0, vec![-2.0, 2.0]), ("x sqrt(1 - y^2)", 0.0, 10.0, -1.3, 6.2, vec![-1.0, 1.0]),
                                         // (and no line where a tiny minimum is no root)
-                                        ("y^2 + 0.0000001", 0.0, 5.0, -100.0, 100.0, vec![]), ("(y - 1)^2 + 0.00001", 0.0, 5.0, -1000.0, 1000.0, vec![])] {
+                                        ("y^2 + 0.0000001", 0.0, 5.0, -100.0, 100.0, vec![]), ("(y - 1)^2 + 0.00001", 0.0, 5.0, -1000.0, 1000.0, vec![]),
+                                        // (check 12: small everywhere is not 0 anywhere; no fixed size decides it)
+                                        ("y^2 + 0.0000001", -4.0, 4.0, -1000.0, 1000.0, vec![]), ("y^2 + 0.000000001", -4.0, 4.0, -100.0, 100.0, vec![]),
+                                        ("y^2 + 0.00000000001", -4.0, 4.0, -10.0, 10.0, vec![]), ("0.0000000001(y - x)", -4.0, 4.0, -4.0, 4.0, vec![]),
+                                        ("e^(-x)(y - x)", 30.0, 60.0, 0.0, 100.0, vec![]),
+                                        // (and true roots of small functions are still found)
+                                        ("0.0000000001 y", -4.0, 4.0, -4.0, 4.0, vec![0.0]), ("0.000001(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0]), ("(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0])] {
         let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("xmin", f(xa)), ("xmax", f(xb)), ("ymin", f(y0)), ("ymax", f(y1))]));
         let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
         assert_eq!(got.len(), want.len(), "{eqt} on x [{xa}, {xb}], y [{y0}, {y1}]: {got:?}");

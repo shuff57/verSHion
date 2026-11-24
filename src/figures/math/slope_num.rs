@@ -607,12 +607,17 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     // (√(2 − y²) at √2, where rounding leaves no float on the line with a value; (2 − y) ln(2 − y) at 2 runs to 0 too, but
     // has no value at 2)
     let edge_zero = |x: f64, b: f64, side: f64| -> bool { !open_at(x, b, side) && shrinks(&|t| f.at(x, t), b, side) == Some(true) };
-    // f is 0 at the height r found inside its domain: its float is 0 to within its size, or it runs to 0 there from each side
-    // it has values on (∛y at 0, whose float at the bracket's end is 10⁻⁵); a pole's sign change grows instead
+    // f is small at r against its own size beside it: its float there is at most 10⁻⁶ of the larger of its values 10⁻⁴ away
+    // (a normal number, not an underflow). Never against a fixed size: 10⁻¹⁰(y − x) or y² + 10⁻⁹ is small everywhere, and is
+    // 0 nowhere but on y = x and nowhere at all.
+    let small_at = |x: f64, r: f64| -> bool {
+        let beside = [-1.0, 1.0].iter().filter_map(|sd: &f64| f.at(x, r + sd * 1e-4 * (1.0 + r.abs()))).map(f64::abs).fold(0.0, f64::max);
+        beside >= 1e-300 && f.at(x, r).is_some_and(|v| v.abs() <= 1e-6 * beside)
+    };
+    // f is 0 at the height r found inside its domain: small against its own size beside it, or running to 0 there from each
+    // side it has values on (∛y at 0, whose float at the bracket's end is 10⁻⁵); a pole's sign change grows instead
     let zero_near = |x: f64, r: f64| -> Option<bool> {
-        // (tiny, and not an underflow: f beside it, 10⁻⁴ away, is a normal number on a side it has values on)
-        let normal_beside = [-1.0, 1.0].iter().any(|sd: &f64| f.at(x, r + sd * 1e-4 * (1.0 + r.abs())).is_some_and(|w| w.abs() >= 1e-300));
-        if let Some(v) = f.at(x, r) { if v.abs() <= 1e-9 * scale && normal_beside { return Some(true); } }
+        if small_at(x, r) { return Some(true); }
         match (shrinks(&|t| f.at(x, t), r, -1.0), shrinks(&|t| f.at(x, t), r, 1.0)) {
             (Some(false), _) | (_, Some(false)) => Some(false),
             (None, None) => None,
@@ -670,7 +675,7 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                         // 10⁻⁸, and it runs to 0 from both sides)
                         // (but not merely a tiny minimum: y² + 10⁻⁷ is never 0, though its minimum is small beside a large scale)
                         let falls = shrinks(&|t| f.at(xr, t), r, -1.0) == Some(true) && shrinks(&|t| f.at(xr, t), r, 1.0) == Some(true);
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-12 * scale) || falls { out.push((r, 0.0)); }
+                        if small_at(xr, r) || falls { out.push((r, 0.0)); }
                     }
                 }
             }
