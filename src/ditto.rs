@@ -1094,7 +1094,48 @@ fn question(item: &Value) -> Result<Question, String> {
     if q.explanation.is_none() && (unkeyed(item) || item.get("parts").and_then(Value::as_array).is_some_and(|ps| ps.iter().any(unkeyed))) {
         q.explanation = Some(crate::model::KEYLESS_SENTINEL.to_string());
     }
+    escape_currency_in(&mut q);
     Ok(q)
+}
+
+/// Escape currency dollar signs a reply left bare. A `$...$` span that opens with an amount
+/// followed by a plain word ("$80 plus $3 per mile") is prose between two prices, not math: both
+/// of its dollar signs become `\$` (holdout v16, FLVS #14). Real math such as `$3x + 2$` or
+/// `$5\text{ cm}$` is unchanged, and so is an already escaped `\$`.
+fn escape_currency(s: &str) -> String {
+    let bytes: Vec<char> = s.chars().collect();
+    let open: Vec<usize> = (0..bytes.len()).filter(|&i| bytes[i] == '$' && (i == 0 || bytes[i - 1] != '\\')).collect();
+    let mut escape = Vec::new();
+    let mut k = 0;
+    while k + 1 < open.len() {
+        let (a, b) = (open[k], open[k + 1]);
+        let inner: String = bytes[a + 1..b].iter().collect();
+        let prose = {
+            let t = inner.trim_end();
+            let mut chars = t.chars().peekable();
+            let mut amount = false;
+            while chars.peek().is_some_and(|c| c.is_ascii_digit() || *c == ',' || *c == '.') { amount = true; chars.next(); }
+            let rest: String = chars.collect();
+            amount && rest.starts_with(' ') && rest.trim_start().chars().take(2).filter(|c| c.is_ascii_alphabetic()).count() == 2
+                && !rest.trim_start().starts_with('\\')
+        };
+        if prose { escape.extend([a, b]); k += 2; } else { k += 2; }
+    }
+    if escape.is_empty() { return s.to_string(); }
+    bytes.iter().enumerate().map(|(i, c)| if escape.contains(&i) { "\\$".to_string() } else { c.to_string() }).collect()
+}
+
+fn escape_currency_in(q: &mut Question) {
+    q.stem = escape_currency(&q.stem);
+    let fix = |answers: &mut Vec<Answer>| for a in answers { a.text = escape_currency(&a.text); };
+    match &mut q.kind {
+        Kind::Mc { answers } => fix(answers),
+        Kind::Multipart { parts } => for p in parts {
+            p.stem = escape_currency(&p.stem);
+            if let crate::model::PartKind::Mc { answers } = &mut p.kind { fix(answers); }
+        },
+        _ => {}
+    }
 }
 
 /// A problem printed as "1) (a) ... (b) ..." has no shared stem: its parts carry the whole task.
@@ -1808,6 +1849,16 @@ mod tests {
         assert_eq!(got.items[0].status, "saved_continued");
         assert!(matches!(&got.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
         assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+    }
+
+    #[test]
+    fn bare_currency_dollars_are_escaped_and_math_is_left_alone() {
+        // Holdout v16, FLVS #14.
+        assert_eq!(escape_currency("a fee of $80 plus $3 per mile"), "a fee of \\$80 plus \\$3 per mile");
+        assert_eq!(escape_currency("costs $12.50 each and $4 shipping"), "costs \\$12.50 each and \\$4 shipping");
+        for math in ["Solve $3x + 2 = 5$ and $x^2$.", "$5\\text{ cm}$", "pay \\$80 now", "$2 \\times 3$", "$40$ dollars", "only $5"] {
+            assert_eq!(escape_currency(math), math, "{math}");
+        }
     }
 
     #[test]
