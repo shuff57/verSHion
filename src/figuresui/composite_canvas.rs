@@ -815,7 +815,9 @@ impl Canvas {
                     ui.selectable_value(&mut self.snap_i, i, *l);
                 }
             });
-            ui.menu_button(RichText::new("Settings").size(12.0), |ui| {
+            // (closes on a click outside or Escape only: egui's default shuts a menu on any click inside it,
+            // which closed it on the Unit field. The choices below close it themselves, as they did.)
+            super::keep_open_menu_button(ui, RichText::new("Settings").size(12.0), |ui| {
                 ui.set_min_width(220.0);
                 ui.label(theme::muted("Unit").size(11.0));
                 let mut unit = p.s("unit").to_string();
@@ -830,6 +832,7 @@ impl Canvas {
                         if ui.add(seg_btn(l, p.i("dec") == d)).clicked() {
                             p.set_i("dec", d);
                             *change = Change::Step;
+                            ui.close();
                         }
                     }
                 });
@@ -840,6 +843,7 @@ impl Canvas {
                         if ui.add(seg_btn(l, p.i("angle_dec") == d)).clicked() {
                             p.set_i("angle_dec", d);
                             *change = Change::Step;
+                            ui.close();
                         }
                     }
                 });
@@ -854,6 +858,7 @@ impl Canvas {
                         if ui.add(b).on_hover_text(format!("{l} labels")).clicked() {
                             p.set_s("label_size", l);
                             *change = Change::Step;
+                            ui.close();
                         }
                     }
                 });
@@ -862,6 +867,7 @@ impl Canvas {
                 if ui.checkbox(&mut sh, "Shade the shape").changed() {
                     p.set_b("shade", sh);
                     *change = Change::Step;
+                    ui.close();
                 }
             });
         });

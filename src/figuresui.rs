@@ -35,6 +35,8 @@ mod ui_test;
 mod bond_energy_tests;
 #[cfg(test)]
 mod share_menu_tests;
+#[cfg(test)]
+mod menu_field_tests;
 mod pedigree_panel;
 
 const DEBOUNCE: Duration = Duration::from_millis(150);
@@ -3731,7 +3733,7 @@ fn card(ui: &mut Ui, ctx: &egui::Context, def: &FigureDef, idx: usize, budget: &
 /// A menu button whose menu closes only on a click outside it, or Escape (egui's default closes it on
 /// any click, so a click into a text field inside, such as the share-link paste box, shut the menu
 /// before it took any text). Items that should dismiss the menu call `ui.close()` themselves.
-fn keep_open_menu_button<R>(ui: &mut Ui, label: &str, add_contents: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<Option<R>> {
+fn keep_open_menu_button<'a, R>(ui: &mut Ui, label: impl egui::IntoAtoms<'a>, add_contents: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<Option<R>> {
     use egui::containers::menu::{MenuButton, MenuConfig, is_in_menu};
     // (inside a menu this is a submenu, which takes its close behavior from the menu it opens from)
     if is_in_menu(ui) {
