@@ -470,6 +470,44 @@ fn poly_rem(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
     }
     Some(trim(r))
 }
+/// a / d, the quotient of polynomial long division (None on overflow).
+fn poly_div(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
+    let d = trim(d.to_vec());
+    let mut r = trim(a.to_vec());
+    if r.len() < d.len() { return Some(vec![Q(0, 1)]); }
+    let dl = *d.last()?;
+    let mut q = vec![Q(0, 1); r.len() - d.len() + 1];
+    while r.len() >= d.len() && !(r.len() == 1 && r[0].0 == 0) {
+        let k = r.len() - d.len();
+        let t = r.last()?.div(dl)?;
+        q[k] = t;
+        for (i, di) in d.iter().enumerate() { r[k + i] = r[k + i].sub(t.mul(*di)?)?; }
+        r.pop();
+        if r.is_empty() { r.push(Q(0, 1)); }
+        r = trim(r);
+    }
+    Some(trim(q))
+}
+fn is_zero_poly(c: &[Q]) -> bool { c.iter().all(|q| q.0 == 0) }
+/// Distinct real roots of c in the window, by Sturm's theorem (usize::MAX where it cannot be counted).
+fn sturm_lines(c: &[Q], y0: f64, y1: f64) -> usize { Q::of_f64(y0).zip(Q::of_f64(y1)).and_then(|(lo, hi)| sturm_count(c, lo, hi)).unwrap_or(usize::MAX) }
+/// The greatest common divisor of two polynomials, made monic (None on overflow).
+fn poly_gcd(a: &[Q], b: &[Q]) -> Option<Vec<Q>> {
+    let (mut a, mut b) = (trim(a.to_vec()), trim(b.to_vec()));
+    while !is_zero_poly(&b) { let r = poly_rem(&a, &b)?; a = b; b = r; }
+    let lead = *a.last()?;
+    if lead.0 == 0 { return Some(a); }
+    a.iter().map(|c| c.div(lead)).collect()
+}
+/// The polynomial with each of its roots once: c / gcd(c, c′).
+fn square_free(c: &[Q]) -> Option<Vec<Q>> {
+    let c = trim(c.to_vec());
+    if c.len() <= 1 { return Some(c); }
+    let d: Vec<Q> = (1..c.len()).map(|k| c[k].mul(Q(k as i128, 1))).collect::<Option<_>>()?;
+    let g = poly_gcd(&c, &d)?;
+    poly_div(&c, &g)
+}
+
 /// The number of distinct real roots of the polynomial in [lo, hi] (Sturm's theorem), or None on overflow.
 pub(crate) fn sturm_count(c: &[Q], lo: Q, hi: Q) -> Option<usize> {
     let c = trim(c.to_vec());
@@ -687,6 +725,56 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     };
     // f is 0 everywhere: every horizontal line
     if has_no_vars_zero(&f.tree) { return Equils { lines: vec![], complete: true, everywhere: true }; }
+    // The exact way, where it can be taken: f(x, y) at three rational x's is a polynomial in y with rational coefficients
+    // (y − 10⁻¹⁰x, y² + 10⁻¹⁴, the logistic, (y − 1)(y − x)). A line y = c is an equilibrium only if c is a root at every x,
+    // so the lines are the real roots of the exact greatest common divisor of those polynomials (each root once), found
+    // where its square-free part changes sign and counted by Sturm's theorem; no size of f decides anything. (A common
+    // root at three x's but not at every x needs f's coefficients to share a root at those three x's alone: the lines found
+    // are checked at every x below as well.)
+    let x3 = [x_try[0], x_try[1], pick(0.137_2)];
+    let polys: Option<Vec<Vec<Q>>> = x3.iter().map(|x| Q::of_f64(*x).and_then(|q| poly_in_y(&f.tree, q))).collect();
+    if let Some(polys) = polys.filter(|ps| ps.iter().any(|c| !is_zero_poly(c))) {
+        let g = polys.iter().try_fold(vec![Q(0, 1)], |acc, c| poly_gcd(&acc, c));
+        if let Some(sf) = g.as_ref().and_then(|g| square_free(g)) {
+            let ev = |y: f64| sf.iter().rev().fold(0.0, |a, q| a * y + q.0 as f64 / q.1 as f64);
+            let n = 4000;
+            let ys: Vec<f64> = (0..=n).map(|j| y0 + hy * j as f64 / n as f64).collect();
+            let vs: Vec<f64> = ys.iter().map(|y| ev(*y)).collect();
+            let mut roots: Vec<f64> = vec![];
+            for j in 0..=n {
+                if vs[j] == 0.0 { roots.push(ys[j]); continue; }
+                if j < n && vs[j + 1] != 0.0 && (vs[j] > 0.0) != (vs[j + 1] > 0.0) {
+                    let (mut a, mut c) = (ys[j], ys[j + 1]);
+                    let sa = vs[j] > 0.0;
+                    for _ in 0..200 { let m = 0.5 * (a + c); let vm = ev(m); if vm == 0.0 { a = m; c = m; break; } if (vm > 0.0) == sa { a = m; } else { c = m; } if c - a <= 1e-15 * (1.0 + a.abs()) { break; } }
+                    roots.push(0.5 * (a + c));
+                }
+            }
+            roots.dedup_by(|a, c| (*a - *c).abs() < 1e-9 * hy);
+            let complete = Q::of_f64(y0).zip(Q::of_f64(y1)).and_then(|(lo, hi)| sturm_count(&sf, lo, hi)).is_some_and(|k| k == roots.len());
+            let mut lines = vec![];
+            for r in roots {
+                // (and f is 0 on the line at the x's of the window where it has a value: three x's do not make every x)
+                let ok = xs.iter().filter_map(|x| f.at(*x, r).map(|v| (*x, v))).all(|(x, v)| {
+                    let beside = [-1.0, 1.0].iter().filter_map(|sd: &f64| f.at(x, r + sd * 1e-4 * (1.0 + r.abs()))).map(f64::abs).fold(0.0, f64::max);
+                    v == 0.0 || v.abs() <= 1e-6 * beside
+                });
+                if !ok { continue; }
+                let exact = candidates(r).into_iter().find(|c| zero_fn(&subst(&f.tree, None, Some(c)))).and_then(|c| ex::exact(&c, None));
+                let yv = exact.as_ref().map(|e| e.value()).unwrap_or(r);
+                let mut runs: Vec<(f64, f64)> = vec![];
+                let m = 480;
+                let mut start: Option<f64> = None;
+                for i in 0..=m {
+                    let x = x0 + w * i as f64 / m as f64;
+                    match (f.at(x, yv).is_some(), start) { (true, None) => start = Some(x), (false, Some(s0)) => { runs.push((s0, x0 + w * (i as f64 - 1.0) / m as f64)); start = None; } _ => {} }
+                }
+                if let Some(s0) = start { runs.push((s0, x1)); }
+                lines.push(Equil { y: yv, exact, runs });
+            }
+            return Equils { complete: complete && lines.len() == sturm_lines(&sf, y0, y1), lines, everywhere: false };
+        }
+    }
     // f(x, y) = 0 for every y at the x tried (y′ = x − 0.37·…): try the other x; when 0 at both, nothing is claimed
     let flat = |xr: f64| (0..=40).all(|j| f.at(xr, y0 + hy * (j as f64 + 0.41) / 41.0) == Some(0.0));
     let Some(xr) = x_try.into_iter().find(|x| !flat(*x)) else { return Equils { lines: vec![], complete: false, everywhere: false } };
@@ -721,7 +809,20 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             // (an x where f is exactly 0 on the line is on it: x(y − 1)^(1/3) and x√(1 − y²) at x = 0, whether or not the line
             // is an edge that fell on a sampled height; the underflow guard is the search's, at the x it searches)
             if f.at(x, r) == Some(0.0) { return Some(true); }
-            zero_near(x, r)
+            // (on the line at this x: f's float there is a rounding of its size beside it, 10⁻⁹ of it for a crossing root
+            // found by halving, 10⁻⁶ for a touching one found by golden section; or f keeps falling toward the line from
+            // each side, five decades in, down to 10⁻¹² away, as every root of any order does and y + 10⁻¹⁰ sin x does not)
+            let u = 1.0 + r.abs();
+            let beside = [-1.0, 1.0].iter().filter_map(|sd: &f64| f.at(x, r + sd * 1e-4 * u)).map(f64::abs).fold(0.0, f64::max);
+            let touching = match (f.at(xr, r - 1e-4 * u), f.at(xr, r + 1e-4 * u)) { (Some(a), Some(c)) => (a > 0.0) == (c > 0.0), _ => false };
+            if let Some(v) = f.at(x, r) { if beside >= 1e-300 && v.abs() <= (if touching { 1e-6 } else { 1e-9 }) * beside { return Some(true); } }
+            let deep = |sd: f64| -> Option<bool> {
+                let a: Vec<f64> = [1e-4, 1e-6, 1e-8, 1e-10, 1e-12].iter().map(|d| f.at(x, r + sd * d * u).map(f64::abs)).collect::<Option<_>>()?;
+                if a.iter().any(|v| *v < 1e-300) { return Some(false); }
+                let rs: Vec<f64> = a.windows(2).map(|p| p[1] / p[0]).collect();
+                Some(rs.iter().all(|q| *q <= 0.9) && rs.windows(2).all(|p| p[1] <= p[0] + 0.05))
+            };
+            match (deep(-1.0), deep(1.0)) { (Some(false), _) | (_, Some(false)) => Some(false), (None, None) => None, _ => Some(true) }
         };
         let vals: Vec<Option<bool>> = xs.iter().map(|x| ok_at(*x)).collect();
         let defined = vals.iter().filter(|v| v.is_some()).count();
