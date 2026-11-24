@@ -1,0 +1,217 @@
+{
+ "figure": "phase-diagram",
+ "site": "chemistry",
+ "slug": "phase-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw water or carbon dioxide",
+   "class": "core",
+   "evidence": "changes:substance=Carbon dioxide",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw nitrogen, oxygen, argon, methane or ammonia",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours has water, carbon dioxide, a typical substance and custom only."
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw your own substance from its triple point and critical point",
+   "class": "core",
+   "evidence": "changes:{\"substance\":\"Custom\",\"tt\":200,\"pt\":0.5} + handle:drag:triple point",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Give your own substance’s normal melting and boiling points",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ custom substance takes a melting-curve slope, not the normal melting and boiling points."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw a not-to-scale sketch with the values written at the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours is always drawn to scale on numbered axes."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw to scale on numbered axes with gridlines",
+   "class": "control",
+   "evidence": "changes:grid=false + changes:paxis=Linear",
+   "note": "Ours’ only layout; gridlines and the pressure scale are switchable."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Give temperatures in °C or K",
+   "class": "control",
+   "evidence": "changes:unit=Celsius (°C)",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Give pressures in atm or kPa",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours uses atm only."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Name the regions, the triple and critical points and the phase boundaries",
+   "class": "control",
+   "evidence": "changes:lab_regions=Off + changes:lab_curves=Off + changes:lab_special=Off",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Letter the regions, points and boundaries instead of naming them",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours’ blank mode numbers the blanks (1 ____); no letters in place of names."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Leave the regions, points and boundaries as blank lines",
+   "class": "version",
+   "evidence": "changes:lab_regions=Blank for students + changes:lab_curves=Blank for students + changes:lab_special=Blank for students",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave the regions, points and boundaries bare",
+   "class": "control",
+   "evidence": "changes:lab_regions=Off + changes:lab_curves=Off + changes:lab_special=Off",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw dashed lines from the triple and critical points to the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ dotted lines from the critical point bound the supercritical region; none run to the axes as guides."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write the values where the guide lines meet the axes",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Put blank lines where the guide lines meet the axes",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Write nothing where the guide lines meet the axes",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw the 1 atm line",
+   "class": "control",
+   "evidence": "changes:isobar=false + handle:drag:isobar",
+   "note": "On at the opening state; ours’ isobar can be at any pressure."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the normal melting and boiling (or sublimation) points on it by their temperatures",
+   "class": "control",
+   "evidence": "changes:show_answers=false",
+   "note": "Checked by hand: the answer copy writes 273 and 373 at the axis; the student copy drops them."
+  },
+  {
+   "id": "cap-06c",
+   "text": "Mark those points by name",
+   "class": "control",
+   "evidence": "changes:show_answers=false",
+   "note": "Checked by hand: the answer copy writes “melts” and “boils”; the student copy drops them."
+  },
+  {
+   "id": "cap-06d",
+   "text": "Mark those points by letters",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Mark those points with blank lines",
+   "class": "version",
+   "evidence": "",
+   "note": "The student copy leaves them unmarked; the blank is in the text below, not on the figure."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Show or hide the supercritical fluid region",
+   "class": "control",
+   "evidence": "",
+   "note": "A switch on the reference (verified in its page HTML). Ours draws it always, with no switch to turn it off; owner 2026-11-24: a reference show/hide switch ours lacks is an open gap, no credit for the shown half."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Shuffle the letters",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Choose the curve’s color",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Write the axis titles",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ axis titles are fixed."
+  },
+  {
+   "id": "cap-07f",
+   "text": "Put a blank line in place of the chart or an axis title",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Set the axis ranges",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Set the axis numbering",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07i",
+   "text": "Set the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

@@ -181,9 +181,17 @@ fn main() -> Result<(), eframe::Error> {
     }
     // Headless: VERSHION_FIGURE_HANDLES=1 prints every figure's drag handles at its opening state, one per
     // line: <id>\t<actions: drag,click,scroll,label>\t<inline-edit key or ->\t<tip> (the parity probe reads it).
-    if vershion::env_var("VERSHION_FIGURE_HANDLES").as_deref() == Ok("1") {
-        for d in figures::registry() {
-            let p = figures::start_params(&d);
+    // VERSHION_FIGURE_HANDLES=<figure id> [VERSHION_FIG_PARAMS='{...}'] prints that one figure's handles after the params are set
+    // the way VERSHION_RENDER_FIG sets them (the probe's handle@ token: a handle that appears only after a setting changes).
+    if let Ok(which) = vershion::env_var("VERSHION_FIGURE_HANDLES") {
+        let one = which != "1";
+        let over: serde_json::Value = if one { vershion::env_var("VERSHION_FIG_PARAMS").ok().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default() } else { serde_json::Value::Null };
+        if one && !figures::registry().iter().any(|d| d.id == which) {
+            eprintln!("no figure {which}");
+            std::process::exit(1);
+        }
+        for d in figures::registry().into_iter().filter(|d| !one || d.id == which) {
+            let p = if one { figures::params_from_json(&d, &over) } else { figures::start_params(&d) };
             let size = figures::svg_size(&(d.render)(&p));
             for h in d.handles(&p, size) {
                 let acts: Vec<&str> = [(h.drag.is_some(), "drag"), (h.click.is_some() || h.click_at.is_some(), "click"), (h.scroll.is_some(), "scroll"), (h.label_drag, "label")]

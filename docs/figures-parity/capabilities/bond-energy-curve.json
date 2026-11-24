@@ -1,0 +1,196 @@
+{
+ "figure": "bond-energy-curve",
+ "site": "chemistry",
+ "slug": "bond-energy-curve",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw up to three bonds’ curves",
+   "class": "core",
+   "evidence": "changes:count=3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give each bond your own name",
+   "class": "control",
+   "evidence": "changes:name1=H–H",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Set each bond’s length and bond energy",
+   "class": "core",
+   "evidence": "changes:length1=200 + changes:energy1=400",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Give lengths in pm, Å or nm",
+   "class": "control",
+   "evidence": "changes:length_unit=Å",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Write energies as kJ/mol or kJ mol⁻¹",
+   "class": "control",
+   "evidence": "changes:energy_unit=kJ mol⁻¹",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw dashed guide lines from each minimum to both axes",
+   "class": "control",
+   "evidence": "changes:guides=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Label the guide lines with the values",
+   "class": "control",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Values\"}",
+   "note": "Values is the default guide label, so this is the guides render."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Label the guide lines “Bond length” and “Bond energy”",
+   "class": "control",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Bond length and energy\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Put blank lines on the guide lines for students",
+   "class": "version",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Blank lines\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Leave the guide lines unlabeled",
+   "class": "control",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"None\"}",
+   "note": ""
+  },
+  {
+   "id": "cap-03f",
+   "text": "Put a dot on each minimum",
+   "class": "control",
+   "evidence": "changes:dots=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Write Repulsion and Attraction either side of a curve’s minimum",
+   "class": "control",
+   "evidence": "changes:regions=Words",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Put blank lines in place of Repulsion and Attraction",
+   "class": "version",
+   "evidence": "changes:regions=Blank lines",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Show the bond names in a key",
+   "class": "control",
+   "evidence": "changes:hide_names=true",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Hide the names as Bond A, B and C",
+   "class": "version",
+   "evidence": "changes:hide_names=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Number the axes, with a Fit button that fits them to the curves",
+   "class": "control",
+   "evidence": "changes:{\"fit\":false,\"x_to\":300}",
+   "note": "Ours’ Fit is a switch (on at the opening state); the token shows it governs the ranges."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Draw the axes as shape only, with just the 0 on the energy axis",
+   "class": "control",
+   "evidence": "changes:axes=Shape only",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Draw the curves in color or in black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Hydrogen",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Write the axis titles",
+   "class": "control",
+   "evidence": "changes:xtitle=Distance between nuclei (pm) + changes:ytitle=Energy (kJ/mol)",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Put a blank line in place of the chart or an axis title",
+   "class": "version",
+   "evidence": "changes:title_style=Blank line + changes:xtitle_mode=Blank line + changes:ytitle_mode=Blank line",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Set the axis ranges and steps",
+   "class": "control",
+   "evidence": "changes:{\"fit\":false,\"x_to\":300} + changes:{\"fit\":false,\"y_by\":100}",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Number every line, every 2nd, 5th or 10th line, or none",
+   "class": "control",
+   "evidence": "changes:x_num=Every 2nd line + changes:y_num=No numbers",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Turn the gridlines on or off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Draw the gridlines light, standard or bold",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has gridlines on or off only."
+  },
+  {
+   "id": "cap-07i",
+   "text": "Add minor gridlines, 2, 4 or 5 per block",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07j",
+   "text": "Set the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

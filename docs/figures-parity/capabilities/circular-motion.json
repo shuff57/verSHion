@@ -1,0 +1,224 @@
+{
+ "figure": "circular-motion",
+ "site": "physics",
+ "slug": "circular-motion",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw the top view",
+   "class": "core",
+   "evidence": "changes:setup=Vertical circle",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw a vertical circle",
+   "class": "core",
+   "evidence": "changes:setup=Vertical circle",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw a conical pendulum",
+   "class": "core",
+   "evidence": "",
+   "note": "Ours has Top view and Vertical circle only."
+  },
+  {
+   "id": "cap-02a",
+   "text": "In the top view, put a string around the object",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-02b",
+   "text": "In the top view, put the object on a turntable",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-02c",
+   "text": "In the top view, put the object on a road",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-02d",
+   "text": "Draw the object at 1 to 8 positions",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours draws one position in the top view."
+  },
+  {
+   "id": "cap-02e",
+   "text": "Set where the first position is",
+   "class": "control",
+   "evidence": "changes:angle=120",
+   "note": ""
+  },
+  {
+   "id": "cap-02f",
+   "text": "Go round clockwise or counterclockwise",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ direction switch applies only to the vertical circle; the top view always goes counterclockwise."
+  },
+  {
+   "id": "cap-03",
+   "text": "Add a second object halfway out on a turntable, with a velocity arrow half as long",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Swing the object in a vertical circle on a string",
+   "class": "core",
+   "evidence": "changes:setup=Vertical circle",
+   "note": "Ours’ vertical circle is on a string (tension)."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Run the vertical circle as a loop",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-04c",
+   "text": "Put the object over a hill",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-04d",
+   "text": "Put the object in a dip",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Put the object at the top, the bottom, or both",
+   "class": "control",
+   "evidence": "changes:{\"setup\":\"Vertical circle\",\"position\":\"Top\"}",
+   "note": "Token passes on the setup alone; checked by hand that Top differs from Top and bottom."
+  },
+  {
+   "id": "cap-04f",
+   "text": "Put the object at the side of the vertical circle",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has Top, Bottom, Top and bottom only."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Set the conical pendulum’s string angle from the vertical, 15° to 60°",
+   "class": "control",
+   "evidence": "",
+   "note": "No conical pendulum."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label the conical pendulum’s angle and string length",
+   "class": "control",
+   "evidence": "",
+   "note": "No conical pendulum."
+  },
+  {
+   "id": "cap-05c",
+   "text": "Draw the conical pendulum’s velocity into or out of the page",
+   "class": "control",
+   "evidence": "",
+   "note": "No conical pendulum."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Turn each vector on or off (velocity, centripetal acceleration, inward force, gravity, tension, normal force)",
+   "class": "control",
+   "evidence": "",
+   "note": "Merged from cap-06a–cap-06f (owner decision 2026-11-24). Ours has no switch for any vector: the top view always draws v and a, the vertical circle always draws v, a_c, Fg and T; no inward force or normal force."
+  },
+  {
+   "id": "cap-06g",
+   "text": "Write your own label on each vector, or leave it off",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ vector labels are fixed."
+  },
+  {
+   "id": "cap-06h",
+   "text": "Put a blank line in place of a vector’s label for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Ours’ vector labels are fixed."
+  },
+  {
+   "id": "cap-07",
+   "text": "Split the conical pendulum’s tension into horizontal and vertical components",
+   "class": "control",
+   "evidence": "",
+   "note": "No conical pendulum."
+  },
+  {
+   "id": "cap-08a",
+   "text": "Mark a radius or a diameter",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours draws an unlabeled dashed centre line under the acceleration; no radius/diameter mark."
+  },
+  {
+   "id": "cap-08b",
+   "text": "Mark the angular speed ω",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours prints the angular speed in the answer text, not as a mark on the figure."
+  },
+  {
+   "id": "cap-08c",
+   "text": "Mark the angle of the first position",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-08d",
+   "text": "Letter the positions A, B, C…",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-09a",
+   "text": "Draw the object as a ball or a block",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours draws a ball only."
+  },
+  {
+   "id": "cap-09b",
+   "text": "Give the object its own label",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-09c",
+   "text": "Write vectors with an arrow over each label, or in bold",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours has no such control."
+  },
+  {
+   "id": "cap-09d",
+   "text": "Color the figure for slides, or black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Colour is the opening state."
+  }
+ ]
+}

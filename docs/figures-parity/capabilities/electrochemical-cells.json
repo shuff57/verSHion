@@ -1,0 +1,77 @@
+{
+ "figure": "electrochemical-cells",
+ "site": "chemistry",
+ "slug": "electrochemical-cells",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Choose the two metals, each in a solution of its own ion, one on either side",
+   "class": "core",
+   "evidence": "changes:left=Mg + changes:right=Ag",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Take E°cell from the table or type your own",
+   "class": "control",
+   "evidence": "changes:{\"voltage_source\":\"Custom\",\"voltage\":2.0}",
+   "note": "From the page’s E°cell control."
+  },
+  {
+   "id": "cap-02",
+   "text": "Connect a digital voltmeter, a dial voltmeter or a coil of wire between the electrodes",
+   "class": "control",
+   "evidence": "changes:meter=Dial voltmeter + changes:meter=Coil of wire",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Name the metals, solutions and salt bridge",
+   "class": "control",
+   "evidence": "changes:names=false",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Leave the names off for students to fill in",
+   "class": "version",
+   "evidence": "changes:names=false",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Label the anode and cathode with their signs",
+   "class": "control",
+   "evidence": "changes:electrodes=true",
+   "note": "Checked by hand: Anode (−), Cathode (+)."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw electron flow arrows",
+   "class": "control",
+   "evidence": "changes:flow=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=A zinc–copper cell",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Print an answer key with the anode, cathode and E°cell",
+   "class": "version",
+   "evidence": "changes:show_answers=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Add the half-reactions and the balanced overall reaction to the answer key",
+   "class": "version",
+   "evidence": "changes:show_answers=true",
+   "note": "Checked by hand: oxidation, reduction and overall lines."
+  }
+ ]
+}

@@ -1,0 +1,105 @@
+{
+ "figure": "chromatography",
+ "site": "chemistry",
+ "slug": "chromatography",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw up to 6 inks",
+   "class": "core",
+   "evidence": "changes:n=5",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Name each ink",
+   "class": "control",
+   "evidence": "changes:ink1_name=Pen 1",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Give each ink up to 5 colors",
+   "class": "core",
+   "evidence": "changes:ink2_spots=red 4.4, blue 6, green 3, pink 1.5, brown 7",
+   "note": "Checked by hand: five spots drawn."
+  },
+  {
+   "id": "cap-01d",
+   "text": "Set how far each color traveled from the origin line",
+   "class": "core",
+   "evidence": "changes:ink2_spots=red 3",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Set how far the solvent front is above the origin line",
+   "class": "core",
+   "evidence": "changes:front=7",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Show the paper after the solvent has run",
+   "class": "control",
+   "evidence": "changes:before=true",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Show the paper before and after, side by side",
+   "class": "control",
+   "evidence": "changes:before=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the beaker setup with a glass rod and solvent",
+   "class": "control",
+   "evidence": "changes:beaker=false",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Draw the paper alone",
+   "class": "control",
+   "evidence": "changes:beaker=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Mark the distances from the origin line to each spot and to the solvent front, in cm",
+   "class": "control",
+   "evidence": "changes:measurements=true",
+   "note": "Checked by hand: spot distances and the 8.0 cm front arrow."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Label the glass rod, solvent front, pencil (origin) line and solvent",
+   "class": "control",
+   "evidence": "changes:parts=true",
+   "note": "Checked by hand: Rod, Solvent front, Origin line, Solvent."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Label the paper and the beaker",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours’ part labels do not name the paper or the beaker."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Which pen?",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Print an answer key with each spot’s Rf value",
+   "class": "version",
+   "evidence": "changes:show_answers=true",
+   "note": ""
+  }
+ ]
+}

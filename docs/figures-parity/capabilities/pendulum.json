@@ -1,0 +1,133 @@
+{
+ "figure": "pendulum",
+ "site": "physics",
+ "slug": "pendulum",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw the Swing: the bob at release, at the bottom and at the far side",
+   "class": "core",
+   "evidence": "changes:picture=One bob",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw one bob",
+   "class": "core",
+   "evidence": "changes:picture=One bob",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the angle from the vertical, 5° to 75°",
+   "class": "core",
+   "evidence": "changes:angle=50",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Choose which side the bob is released on",
+   "class": "control",
+   "evidence": "changes:side=Left",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw the bob’s dashed path",
+   "class": "control",
+   "evidence": "changes:show_path=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Mark the angle θ, with its own label",
+   "class": "control",
+   "evidence": "changes:show_angle=false + changes:angle_label=α",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Mark the string length L, with its own label",
+   "class": "control",
+   "evidence": "changes:length_label=ℓ",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Mark the height h above the lowest point, with its own label",
+   "class": "control",
+   "evidence": "changes:show_height=false + changes:height_label=Δh",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Put a blank line in place of a mark’s label for students",
+   "class": "version",
+   "evidence": "changes:angle_label=- + changes:height_label=-",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Letter the Swing’s three bobs A, B and C",
+   "class": "control",
+   "evidence": "changes:show_letters=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Edit each of the letters",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours draws fixed A, B, C."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw the velocity at the bottom of the Swing",
+   "class": "control",
+   "evidence": "changes:show_velocity=true",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label the velocity",
+   "class": "control",
+   "evidence": "changes:{\"show_velocity\":true,\"velocity_label\":\"v_max\"}",
+   "note": "Token passes on the arrow alone; checked by hand that the label changes the render."
+  },
+  {
+   "id": "cap-06a",
+   "text": "On one bob, draw the tension and the weight",
+   "class": "core",
+   "evidence": "changes:{\"picture\":\"One bob\",\"forces\":\"Weight and tension\"}",
+   "note": "Token passes on the picture alone; checked by hand that the forces change the one-bob render."
+  },
+  {
+   "id": "cap-06b",
+   "text": "On one bob, add the weight’s components along the string and the path",
+   "class": "core",
+   "evidence": "changes:{\"picture\":\"One bob\",\"forces\":\"Components\"}",
+   "note": "Token passes on the picture alone; checked by hand that the components change the one-bob render."
+  },
+  {
+   "id": "cap-07a",
+   "text": "Label the bob",
+   "class": "control",
+   "evidence": "changes:bob_label=2 kg",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=A simple pendulum",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Color the figure for slides",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  }
+ ]
+}

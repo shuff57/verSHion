@@ -1,0 +1,189 @@
+{
+ "figure": "spring",
+ "site": "physics",
+ "slug": "spring",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Hang the spring from a ceiling",
+   "class": "core",
+   "evidence": "changes:orientation=Horizontal",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Lay the spring horizontal from a wall, with the object on a floor",
+   "class": "core",
+   "evidence": "changes:orientation=Horizontal",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw one spring on its own",
+   "class": "core",
+   "evidence": "changes:picture=One spring",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw the spring before and after it is loaded",
+   "class": "core",
+   "evidence": "changes:picture=One spring",
+   "note": "The opening state; the token shows the switch that reaches it is live."
+  },
+  {
+   "id": "cap-02c",
+   "text": "Draw three positions for simple harmonic motion",
+   "class": "core",
+   "evidence": "changes:picture=Three positions",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Put two or three springs in series",
+   "class": "core",
+   "evidence": "changes:arrangement=2 in series + changes:arrangement=3 in series",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Put two or three springs in parallel",
+   "class": "core",
+   "evidence": "changes:arrangement=2 in parallel + changes:arrangement=3 in parallel",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Number the springs k₁, k₂, k₃ instead of labeling each k",
+   "class": "control",
+   "evidence": "",
+   "note": "Ours writes the one spring label on every spring; no numbering."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Set the extension, up to the natural length again",
+   "class": "core",
+   "evidence": "changes:extension=80",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Squash a spring on a floor by up to half its natural length",
+   "class": "core",
+   "evidence": "changes:{\"orientation\":\"Horizontal\",\"extension\":-30}",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Set the amplitude A in the three-position picture",
+   "class": "core",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"amplitude\":60}",
+   "note": "Token passes on the picture alone; checked by hand that amplitude changes the three-position render."
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw the coils as a zigzag or as loops",
+   "class": "control",
+   "evidence": "changes:coil=Loops",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Hang a block, a ball or slotted masses",
+   "class": "control",
+   "evidence": "changes:shape=Ball + changes:shape=Slotted masses",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Give the object its own label",
+   "class": "control",
+   "evidence": "changes:object_label=2 kg",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Mark the extension as a dimension line",
+   "class": "control",
+   "evidence": "changes:show_extension=false",
+   "note": "On at the opening state."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Mark the natural length as a dimension line",
+   "class": "control",
+   "evidence": "changes:show_natural=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Draw a dashed equilibrium line",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"show_equilibrium\":false}",
+   "note": "Ours draws the equilibrium guide only in Three positions. Token passes on the picture alone; checked by hand that turning the guide off changes the three-position render."
+  },
+  {
+   "id": "cap-07d",
+   "text": "Draw an applied force pulling or pushing on the object",
+   "class": "control",
+   "evidence": "changes:show_applied=true + changes:{\"show_applied\":true,\"orientation\":\"Horizontal\",\"extension\":-30}",
+   "note": "Checked by hand: a compressed spring gets a pushing arrow."
+  },
+  {
+   "id": "cap-08a",
+   "text": "In three positions, draw the velocity at equilibrium",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Velocity\"}",
+   "note": "Token passes on the picture alone; checked by hand that Velocity only differs from Both."
+  },
+  {
+   "id": "cap-08b",
+   "text": "In three positions, draw the acceleration at each end",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Acceleration\"}",
+   "note": "Token passes on the picture alone; the default Both draws it."
+  },
+  {
+   "id": "cap-08c",
+   "text": "In three positions, choose which way the object is moving",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_direction\":\"Toward support\"}",
+   "note": "Token passes on the picture alone; checked by hand that the direction changes the three-position render."
+  },
+  {
+   "id": "cap-09a",
+   "text": "Write your own text in any label",
+   "class": "control",
+   "evidence": "changes:spring_label=k₀ + changes:extension_label=Δx",
+   "note": ""
+  },
+  {
+   "id": "cap-09b",
+   "text": "Put a blank line in place of a label for students",
+   "class": "version",
+   "evidence": "changes:object_label=- + changes:spring_label=-",
+   "note": "A dash in a label field draws a blank line."
+  },
+  {
+   "id": "cap-09c",
+   "text": "Leave a label off",
+   "class": "control",
+   "evidence": "changes:spring_label=none + changes:extension_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-09d",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Hooke’s law",
+   "note": ""
+  },
+  {
+   "id": "cap-09e",
+   "text": "Color the figure for slides",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  }
+ ]
+}

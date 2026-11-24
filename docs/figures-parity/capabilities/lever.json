@@ -1,0 +1,147 @@
+{
+ "figure": "lever",
+ "site": "physics",
+ "slug": "lever",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Choose a class 1, 2 or 3 lever (fulcrum, load or effort in the middle)",
+   "class": "core",
+   "evidence": "changes:class=Class 2 + changes:class=Class 3",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the effort arm and the load arm, drawn to scale",
+   "class": "core",
+   "evidence": "changes:effort_arm=2 + changes:load_arm=1",
+   "note": "Ours clamps very unequal arms and says “Arm lengths are schematized for legibility.”"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Measure the arms in cm, m, in or ft",
+   "class": "control",
+   "evidence": "changes:length_units=cm",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Set the load as a force in N or lb",
+   "class": "core",
+   "evidence": "changes:load=500 + changes:load_units=lbf",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Give the load as a mass in kg or g",
+   "class": "control",
+   "evidence": "changes:load_units=kg",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Draw the load as a block on the beam or as a force arrow",
+   "class": "control",
+   "evidence": "changes:load_shape=Force arrow",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Work out the effort from the load and the arms, to 3 significant figures",
+   "class": "core",
+   "evidence": "changes:show_answers=true",
+   "note": "Ours writes the effort value only with Show answers on; the student copy has a blank line there."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Label the load and each arm with its value",
+   "class": "control",
+   "evidence": "changes:load=500 + changes:effort_arm=2",
+   "note": "The value labels are the opening state; the tokens show they follow the values."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write your own text, such as F_E or ?, in the load, effort or arm labels",
+   "class": "control",
+   "evidence": "changes:load_label=F_L + changes:effort_label=F_E + changes:effort_arm_label=?",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Put a blank line in the load, effort or arm labels for students",
+   "class": "version",
+   "evidence": "changes:load_label=- + changes:load_arm_label=-",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Leave the load, effort or arm labels off",
+   "class": "control",
+   "evidence": "changes:load_label=none + changes:effort_label=none + changes:effort_arm_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Name the effort, load and fulcrum",
+   "class": "control",
+   "evidence": "changes:fulcrum_name=Pivot",
+   "note": "Names are written at the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Put a blank line in place of a name for students to label",
+   "class": "version",
+   "evidence": "changes:fulcrum_name=- + changes:load_name=- + changes:effort_name=-",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Leave a name off",
+   "class": "control",
+   "evidence": "changes:fulcrum_name=none + changes:effort_name=none",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Turn the two arms’ dimension lines on or off",
+   "class": "control",
+   "evidence": "changes:show_arms=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=A seesaw",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Print an answer key with the mechanical advantage under the figure",
+   "class": "version",
+   "evidence": "changes:show_answers=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Set the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "Mirror the lever left to right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08e",
+   "text": "Color the figure for slides",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  }
+ ]
+}
