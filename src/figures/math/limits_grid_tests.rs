@@ -259,35 +259,58 @@ fn the_student_copy_leaves_off_the_asymptote_s_equation() {
     assert!(words_in(&svg(&with(on)), "labels").contains("y = 2"));
 }
 
-/// Check 1: each kind label sits nearer its own break's x than any other break's.
+/// Checks 1 and 2: each kind label's box is nearer its own break's marks than any other break's (the hole at (1, 2); the
+/// jump at 2 from 3 to −1; the jump at 4 from 1 to −2; the infinite break along x = 5), and no leader runs along a gridline.
 #[test]
 fn kind_labels_sit_by_their_own_break() {
     for size in ["Medium", "Large"] {
         let kv = json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "label_size": size});
         let s = svg(&with(kv.clone()));
         let g = super::grid_layout(&with(kv));
-        let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
+        let (sx, sy) = (|x: f64| g.ml + (x - g.x0) * g.ux, |y: f64| g.mt + g.ph - (y - g.y0) * g.uy);
+        let fs = 15.0 * if size == "Large" { 1.4 } else { 1.0 };
         let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
         let body = &body[..body.find("</g>").unwrap()];
-        // (a label with no clear room on the plot is written under it: "On the graph: x = 1 (removable)")
         let under = words_in(&s, "block");
-        // (each label's centre: its text's x plus half its width, read from the drawn text and its own words)
-        let mut seen = vec![];
+        let marks: Vec<(f64, &str, Vec<(f64, f64)>)> = vec![(1.0, "removable", vec![(1.0, 2.0)]), (2.0, "jump", vec![(2.0, 3.0), (2.0, -1.0)]), (4.0, "jump", vec![(4.0, 1.0), (4.0, -2.0)]), (5.0, "infinite", (0..=24).map(|k| (5.0, -6.0 + k as f64 * 0.5)).collect())];
+        let dist = |b: [f64; 4], ms: &[(f64, f64)]| ms.iter().map(|(x, y)| { let (px, py) = (sx(*x), sy(*y)); let dx = (b[0] - px).max(px - b[2]).max(0.0); let dy = (b[1] - py).max(py - b[3]).max(0.0); dx.hypot(dy) }).fold(f64::MAX, f64::min);
+        let mut placed: Vec<f64> = vec![];
+        // (the leaders: start, end)
+        let leaders: Vec<((f64, f64), (f64, f64))> = body.split("<line").skip(1).filter(|p| p.contains(r#"data-lim="leader""#)).map(|part| {
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            ((num("x1"), num("y1")), (num("x2"), num("y2")))
+        }).collect();
         for part in body.split("<text").skip(1) {
             if part.contains(r##"fill="#fff""##) { continue; }
-            let x: f64 = part.split(" x=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
-            let word: String = { let mut w = String::new(); let mut inside = true; for c in part.chars() { match c { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(c), _ => {} } if w.ends_with("removable") || w.ends_with("jump") || w.ends_with("infinite") { break; } } w.trim_start_matches(|c: char| c != 'r' && c != 'j' && c != 'i').to_string() };
-            let cx = x + super::limits::tw(&word, 15.0 * if size == "Large" { 1.4 } else { 1.0 }) / 2.0;
-            seen.push((word, cx));
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            let (x, y) = (num("x"), num("y"));
+            let word: String = { let mut w = String::new(); let mut inside = true; for c in part.chars() { match c { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(c), _ => {} } } w.trim().to_string() };
+            let b = [x, y - 0.75 * fs, x + super::limits::tw(&word, fs), y + 0.25 * fs];
+            // (a label on a leader belongs to the mark its leader starts at)
+            let lead = leaders.iter().find(|(_, e)| e.0 >= b[0] - 6.0 && e.0 <= b[2] + 6.0 && e.1 >= b[1] - 6.0 && e.1 <= b[3] + 6.0);
+            let b = match lead { Some((st, _)) => [st.0, st.1, st.0, st.1], None => b };
+            let nearest = marks.iter().min_by(|a, c| dist(b, &a.2).partial_cmp(&dist(b, &c.2)).unwrap()).unwrap();
+            assert_eq!(nearest.1, word, "{size}: the {word} label {b:?} is nearest the {} at x = {}", nearest.1, nearest.0);
+            placed.push(nearest.0);
         }
-        let breaks = [(1.0, "removable"), (2.0, "jump"), (4.0, "jump"), (5.0, "infinite")];
-        let mut jumps = vec![];
-        for (word, cx) in &seen {
-            let nearest = breaks.iter().min_by(|a, b| (cx - sx(a.0)).abs().partial_cmp(&(cx - sx(b.0)).abs()).unwrap()).unwrap();
-            assert_eq!(&nearest.1, word, "{size}: a {word} label at {cx} is nearest the {} at x = {}", nearest.1, nearest.0);
-            if word == "jump" { jumps.push(nearest.0); }
+        for (x, word) in [(1.0, "removable"), (2.0, "jump"), (4.0, "jump"), (5.0, "infinite")] {
+            if !placed.contains(&x) { assert!(under.contains(&format!("x = {x} ({word})")), "{size}: the {word} at {x} is neither on the plot nor under it: {placed:?} / {under}"); }
         }
-        for (x, word) in [(2.0, "jump"), (4.0, "jump")] { if !jumps.contains(&x) { assert!(under.contains(&format!("x = {x} ({word})")), "{size}: the {word} at {x} is neither on the plot nor under it: {seen:?} / {under}"); } }
-        for (x, word) in [(1.0, "removable"), (5.0, "infinite")] { if !seen.iter().any(|w| w.0 == word) { assert!(under.contains(&format!("x = {x} ({word})")), "{size}: {word} missing: {under}"); } }
+        for part in body.split("<line").skip(1).filter(|p| p.contains(r#"data-lim="leader""#)) {
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            let (dx, dy) = ((num("x1") - num("x2")).abs(), (num("y1") - num("y2")).abs());
+            assert!(dx >= 0.25 * dy && dy >= 0.25 * dx, "{size}: a leader runs along a gridline");
+        }
+    }
+}
+
+/// Renders the kind-label example to PNG for a look (GRID_LIM_OUT, default /tmp/cgl).
+#[test]
+#[ignore]
+fn dump_kind_label_pngs() {
+    let dir = std::env::var("GRID_LIM_OUT").unwrap_or_else(|_| "/tmp/cgl".into());
+    for size in ["Medium", "Large"] {
+        let s = svg(&with(json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true, "label_size": size})));
+        std::fs::write(format!("{dir}/kinds_{size}.png"), crate::figures::to_png(&s, 1.0).unwrap()).unwrap();
     }
 }

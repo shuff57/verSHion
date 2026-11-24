@@ -306,8 +306,44 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     if !unlabelled.is_empty() { lnotes.push(format!("Not labelled on the graph (on the window's edge or off the plot; the key names them when you ask where f is not continuous): {}", unlabelled.join(", ").replace('-', "\u{2212}"))); }
     let mut labels_svg = String::new();
     let mut beside: Vec<String> = vec![];
+    // Each break's marks, in px: its one-sided limits' heights and its value at x (the circles and dots drawn there), or its
+    // whole upright for an infinite one. A kind label beside its break is accepted only where its box is nearer its own
+    // break's marks than any other break's, by a margin; one on a leader only where the leader slants clearly (never along a
+    // gridline). Otherwise the placer, shared with the limits figure, is asked again with the refused spot blocked.
+    let marks_of = |d: &Disc| -> Vec<(Pt, Pt)> {
+        let x = sx(d.x);
+        if d.kind == "infinite" { return vec![((x, rect[1]), (x, rect[3]))]; }
+        [d.left.num(), d.right.num(), d.value.num()].into_iter().flatten().filter(|y| inside_y(*y)).map(|y| ((x, sy(y)), (x, sy(y)))).collect()
+    };
+    let disc_marks: Vec<(String, Vec<(Pt, Pt)>)> = discs.iter().filter(|d| d.kind != UNSURE).map(|d| (d.kind.to_string(), marks_of(d))).collect();
+    let mark_d = |ms: &[(Pt, Pt)], b: Bx| ms.iter().map(|(a, c)| seg_box_dist(*a, *c, b)).fold(f64::MAX, f64::min);
+    let owner = |r: &Req| -> Option<usize> { discs.iter().filter(|d| d.kind != UNSURE).position(|d| (sx(d.x) - r.anchor.0).abs() < 0.5) };
+    let acceptable = |kind: char, r: &Req, spot: &Spot| -> bool {
+        // (a leader ties the label to its own mark, wherever the label sits, so long as it can be seen: clearly slanting, at
+        // least about 14° off upright and level, never along a gridline)
+        let c = match spot { Spot::Beside(c) => *c, Spot::Leader(_, s, e) => { let (dx, dy) = ((s.0 - e.0).abs(), (s.1 - e.1).abs()); return dx >= 0.25 * dy && dy >= 0.25 * dx; } Spot::Off => return true };
+        if kind != 'k' { return true; }
+        let Some(i) = owner(r) else { return true };
+        let b = label_box_for(c, &r.text, size);
+        let own = mark_d(&disc_marks[i].1, b);
+        disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, b) >= own + 6.0)
+    };
     for (kind, r) in &reqs {
-        match place(&mut board, r, size) {
+        let mut blocked: Vec<Bx> = vec![];
+        let spot = loop {
+            let (nb, ns) = (board.boxes.len(), board.segs.len());
+            let sp = place(&mut board, r, size);
+            if acceptable(*kind, r, &sp) || blocked.len() >= 40 { break if acceptable(*kind, r, &sp) { sp } else { board.boxes.truncate(nb); board.segs.truncate(ns); Spot::Off }; }
+            board.boxes.truncate(nb);
+            board.segs.truncate(ns);
+            let c = match &sp { Spot::Beside(c) | Spot::Leader(c, _, _) => *c, Spot::Off => unreachable!() };
+            let b = label_box_for(c, &r.text, size);
+            blocked.push(b);
+            board.boxes.push(b);
+        };
+        // (the refused spots are no obstacle to the next label)
+        for b in &blocked { if let Some(k) = board.boxes.iter().position(|o| o == b) { board.boxes.remove(k); } }
+        match spot {
             Spot::Beside(c) => labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true)),
             Spot::Leader(c, s, e) => {
                 // (on a white casing, so a leader along a gridline still reads as a leader)
