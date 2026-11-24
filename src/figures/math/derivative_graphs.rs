@@ -762,6 +762,8 @@ impl Model {
     }
     /// f at x, where x is known exactly when `xe` is given: there f's value is derived exactly (√(2 − x²) at x = √2 is 0,
     /// though the float nearest √2 is past the end of the domain, where the float form has none).
+    /// x is inside the radius of a removable hole's local series, on that hole's piece.
+    pub(crate) fn local_covers(&self, x: f64) -> bool { self.locals.iter().any(|l| (x - l.x).abs() <= l.radius && self.piece_at(x) == Some(l.pi)) }
     pub(crate) fn f_at(&self, x: f64, xe: Option<&XV>) -> Option<f64> {
         if let (Mode::F, Some(xe)) = (&self.mode, xe) {
             if let Some(pi) = self.piece_at(x) {
@@ -2044,30 +2046,39 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             }
             other => other,
         };
-        // (a value steady from one float to the next can still be lost to cancellation, as (eˣ − 1)/x″ at 0.00001 beside its
-        // removable hole, 0.25 for 1/3: checked against a central difference of the derivative below it, taken where the
-        // floats are sound (a thousandth away, and half that, extrapolated). Where the two differences agree with each other
-        // but not with the value, it is not written: it is undecided here. Across a kink or a cusp the differences disagree
-        // with each other, and the check says nothing.)
-        // (a value can still be lost to cancellation though it is steady from one float to the next, or though its exact form
-        // is right: (eˣ − 1)/x″ at 0.00001 is exactly −2·10¹⁵ + 1999980000100000·e^(1/100000), whose float is 0.25 for 1/3.
-        // It is checked against a central difference of the derivative below it, taken where the floats are sound (a
-        // thousandth away, and half that, extrapolated). Where the two differences agree with each other but not with the
-        // value, the model's own value is written if it agrees with them (its local series beside a hole), and otherwise
-        // nothing: it is undecided here. Across a kink or a cusp the differences disagree with each other, and the check says
-        // nothing.)
+        // (an exact rational value is exact: f′(1.0000001) = 1 for |x − 1| beside its corner is never questioned)
+        let rational = ve.as_ref().is_some_and(|e| e.rational().is_some());
         let (v, ve) = match v {
-            Some(w) if fi > 0 && !settled.get() && !proven_zero && !m.is_isolated(t.v) => {
-                let h1 = 1e-3 * (1.0 + t.v.abs());
-                let cd = |h: f64| -> Option<f64> { Some((m.d(fi - 1, t.v + h)? - m.d(fi - 1, t.v - h)?) / (2.0 * h)) };
-                match (cd(h1), cd(h1 / 2.0)) {
-                    (Some(d1), Some(d2)) => {
-                        let fd = (4.0 * d2 - d1) / 3.0;
-                        let fd_err = (d2 - d1).abs();
-                        let tol = |u: f64| 1e-6 * (1.0 + u.abs()) + 10.0 * fd_err;
-                        let sound = fd.is_finite() && fd_err <= 1e-4 * (1.0 + fd.abs());
-                        if sound && (w - fd).abs() > tol(w) {
-                            match m.d(fi, t.v).filter(|dv| (dv - fd).abs() <= tol(*dv)) {
+            // (inside a removable hole's local series, f and its derivatives are the series' own, as on the curves: beside
+            // the hole the typed formula, and an exact form of it (−2·10¹⁵ + 1999980000100000·e^(1/100000) for (eˣ − 1)/x″ at
+            // 0.00001), lose their digits to cancellation; the series, checked against the formula where both are sound,
+            // does not. So (1 − cos x)/x² reads f(0.0000001) ≈ 0.5, (eˣ − e⁻ˣ)/(2x) reads f′(0.00001) ≈ 3.3333 × 10⁻⁶, and a
+            // hole at 100 reads as one at 0.)
+            Some(w) if !rational && !m.is_isolated(t.v) && m.local_covers(t.v) => match m.d(fi, t.v) { Some(dv) => (Some(dv), None), None => (Some(w), ve) },
+            // (elsewhere a value can still be lost to cancellation: it is checked against differences of the derivative below
+            // it, a thousandth, half and a quarter of that away (central, or one-sided beside the edge of the domain),
+            // extrapolated. Only where the three steps agree is the difference sound; then a value that disagrees with it,
+            // by more than a millionth of either, is replaced by the model's own value if that agrees, and otherwise not
+            // written: undecided. Across a kink or a cusp the steps disagree and the check says nothing.)
+            Some(w) if fi > 0 && !rational && !settled.get() && !proven_zero && !m.is_isolated(t.v) => {
+                let g = |y: f64| m.d(fi - 1, y);
+                let x = t.v;
+                let dh = |h: f64| -> Option<f64> {
+                    match (g(x + h), g(x - h)) {
+                        (Some(a), Some(c)) => Some((a - c) / (2.0 * h)),
+                        // (one side only: from three points on it, not from x itself)
+                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(sd * (-2.5 * g(x + sd * h)? + 4.0 * g(x + 2.0 * sd * h)? - 1.5 * g(x + 3.0 * sd * h)?) / h) }
+                    }
+                };
+                let h1 = 1e-3;
+                match (dh(h1), dh(h1 / 2.0), dh(h1 / 4.0)) {
+                    (Some(d1), Some(d2), Some(d3)) => {
+                        let (f12, f23) = ((4.0 * d2 - d1) / 3.0, (4.0 * d3 - d2) / 3.0);
+                        let fd_err = (f12 - f23).abs();
+                        let sound = f23.is_finite() && fd_err <= 1e-6 * (1.0 + f23.abs());
+                        let tol = |u: f64| 1e-6 * u.abs().max(f23.abs()) + 10.0 * fd_err + 1e-11;
+                        if sound && (w - f23).abs() > tol(w) {
+                            match m.d(fi, t.v).filter(|dv| (dv - f23).abs() <= tol(*dv)) {
                                 Some(dv) => (Some(dv), None),
                                 None => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
                             }

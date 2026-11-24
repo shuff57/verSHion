@@ -63,14 +63,18 @@ fn the_tracer_beside_an_irrational_base_zero_never_says_absent() {
 /// the note never speaks of a root.
 #[test]
 fn the_tracer_beside_a_removable_hole_writes_no_lost_value() {
-    let cases: [(&str, &str, f64, f64); 9] = [
+    let cases: Vec<(&str, &str, f64, f64)> = vec![
         ("(e^x - 1)/x", "0.00001", 0.5, 1.0 / 3.0), ("(e^x - 1)/x", "0.000001", 0.5, 1.0 / 3.0), ("(e^x - 1)/x", "0.0000001", 0.5, 1.0 / 3.0),
         ("ln(1 + x)/x", "0.00001", -0.5, 2.0 / 3.0), ("ln(1 + x)/x", "0.0000001", -0.5, 2.0 / 3.0),
         ("(e^x - 1 - x)/x^2", "0.00001", 1.0 / 6.0, 1.0 / 12.0), ("(sqrt(1 + x) - 1)/x", "0.00001", -0.125, 0.125),
         ("(1 - cos(x))/x^2", "0.0001", 0.0, -1.0 / 12.0), ("sin(x)/x", "0.0000001", 0.0, -1.0 / 3.0),
+        // check 17: small values ((eˣ − e⁻ˣ)/(2x) = 1 + x²/6 + …, f′ = x/3), holes far from 0, f itself beside a hole
+        ("(e^x - e^(-x))/(2x)", "0.00001", 0.00001 / 3.0, 1.0 / 3.0), ("(e^x - e^(-x))/(2x)", "0.000001", 0.000001 / 3.0, 1.0 / 3.0),
+        ("(e^(x - 100) - 1)/(x - 100)", "100.00001", 0.5, 1.0 / 3.0), ("ln(1 + (x - 50))/(x - 50)", "50.0000001", -0.5, 2.0 / 3.0),
     ];
     for (fx, tx, d1, d2) in cases {
-        let p = with(&[("f", s(fx)), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let c = typed(tx).unwrap().v.round();
+        let p = with(&[("f", s(fx)), ("xmin", f(c - 2.0)), ("xmax", f(c + 2.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
         let out = build(&p);
         let reads: Vec<String> = out.labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
         for (k, want) in [(1usize, d1), (2, d2)] {
@@ -81,9 +85,34 @@ fn the_tracer_beside_a_removable_hole_writes_no_lost_value() {
             let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
             let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
             // (right to the places written: 0.33 for 1/3 is right, 0.25 is not)
-            let places = v.trim().split('.').nth(1).map_or(0, |d| d.chars().take_while(|c| c.is_ascii_digit()).count());
-            assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) + 1e-9, "{fx} at {tx}: derivative {k} written {r}, by series {want}");
+            // (right to the places written: 0.33 for 1/3 is right, 0.25 is not; a value in powers of ten to its significant figures)
+            let places = v.trim().split('e').next().unwrap().split('.').nth(1).map_or(0, |d| d.chars().take_while(|c| c.is_ascii_digit()).count());
+            let unit = if v.contains('e') { 10f64.powi(v.split('e').nth(1).unwrap().trim().parse::<i32>().unwrap_or(0)) } else { 1.0 };
+            assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit + 1e-12, "{fx} at {tx}: derivative {k} written {r}, by series {want}");
         }
         assert!(out.notes.iter().all(|n| !n.contains("root")), "{fx} at {tx}: {:?}", out.notes);
+    }
+}
+
+/// Check 17: f itself beside a removable hole is the series' value, and right exact values beside a corner are kept.
+/// (1 − cos x)/x² = 1/2 − x²/24 + …; (sin x − x)/x³ = −1/6 + …; |x − 1| has f′ = 1 right of 1; (x − 1)^(2/3) has
+/// f′ = (2/3)(x − 1)^(−1/3) = 2000/3 at 1.000000001.
+#[test]
+fn f_beside_a_hole_and_exact_values_beside_a_corner() {
+    for (fx, tx, want) in [("(1 - cos(x))/x^2", "0.0000001", 0.5), ("(sin(x) - x)/x^3", "0.0000001", -1.0 / 6.0)] {
+        let p = with(&[("f", s(fx)), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("tracer_x", s(tx))]);
+        let r = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).next().unwrap();
+        let v: f64 = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap().replace('\u{2212}', "-").trim().parse().unwrap_or_else(|_| panic!("{fx}: {r}"));
+        // (right to the places written)
+        let places = r.rsplit('.').next().map_or(0, |d| d.chars().take_while(|c| c.is_ascii_digit()).count());
+        assert!((v - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) + 1e-12, "{fx} at {tx}: {r}");
+    }
+    for (fx, tx, want) in [("abs(x - 1)", "1.0000001", "1"), ("abs(x - 10)", "10.000001", "1"), ("(x - 1)^(2/3)", "1.000000001", "2000/3")] {
+        let x = typed(tx).unwrap().v;
+        let p = with(&[("f", s(fx)), ("xmin", f(x - 2.0)), ("xmax", f(x + 2.0)), ("tracer_x", s(tx))]);
+        let out = build(&p);
+        let r = out.labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).nth(1).unwrap();
+        assert!(r.ends_with(&format!("= {want}")), "{fx} at {tx}: {r}");
+        assert!(out.notes.iter().all(|n| !n.contains("cannot be decided")), "{fx} at {tx}: {:?}", out.notes);
     }
 }
