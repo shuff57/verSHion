@@ -56,3 +56,34 @@ fn the_tracer_beside_an_irrational_base_zero_never_says_absent() {
         for r in &reads[1..] { assert!(!r.contains("does not exist"), "{fx} at {tx}: {r}"); }
     }
 }
+
+/// Check 16: beside a removable hole the tracer writes no value its floats have lost. (eˣ − 1)/x = 1 + x/2 + x²/6 + …, so
+/// f′ = 1/2 + x/3 + … and f″ = 1/3 + x/4 + …; ln(1 + x)/x = 1 − x/2 + x²/3 − …, f″ = 2/3 − …; (eˣ − 1 − x)/x² = 1/2 + x/6 +
+/// …, f′ = 1/6 + …; (√(1 + x) − 1)/x = 1/2 − x/8 + …, f″ = 1/8 + …. Each reading is the value to 3 places or undecided, and
+/// the note never speaks of a root.
+#[test]
+fn the_tracer_beside_a_removable_hole_writes_no_lost_value() {
+    let cases: [(&str, &str, f64, f64); 9] = [
+        ("(e^x - 1)/x", "0.00001", 0.5, 1.0 / 3.0), ("(e^x - 1)/x", "0.000001", 0.5, 1.0 / 3.0), ("(e^x - 1)/x", "0.0000001", 0.5, 1.0 / 3.0),
+        ("ln(1 + x)/x", "0.00001", -0.5, 2.0 / 3.0), ("ln(1 + x)/x", "0.0000001", -0.5, 2.0 / 3.0),
+        ("(e^x - 1 - x)/x^2", "0.00001", 1.0 / 6.0, 1.0 / 12.0), ("(sqrt(1 + x) - 1)/x", "0.00001", -0.125, 0.125),
+        ("(1 - cos(x))/x^2", "0.0001", 0.0, -1.0 / 12.0), ("sin(x)/x", "0.0000001", 0.0, -1.0 / 3.0),
+    ];
+    for (fx, tx, d1, d2) in cases {
+        let p = with(&[("f", s(fx)), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let out = build(&p);
+        let reads: Vec<String> = out.labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+        for (k, want) in [(1usize, d1), (2, d2)] {
+            let r = &reads[k];
+            if r.contains("cannot be decided") { continue; }
+            assert!(!r.contains("does not exist"), "{fx} at {tx}: {r}");
+            let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-").replace(" \u{d7} 10", "e").replace('\u{207b}', "-");
+            let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
+            let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+            // (right to the places written: 0.33 for 1/3 is right, 0.25 is not)
+            let places = v.trim().split('.').nth(1).map_or(0, |d| d.chars().take_while(|c| c.is_ascii_digit()).count());
+            assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) + 1e-9, "{fx} at {tx}: derivative {k} written {r}, by series {want}");
+        }
+        assert!(out.notes.iter().all(|n| !n.contains("root")), "{fx} at {tx}: {:?}", out.notes);
+    }
+}

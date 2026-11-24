@@ -2044,6 +2044,40 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             }
             other => other,
         };
+        // (a value steady from one float to the next can still be lost to cancellation, as (eˣ − 1)/x″ at 0.00001 beside its
+        // removable hole, 0.25 for 1/3: checked against a central difference of the derivative below it, taken where the
+        // floats are sound (a thousandth away, and half that, extrapolated). Where the two differences agree with each other
+        // but not with the value, it is not written: it is undecided here. Across a kink or a cusp the differences disagree
+        // with each other, and the check says nothing.)
+        // (a value can still be lost to cancellation though it is steady from one float to the next, or though its exact form
+        // is right: (eˣ − 1)/x″ at 0.00001 is exactly −2·10¹⁵ + 1999980000100000·e^(1/100000), whose float is 0.25 for 1/3.
+        // It is checked against a central difference of the derivative below it, taken where the floats are sound (a
+        // thousandth away, and half that, extrapolated). Where the two differences agree with each other but not with the
+        // value, the model's own value is written if it agrees with them (its local series beside a hole), and otherwise
+        // nothing: it is undecided here. Across a kink or a cusp the differences disagree with each other, and the check says
+        // nothing.)
+        let (v, ve) = match v {
+            Some(w) if fi > 0 && !settled.get() && !proven_zero && !m.is_isolated(t.v) => {
+                let h1 = 1e-3 * (1.0 + t.v.abs());
+                let cd = |h: f64| -> Option<f64> { Some((m.d(fi - 1, t.v + h)? - m.d(fi - 1, t.v - h)?) / (2.0 * h)) };
+                match (cd(h1), cd(h1 / 2.0)) {
+                    (Some(d1), Some(d2)) => {
+                        let fd = (4.0 * d2 - d1) / 3.0;
+                        let fd_err = (d2 - d1).abs();
+                        let tol = |u: f64| 1e-6 * (1.0 + u.abs()) + 10.0 * fd_err;
+                        let sound = fd.is_finite() && fd_err <= 1e-4 * (1.0 + fd.abs());
+                        if sound && (w - fd).abs() > tol(w) {
+                            match m.d(fi, t.v).filter(|dv| (dv - fd).abs() <= tol(*dv)) {
+                                Some(dv) => (Some(dv), None),
+                                None => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
+                            }
+                        } else { (Some(w), ve) }
+                    }
+                    _ => (Some(w), ve),
+                }
+            }
+            other => (other, ve),
+        };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
     // (f″ where f′ does not exist does not exist either; where f′ is only undecided, f″ is worked out on its own)
@@ -2423,7 +2457,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         if u.iter().any(|u| *u) {
             let which = if u[1] && u[2] { format!("{name}{PRIME} and {name}{DPRIME}") } else if u[1] { format!("{name}{PRIME}") } else { format!("{name}{DPRIME}") };
             let advice = if model.as_ref().is_some_and(|m| m.pieces.iter().any(|pc| domain::root_product(&pc.e))) { ": typed as a single power (x^(4/3) for x\u{b7}x^(1/3)) it can be decided" } else { "" };
-            notes.push(format!("{which} at x = {} cannot be decided exactly where the root's base is 0, so it is not written{advice}", t.show));
+            notes.push(format!("{which} at x = {} cannot be decided here (the arithmetic loses its digits at this x), so it is not written{advice}", t.show));
         }
     }
     // ── draw the marks (guides under the dots) ──
