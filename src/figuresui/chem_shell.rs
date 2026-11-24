@@ -764,7 +764,9 @@ impl Workspace {
                 ui.ctx().copy_text(l);
                 self.toast = Some(("Link copied. Share it, and anyone who opens it sees this exact figure.".into(), false));
             }
-            share.context_menu(|ui| {
+            // (closes on a click outside or Escape only: egui's default shuts a menu on any click inside it,
+            // which closed it on the paste box before a link could be pasted. The actions close it themselves.)
+            egui::Popup::context_menu(&share).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                 ui.set_min_width(300.0);
                 ui.label(theme::muted("Share link works offline: the link itself holds the settings.").size(11.0));
                 ui.separator();
@@ -774,7 +776,11 @@ impl Workspace {
                 // this app's extras live here, so the toolbar itself matches the reference's
                 if !shell {
                     ui.separator();
+                    let handles = self.hide_handles;
                     self.chem_extras(ui, &mut act);
+                    if !matches!(act, Act::None) || self.hide_handles != handles {
+                        ui.close();
+                    }
                 }
             });
             if !narrow {
