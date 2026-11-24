@@ -25,11 +25,12 @@ pub fn params() -> Vec<ParamDef> {
         ParamDef::choice("lim_inf_answer", "An infinite limit is written", &["\u{221e} or \u{2212}\u{221e}", "does not exist"], "\u{221e} or \u{2212}\u{221e}"),
         ParamDef::choice("lim_dne", "Does not exist is written", &["does not exist", "DNE"], "does not exist"),
         ParamDef::bool("lim_stu_kinds", "Student copy: leave off the kind labels", true),
+        ParamDef::bool("lim_stu_asym", "Student copy: leave off the asymptotes' equations", true),
     ]
 }
 
 /// Keys of the limit controls, for the panel.
-pub const KEYS: [&str; 10] = ["lim_ask_at", "lim_inf", "lim_disc", "lim_hasym", "lim_kinds", "lim_rows", "lim_points", "lim_inf_answer", "lim_dne", "lim_stu_kinds"];
+pub const KEYS: [&str; 11] = ["lim_ask_at", "lim_inf", "lim_disc", "lim_hasym", "lim_kinds", "lim_rows", "lim_points", "lim_inf_answer", "lim_dne", "lim_stu_kinds", "lim_stu_asym"];
 
 /// Any limit control on: only then is anything added to the grid.
 pub fn active(p: &Params) -> bool {
@@ -45,12 +46,47 @@ pub fn relevant(key: &str, p: &Params) -> bool {
         "lim_rows" | "lim_points" => active(p),
         "lim_inf_answer" | "lim_dne" => !p.s("lim_ask_at").trim().is_empty() || p.s("lim_inf") != "None",
         "lim_stu_kinds" => p.b("lim_kinds"),
+        "lim_stu_asym" => p.b("lim_hasym"),
         _ => true,
     }
 }
 
+/// Whether the grid draws a row as the limit questions read it: across the window (and at its domain's ends and its holes)
+/// the grid's own reader and the limits reader give the row a value at the same x's, and the same value. A row the grid
+/// draws only for x ≥ 0 (x^(1/3)) or cannot draw at all (floor x) gives no answers about a curve that is not on the page.
+fn drawn_as_read(t: &str, x0: f64, x1: f64) -> bool {
+    let mut tmp = vec![];
+    // (a row the limits reader refuses is said by the model's own note)
+    let Some(pc) = read_line(1, 0, t, &mut tmp) else { return true };
+    let Src::Formula { x: ref fx } = pc.src else { return true };
+    let (main, dom) = split_domain(t);
+    let Some(Row::Func(e)) = parse_row(main) else { return false };
+    let ivs = dom.map(|d| crate::figures::math::parse_ineq(&d.to_lowercase().replace('y', "x"))).unwrap_or_default();
+    let in_dom = |v: f64| ivs.is_empty() || ivs.iter().any(|iv| (v > iv.lo || (iv.lo_c && v >= iv.lo)) && (v < iv.hi || (iv.hi_c && v <= iv.hi)));
+    let grid_v = |x: f64| -> Option<f64> { if !in_dom(x) { return None; } crate::figures::math::eval_full(&e, x, None, false).filter(|v| v.is_finite()) };
+    let lim_v = |x: f64| -> Option<f64> { if !pc.includes(x) { return None; } cas::ev(fx, x).filter(|v| v.is_finite()) };
+    let mut xs: Vec<f64> = (0..=400).map(|i| x0 + (x1 - x0) * (i as f64 + 0.37) / 401.0).collect();
+    for e in pc.lo.iter().chain(pc.hi.iter()) { xs.push(e.x.v); }
+    for h in &pc.holes { xs.push(h.0.v); }
+    xs.into_iter().filter(|x| *x >= x0 && *x <= x1).all(|x| match (grid_v(x), lim_v(x)) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.abs() > 1e6 || b.abs() > 1e6 || (a - b).abs() <= 1e-6 * (1.0 + a.abs()),
+        // (beside a pole one reader may overflow where the other does not)
+        (Some(a), None) | (None, Some(a)) => a.abs() > 1e6,
+    })
+}
+
 /// The row numbers (1-based) of the rows that make f, with their texts (style words taken off).
 fn f_rows(p: &Params, notes: &mut Vec<String>) -> Vec<(usize, String)> {
+    let g = grid_layout(p);
+    let rows = f_rows_typed(p, notes);
+    rows.into_iter().filter(|(n, t)| {
+        let same = drawn_as_read(t, g.x0, g.x1);
+        if !same { notes.push(format!("Row {n} is drawn differently from how the limit questions would read it (part of it is not drawn, or it is not drawn at all), so no question is asked about it: {}", t.trim())); }
+        same
+    }).collect()
+}
+fn f_rows_typed(p: &Params, notes: &mut Vec<String>) -> Vec<(usize, String)> {
     let rows: Vec<&str> = p.s("equations").split(';').collect();
     let is_func = |t: &str| { let (main, _) = split_domain(t); matches!(parse_row(main), Some(Row::Func(e)) if !e.trim().is_empty()) };
     let pick = p.s("lim_rows").trim().to_string();
@@ -153,6 +189,15 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     }
     let g = grid_layout(p);
     let m = Model::new(&lp, &g);
+    // (two rows of f over the same x give f two values there: no limit is asked about a function that is not one)
+    if m.notes.iter().any(|n| n.starts_with("Pieces ") && n.contains("both cover")) {
+        for n in m.notes.iter().filter(|n| n.starts_with("Pieces ") && n.contains("both cover")) {
+            let t = format!("{}; no limit question is asked until f is one function: name its rows in f is the rows", in_grid_words(n, &rows).trim_end_matches(", so change one of the domains").replace(": a function has one value for each x, so change one of the domains", ""));
+            if !notes.contains(&t) { notes.push(t); }
+        }
+        for n in &lnotes { let t = in_grid_words(n, &rows); if !notes.contains(&t) { notes.push(t); } }
+        return coordinate_grid_build(p0, notes);
+    }
     let _ = m.piles();
     lnotes.extend(m.notes.iter().cloned());
     let mut dr = Drawn::default();
@@ -239,11 +284,15 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
                     for (dx, dy) in [(1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] { tries.push((an.0 + dx * (w / 2.0 - 6.0), an.1 + dy * hy)); }
                 }
             }
+            // (a label is read as belonging to the break whose x it is nearest: tries nearer another break's x are dropped)
+            let others: Vec<f64> = discs.iter().filter(|o| o.kind != UNSURE && (o.x - d.x).abs() > 1e-12 * (1.0 + d.x.abs())).map(|o| sx(o.x)).collect();
+            let near_own: Vec<Pt> = tries.iter().copied().filter(|t| others.iter().all(|ox| (t.0 - x).abs() + 4.0 < (t.0 - ox).abs())).collect();
+            if !near_own.is_empty() { tries = near_own; }
             let gap = if d.kind == "removable" { cr + 2.0 } else { 1.5 };
             reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![], gap }));
         }
     }
-    for (t, a, b) in &asym_lines {
+    for (t, a, b) in asym_lines.iter().filter(|_| !(stu && p.b("lim_stu_asym"))) {
         let w = tw(t, size);
         let n = 24;
         let mut ts: Vec<f64> = (0..n).map(|j| j as f64 / (n - 1) as f64).collect();
@@ -261,7 +310,9 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
         match place(&mut board, r, size) {
             Spot::Beside(c) => labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true)),
             Spot::Leader(c, s, e) => {
-                labels_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1" data-lim="leader"/>"#, s.0, s.1, e.0, e.1, ink.text));
+                // (on a white casing, so a leader along a gridline still reads as a leader)
+                labels_svg.push_str(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#fff" stroke-width="4"/>"##, s.0, s.1, e.0, e.1));
+                labels_svg.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="1.2" data-lim="leader"/>"#, s.0, s.1, e.0, e.1, ink.text));
                 labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true));
             }
             Spot::Off => beside.push(if *kind == 'k' { format!("{} ({})", eq_text("x", &discs.iter().find(|d| sx(d.x) == r.anchor.0).map(|d| d.text.clone()).unwrap_or_default()), r.text) } else { format!("the asymptote {}", r.text) }),

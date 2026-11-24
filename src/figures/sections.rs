@@ -67,7 +67,7 @@ static FIG_6: [RefSection; 5] = [
     s("x-axis", &["xmin", "xmax", "xstep", "numbers", "arrows", "square", "xlabel", "xnum", "xunits", "x_fractions", "x_left_end", "x_right_end", "x_left_extension", "x_right_extension"], ""),
     s("y-axis", &["ymin", "ymax", "ystep", "ylabel", "ynum", "y_fractions", "y_bottom_end", "y_top_end", "y_bottom_extension", "y_top_extension"], ""),
     s("Grid", &["minor", "grid", "line_width", "shading", "asymptotes", "endpoints", "points", "pt_color", "pt_style", "pt_label", "point_radius", "pt_outline", "x_major_every", "x_major_style", "y_major_every", "y_major_style"], ""),
-    s("Limits", &["lim_ask_at", "lim_inf", "lim_disc", "lim_hasym", "lim_kinds", "lim_rows", "lim_points", "lim_inf_answer", "lim_dne", "lim_stu_kinds"], "Limit questions about f, the y = rows (pieces with their domains): the answers go in the key, blank lines on the student copy."),
+    s("Limits", &["lim_ask_at", "lim_inf", "lim_disc", "lim_hasym", "lim_kinds", "lim_rows", "lim_points", "lim_inf_answer", "lim_dne", "lim_stu_kinds", "lim_stu_asym"], "Limit questions about f, the y = rows (pieces with their domains): the answers go in the key, blank lines on the student copy."),
 ];
 
 static CONIC_SECTIONS: [RefSection; 6] = [

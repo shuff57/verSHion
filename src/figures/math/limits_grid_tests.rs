@@ -220,3 +220,74 @@ fn the_classic_setups() {
         assert!(notes.iter().all(|n| !n.contains("f ") && !n.starts_with("Row")), "{}: {notes:?}", e.name);
     }
 }
+
+/// Check 1: no answer about a curve the grid does not draw as read. The grid draws x^(1/3) only for x ≥ 0 and cannot draw
+/// floor x or log10 x, so no question is asked about them (a note says why); a row it draws as read is still f.
+#[test]
+fn rows_drawn_differently_are_not_asked_about() {
+    for eq in ["y = x^(1/3)", "y = floor(x)", "y = log10(x)"] {
+        let kv = json!({"equations": eq, "xmin": -9.0, "xmax": 9.0, "ymin": -5.0, "ymax": 5.0, "lim_ask_at": "0", "lim_kinds": true, "lim_disc": true});
+        let md = model(kv.clone());
+        assert!(md.pieces.is_empty(), "{eq}: still f");
+        let s = svg(&with(kv.clone()));
+        assert_eq!(words_in(&s, "labels"), "", "{eq}");
+        let notes = super::grid_warnings(&with(kv));
+        assert!(notes.iter().any(|n| n.starts_with("Row 1 is drawn differently")), "{eq}: {notes:?}");
+    }
+    assert_eq!(model(json!({"equations": "y = x^2 - 1", "lim_ask_at": "0"})).pieces.len(), 1);
+}
+
+/// Check 1: two rows over the same x are not one function; no limit is asked (row 1's limit is no answer for f).
+#[test]
+fn overlapping_rows_ask_nothing() {
+    let kv = json!({"equations": "y = x^2; y = 2x + 1", "xmin": -4.0, "xmax": 4.0, "ymin": -4.0, "ymax": 8.0, "lim_ask_at": "1"});
+    let s = svg(&with(kv.clone()));
+    assert!(!s.contains("data-lim"), "questions drawn for two overlapping rows");
+    let notes = super::grid_warnings(&with(kv));
+    assert!(notes.iter().any(|n| n.starts_with("Rows 1 and 2 both cover") && n.contains("no limit question")), "{notes:?}");
+}
+
+/// Check 1: the student copy that asks the limits at infinity does not give them away in the asymptote's equation.
+#[test]
+fn the_student_copy_leaves_off_the_asymptote_s_equation() {
+    let kv = json!({"equations": "y = (2x^2 + 1)/(x^2 + 1)", "xmin": -8.0, "xmax": 8.0, "ymin": -3.0, "ymax": 6.0, "lim_hasym": true, "lim_inf": "Both", "show_answers": false});
+    let s = svg(&with(kv.clone()));
+    assert_eq!(s.matches(r#"data-lim="hasym""#).count(), 1, "the dashed line stays");
+    assert!(!words_in(&s, "labels").contains("y = 2"));
+    let mut on = kv.clone();
+    on["lim_stu_asym"] = json!(false);
+    assert!(words_in(&svg(&with(on)), "labels").contains("y = 2"));
+}
+
+/// Check 1: each kind label sits nearer its own break's x than any other break's.
+#[test]
+fn kind_labels_sit_by_their_own_break() {
+    for size in ["Medium", "Large"] {
+        let kv = json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "label_size": size});
+        let s = svg(&with(kv.clone()));
+        let g = super::grid_layout(&with(kv));
+        let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
+        let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
+        let body = &body[..body.find("</g>").unwrap()];
+        // (a label with no clear room on the plot is written under it: "On the graph: x = 1 (removable)")
+        let under = words_in(&s, "block");
+        // (each label's centre: its text's x plus half its width, read from the drawn text and its own words)
+        let mut seen = vec![];
+        for part in body.split("<text").skip(1) {
+            if part.contains(r##"fill="#fff""##) { continue; }
+            let x: f64 = part.split(" x=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+            let word: String = { let mut w = String::new(); let mut inside = true; for c in part.chars() { match c { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(c), _ => {} } if w.ends_with("removable") || w.ends_with("jump") || w.ends_with("infinite") { break; } } w.trim_start_matches(|c: char| c != 'r' && c != 'j' && c != 'i').to_string() };
+            let cx = x + super::limits::tw(&word, 15.0 * if size == "Large" { 1.4 } else { 1.0 }) / 2.0;
+            seen.push((word, cx));
+        }
+        let breaks = [(1.0, "removable"), (2.0, "jump"), (4.0, "jump"), (5.0, "infinite")];
+        let mut jumps = vec![];
+        for (word, cx) in &seen {
+            let nearest = breaks.iter().min_by(|a, b| (cx - sx(a.0)).abs().partial_cmp(&(cx - sx(b.0)).abs()).unwrap()).unwrap();
+            assert_eq!(&nearest.1, word, "{size}: a {word} label at {cx} is nearest the {} at x = {}", nearest.1, nearest.0);
+            if word == "jump" { jumps.push(nearest.0); }
+        }
+        for (x, word) in [(2.0, "jump"), (4.0, "jump")] { if !jumps.contains(&x) { assert!(under.contains(&format!("x = {x} ({word})")), "{size}: the {word} at {x} is neither on the plot nor under it: {seen:?} / {under}"); } }
+        for (x, word) in [(1.0, "removable"), (5.0, "infinite")] { if !seen.iter().any(|w| w.0 == word) { assert!(under.contains(&format!("x = {x} ({word})")), "{size}: {word} missing: {under}"); } }
+    }
+}
