@@ -43,6 +43,15 @@ class SourceMapTests(unittest.TestCase):
         # Holdout v8, Lebl appendix exercises: "A.3.1".
         page={'items':[{'number':None,'label':'A.3.1','question_index':0,'status':'saved'},{'number':None,'label':'A.3.2','question_index':1,'status':'saved'}]}
         self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2]),page,qs)['by_number'],{1:qs[0],2:qs[1]})
+    def test_full_dotted_numbers_keep_sections_apart(self):
+        # Holdout v16, Williamwood: questions 5.3, 6.1, 6.2, 6.3, with 6.3 split into 6.3a and 6.3b.
+        labels=['5.3','6.1','6.2','6.3a','6.3b'];qs=[{'stem':l} for l in labels]
+        page={'items':[{'number':3 if l=='5.3' else None,'label':l,'question_index':k,'status':'saved'} for k,l in enumerate(labels)]}
+        case={'source_id':'s','question_numbers':[503,601,602,603],'dotted_full':True}
+        got=h.parsed_source_map(case,page,qs)
+        self.assertEqual(got['numbers'],[503,601,602,603,603])
+        self.assertEqual(got['groups'][603],[3,4])
+        self.assertEqual(got['by_number'][503]['stem'],'5.3')
     def test_a_leading_continuation_takes_the_one_missing_earlier_number(self):
         # Holdout v6, UC Davis: the page opens mid-problem 1, then prints problems 2 and 3.
         items=[{'number':None,'label':'continued','question_index':0,'status':'saved_continued'},{'number':2,'label':'2','question_index':1,'status':'saved'},{'number':3,'label':'3','question_index':2,'status':'saved'}]
