@@ -293,6 +293,13 @@ class AcceptanceTests(unittest.TestCase):
         self.assertEqual(h.math_tree(r'y \geq -2x+3'),h.math_tree('y>=-2x+3'))
         self.assertNotEqual(h.math_tree('y>3'),h.math_tree('y>=3'))
         self.assertNotEqual(h.math_tree('2x^2-3=0'),h.math_tree('(2x)^2-3=0'))
+    def test_unicode_exponents_preserve_math_structure(self):
+        self.assertEqual(h.math_tree('2v² − 5v + 3 = 0'), h.math_tree('2v^2-5v+3=0'))
+        self.assertEqual(h.math_tree('(x+1)⁻¹²'), h.math_tree('(x+1)^(-12)'))
+        self.assertNotEqual(h.math_tree('v³'), h.math_tree('v^2'))
+        self.assertNotEqual(h.math_tree('2v²'), h.math_tree('(2v)^2'))
+        with self.assertRaises(ValueError):
+            h.math_tree('v¹⁻²')
     def test_repeating_decimal_marker_is_required(self):
         self.assertEqual(h.math_tree('66.6\u0304%'),h.math_tree(r'66.\overline{6}\%'))
         self.assertNotEqual(h.math_tree('66.6\u0304%'),h.math_tree('66.6%'))

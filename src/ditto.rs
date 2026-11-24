@@ -143,6 +143,10 @@ pub const UNRESOLVED_TOPIC: &str = "needs review: source task not visible";
 /// on this page), saved so nothing printed is lost.
 pub const CONTINUED_TOPIC: &str = "needs review: continued from an earlier page";
 
+/// Topic on a multiple-choice question that ends its page before its choices are printed; the
+/// next page's continuation brings them (holdout v15, MCAP #12).
+pub const CHOICES_PENDING_TOPIC: &str = "needs review: choices continue on the next page";
+
 /// The label a reply gives printed content that continues a question begun on an earlier page.
 fn continued_label(label: Option<&str>) -> bool {
     label.is_some_and(|l| l.trim().trim_matches(['(', ')', '[', ']']).trim().eq_ignore_ascii_case("continued"))
@@ -278,13 +282,31 @@ fn split_part_figures_in(v: &mut Value) -> bool {
         // The same box on two parts is one shared picture claimed twice: ownership stays in review.
         let boxes: Vec<_> = parts.iter().filter_map(|p| p.get("figure").and_then(|f| f.get("box"))).collect();
         let distinct = boxes.iter().enumerate().all(|(i, b)| !boxes[..i].contains(b));
+        let letters: Vec<String> = parts.iter().take(26).enumerate().map(|(k, p)| {
+            let own = text(p, "stem");
+            let printed = text(p, "label");
+            part_letter(own)
+                .or_else(|| {
+                    (own.is_empty() && !printed.is_empty() && printed.len() <= 4
+                        && printed.bytes().all(|c| c.is_ascii_alphanumeric()))
+                        .then(|| printed.to_string())
+                })
+                .unwrap_or_else(|| char::from(b'a' + k as u8).to_string())
+        }).collect();
         let splittable = text(&q, "type") == "multipart"
             && distinct
             && !id.is_empty()
             && parts.iter().filter(|p| has_figure(p)).count() >= 2
             && !has_figure(&q)
             && parts.len() <= 26
-            && parts.iter().all(|p| p.get("parts").and_then(Value::as_array).is_none_or(Vec::is_empty) && part(p).is_some());
+            && letters.iter().enumerate().all(|(i, letter)| !letters[..i].contains(letter))
+            && parts.iter().all(|p| {
+                let figure_only = text(p, "stem").is_empty()
+                    && matches!(text(p, "type"), "" | "short-answer")
+                    && has_figure(p);
+                p.get("parts").and_then(Value::as_array).is_none_or(Vec::is_empty)
+                    && (part(p).is_some() || figure_only)
+            });
         if !splittable {
             out.push(q);
             continue;
@@ -295,9 +317,8 @@ fn split_part_figures_in(v: &mut Value) -> bool {
             _ => id.clone(),
         };
         let stem = text(&q, "stem");
-        for (k, p) in parts.iter().enumerate() {
+        for (p, letter) in parts.iter().zip(letters) {
             let own = text(p, "stem");
-            let letter = part_letter(own).unwrap_or_else(|| char::from(b'a' + k as u8).to_string());
             let child_label = if letter.starts_with(&label) { letter.clone() } else { format!("{label}{letter}") };
             let child_id = format!("{id}.{letter}");
             let mut child = p.clone();
@@ -707,6 +728,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         // A multipart whose parts carry the whole task needs no shared stem, with or without a
         // shared figure (holdout v4: "1) [graph] (a) ... (d) ..."): it is not figure-only.
         let parts_carry = text(item, "type") == "multipart" && parts_carry_task(item);
+        let mut choices_pending = false;
         let mut built = if text(item, "stem").is_empty() && !parts_carry && matches!(&cropped, Some(Ok(_))) {
             let mut filled = item.clone();
             let stem = match &applied {
@@ -732,6 +754,29 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         } else {
             question(item)
         };
+        // The last question on a page may print its stem and figure with its choices on the next page:
+        // keep it as an open question flagged for review, so the next page's choices can join it.
+        if built.as_ref().is_err_and(|e| e.contains("at least two choices"))
+            && i + 1 == raw.len()
+            && text(item, "type") == "multiple-choice"
+            && !text(item, "stem").is_empty()
+        {
+            let mut open = item.clone();
+            open["type"] = Value::String("short-answer".into());
+            if let Some(o) = open.as_object_mut() { o.remove("choices"); }
+            built = question(&open);
+            choices_pending = built.is_ok();
+        }
+        // Choices continuing a question begun on the previous page carry no stem of their own.
+        if built.as_ref().is_err_and(|e| e.contains("no stem"))
+            && continued_label(info.label.as_deref())
+            && text(item, "type") == "multiple-choice"
+        {
+            let mut filled = item.clone();
+            filled["stem"] = Value::String(UNRESOLVED_TASK.to_string());
+            built = question(&filled);
+            if built.is_ok() { unresolved = true; }
+        }
         // Promotion cannot conceal an earlier invalid part and shift the raw owner index.
         // Keep a malformed multipart as an explicit dropped raw item instead of a truncated bank item.
         if selected.is_some_and(|s| s.source.part_index.is_some())
@@ -761,6 +806,12 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                     q.topics.push("needs review: source figure ownership".into());
                 }
                 // A continued problem split per figure keeps "continued" as its parent label ("continuede").
+                if choices_pending {
+                    let reason = "its choices are not on this page; kept with its stem so the next page's choices can join it".to_string();
+                    warnings.push(format!("Question {label}: {reason}."));
+                    info.reason = Some(reason);
+                    q.topics.push(CHOICES_PENDING_TOPIC.into());
+                }
                 let continued = continued_label(info.label.as_deref())
                     || continued_label(raw[i].pointer("/splitFrom/label").and_then(Value::as_str));
                 if continued {
@@ -790,6 +841,8 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                     "saved_figure_ownership_unresolved"
                 } else if continued {
                     "saved_continued"
+                } else if choices_pending {
+                    "saved_choices_pending"
                 } else if !bare.is_empty() {
                     "saved_part_picture_missing"
                 } else if !box_review.is_empty() && q.image.is_some() {
@@ -1732,6 +1785,32 @@ mod tests {
     }
 
     #[test]
+    fn a_question_whose_choices_are_on_the_next_page_is_kept_and_the_choices_page_is_not_dropped() {
+        // Holdout v15, MCAP #12: the stem ends page 1; the four choices open page 2 with no stem.
+        let ending = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q11","label":"11","type":"short-answer","stem":"Eleven."},
+            {"id":"q12","label":"12","type":"multiple-choice","stem":"Which graph shows the best model?","choices":[]}]}}).to_string();
+        let got = import_text(&ending,None,1,"w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        assert_eq!((got.items[1].status.as_str(), got.items[1].number), ("saved_choices_pending", Some(12)));
+        assert!(got.doc.questions[1].topics.iter().any(|t| t == CHOICES_PENDING_TOPIC));
+        assert!(matches!(got.doc.questions[1].kind, Kind::Short { .. }));
+        // Not the last item: a choice-less multiple choice is still refused, never guessed open.
+        let middle = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q12","label":"12","type":"multiple-choice","stem":"Which graph?","choices":[]},
+            {"id":"q13","label":"13","type":"short-answer","stem":"Thirteen."}]}}).to_string();
+        assert_eq!(import_text(&middle,None,1,"w").unwrap().items[0].status, "dropped");
+        let choices = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q0","label":"continued","type":"multiple-choice","stem":"","choices":[{"text":"A","correct":false},{"text":"B","correct":false}]},
+            {"id":"q13","label":"13","type":"short-answer","stem":"Thirteen."}]}}).to_string();
+        let got = import_text(&choices,None,2,"w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        assert_eq!(got.items[0].status, "saved_continued");
+        assert!(matches!(&got.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
+        assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+    }
+
+    #[test]
     fn content_continued_from_an_earlier_page_is_saved_unnumbered_and_flagged() {
         // Holdout v6, UC Davis: the page opens with the end of problem 1 (three matrix products).
         let reply = serde_json::json!({"format":FORMAT,"bank":{"name":"LA","questions":[
@@ -2415,6 +2494,32 @@ mod tests {
         assert!(got.warnings.iter().any(|w| w.contains("split from question 2")));
         // import_text splits on its own too, so every path agrees.
         assert_eq!(import_text(&reply, Some(&page()), 1, "w").unwrap().doc.questions.len(), 2);
+    }
+
+    #[test]
+    fn figure_only_parts_split_and_take_the_printed_section_task() {
+        store();
+        let mut raw = json_object(&part_figures_reply(true)).unwrap();
+        let question = &mut raw["bank"]["questions"][0];
+        question["stem"] = Value::String(String::new());
+        for (index, letter) in ["a", "c"].into_iter().enumerate() {
+            question["parts"][index]["stem"] = Value::String(String::new());
+            question["parts"][index]["label"] = Value::String(letter.into());
+        }
+        let task = "Identify the marked side.";
+        raw["exams"][0]["sections"][0]["instructions"] = Value::String(task.into());
+        let reply = raw.to_string();
+        let split = split_part_figures(&reply);
+        assert_eq!(split_part_figures(&split), split);
+        let got = import_text(&reply, Some(&page()), 1, "w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        for ((question, item), label) in got.doc.questions.iter().zip(&got.items).zip(["2a", "2c"]) {
+            assert_eq!(item.label.as_deref(), Some(label));
+            assert_eq!(item.number, Some(2));
+            assert_eq!(item.status, "saved_figure_only");
+            assert_eq!(question.stem, task);
+            assert!(question.image.is_some());
+        }
     }
 
     #[test]

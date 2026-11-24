@@ -1927,8 +1927,11 @@ fn merge_continuation(prev: &mut Converted, next: &mut Converted, slot: usize, p
         _ => false,
     };
     let cont_picture = cont.image.is_some() || cont.figure.is_some();
-    if choice_pictures(cont) || (cont_picture && (host.image.is_some() || host.figure.is_some())) { return false; }
     let open_host = matches!(&host.kind, Kind::Short { sample } if sample.trim().is_empty());
+    // Picture choices move with their answers into a host that has none, so nothing is lost
+    // (holdout v15, MCAP #12: stem and scatter plot on one page, four plot choices on the next).
+    if (choice_pictures(cont) && !(open_host && matches!(cont.kind, Kind::Mc { .. })))
+        || (cont_picture && (host.image.is_some() || host.figure.is_some())) { return false; }
     let kind = match (&host.kind, &cont.kind) {
         (Kind::Multipart { parts: a }, Kind::Multipart { parts: b }) => {
             Kind::Multipart { parts: a.iter().chain(b).cloned().collect() }
@@ -1974,6 +1977,12 @@ fn merge_continuation(prev: &mut Converted, next: &mut Converted, slot: usize, p
     next.figure_runs = kept;
     for item in &mut next.items {
         if let Some(qi) = item.question_index.as_mut() && *qi > 0 { *qi -= 1; }
+    }
+    if let Some(host_item) = prev.items.iter_mut().find(|i| i.question_index == Some(target))
+        && host_item.status == "saved_choices_pending" && matches!(prev.doc.questions[target].kind, Kind::Mc { .. }) {
+        host_item.status = "saved".into();
+        prev.doc.questions[target].topics.retain(|t| t != crate::ditto::CHOICES_PENDING_TOPIC);
+        prev.warnings.retain(|w| !w.contains("its choices are not on this page"));
     }
     let item = &mut next.items[slot];
     item.question_index = None;
@@ -2182,6 +2191,43 @@ pub(crate) mod tests {
         // Without the continued topic, an unresolved first item is not taken for a continuation.
         let mut next = page_of(vec![page_question("Seven.", short())], vec![saved(0, "7", Some(7), "saved_figure_box_unresolved", 0)]);
         assert!(!join_page_break(&mut prev, &mut next, 1));
+    }
+
+    #[test]
+    fn picture_choices_on_the_next_page_join_a_stem_that_had_none() {
+        // Holdout v15, MCAP #12: stem and scatter plot end page 1; the four plot choices open page 2.
+        use crate::model::{Answer, Kind};
+        let mut host = page_question("Which graph shows the best model?", short());
+        host.image = Some(crate::model::ImageRef::default());
+        host.topics.push(crate::ditto::CHOICES_PENDING_TOPIC.into());
+        let mut prev = page_of(vec![page_question("Eleven.", short()), host],
+            vec![saved(0, "11", Some(11), "saved", 0), saved(1, "12", Some(12), "saved_choices_pending", 1)]);
+        let pictured = |t: &str| { let mut a = Answer::new(t, false); a.image = Some(crate::model::ImageRef::default()); a };
+        let mut cont = page_question(crate::ditto::UNRESOLVED_TASK, Kind::Mc { answers: vec![pictured("A"), pictured("B"), pictured("C"), pictured("D")] });
+        cont.topics.extend([crate::ditto::CONTINUED_TOPIC.into(), crate::ditto::UNRESOLVED_TOPIC.into()]);
+        let mut next = page_of(vec![cont, page_question("Thirteen.", short())],
+            vec![saved(0, "continued", None, "saved_continued", 0), saved(1, "13", Some(13), "saved", 1)]);
+        let mut choice_run = figure_run(0);
+        choice_run.choice = Some(ChoiceRef { part: None, choice: 2 });
+        next.figure_runs.push(choice_run);
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        let host = &prev.doc.questions[1];
+        assert_eq!(host.stem, "Which graph shows the best model?");
+        let Kind::Mc { answers } = &host.kind else { panic!("{:?}", host.kind) };
+        assert_eq!(answers.len(), 4);
+        assert!(answers.iter().all(|a| a.image.is_some()) && host.image.is_some());
+        assert!(host.topics.is_empty());
+        assert_eq!(prev.items[1].status, "saved");
+        assert_eq!((prev.figure_runs.len(), prev.figure_runs[0].question_index, prev.figure_runs[0].choice.map(|c| c.choice)), (1, 1, Some(2)));
+        assert_eq!((next.items[0].status.as_str(), next.items[0].merged_into, next.items[1].question_index), ("merged_into_previous_page", Some(1), Some(0)));
+        // A host that already has its own choices keeps them: the pictured choices are not merged in.
+        let mut prev = page_of(vec![page_question("Pick one.", Kind::Mc { answers: vec![Answer::new("x", true), Answer::new("y", false)] })], vec![saved(0, "4", Some(4), "saved", 0)]);
+        let mut cont = page_question("", Kind::Mc { answers: vec![pictured("A"), pictured("B")] });
+        cont.topics.push(crate::ditto::CONTINUED_TOPIC.into());
+        let mut next = page_of(vec![cont], vec![saved(0, "continued", None, "saved_continued", 0)]);
+        assert!(join_page_break(&mut prev, &mut next, 1));
+        assert_eq!(next.items[0].status, "saved", "linked by number instead");
+        assert!(matches!(&prev.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
     }
 
     #[test]

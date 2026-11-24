@@ -68,10 +68,22 @@ def source_number(raw):
     match=re.fullmatch(r'\s*(?:Question\s*)?(\d+)[.)]?\s*',str(label),re.I)
     return int(match[1]) if match else None
 
+SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
+SUPERSCRIPT_TRANSLATION = str.maketrans(SUPERSCRIPT_DIGITS + '⁺⁻', '0123456789+-')
+
+
 def math_tree(text):
     """Structural numeric math comparison, not evaluation or answer generation."""
     if '_ws_mixed' in text:raise ValueError('Reserved math marker')
     text=text.replace('−','-').replace('–','-').replace('×','*').replace('÷','/').replace('^','**')
+    # Keep Unicode exponents as powers, including their sign and all digits.
+    def superscript_power(match):
+        exponent = match[0].translate(SUPERSCRIPT_TRANSLATION)
+        if not re.fullmatch(r'[+-]?[0-9]+', exponent):
+            raise ValueError('Invalid superscript exponent')
+        return f'**({int(exponent)})'
+
+    text = re.sub(rf'(?<=[\w)])[{SUPERSCRIPT_DIGITS}⁺⁻]+', superscript_power, text)
     # The app's own prompt asks for linear math: Unicode relations and (a)/(b) fractions.
     text=text.replace('≥','>=').replace('≤','<=').replace('≠','!=')
     relations={'geq':'>=','ge':'>=','leq':'<=','le':'<=','neq':'!='}
