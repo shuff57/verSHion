@@ -4514,7 +4514,7 @@ const BOND_ENERGY_CURVE: &[Faq] = &[
     },
     Faq {
         q: "How can I compare which of two bonds is stronger?",
-        a: "Show two or three bonds and compare the depth of the wells. The deeper minimum is the stronger bond because more energy is needed to separate the atoms. A stronger bond is often also shorter, so its minimum sits closer to the vertical axis, but the figure uses whatever lengths and energies you enter.",
+        a: "Show two or three bonds and compare the depth of the wells. The deeper minimum is the stronger bond because more energy is needed to separate the atoms. Each curve uses the length and energy you type for that bond, so the figure does not tie length to strength.",
     },
 ];
 
