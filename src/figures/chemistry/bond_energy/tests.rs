@@ -175,6 +175,103 @@ fn nearby_guide_labels_have_separate_baselines() {
     assert!((baseline("−400 kJ/mol") - baseline("−399 kJ/mol")).abs() >= 14.0);
 }
 
+/// Guide labels as (x, baseline, font size, text, has a white halo drawn under it), read from the SVG.
+fn guide_labels(xml: &Document<'_>, left: f64) -> Vec<(f64, f64, f64, String, bool)> {
+    let mut halos = Vec::new();
+    let mut labels = Vec::new();
+    for n in xml.descendants().filter(|n| n.has_tag_name("text")) {
+        // Rotated axis titles carry no x/y of their own.
+        let Some(x) = n.attribute("x").and_then(|x| x.parse::<f64>().ok()) else {
+            continue;
+        };
+        if (x - (left + 7.0)).abs() > 0.01 {
+            continue;
+        }
+        let (y, fs) = (attr(n, "y"), attr(n, "font-size"));
+        let text = n.text().unwrap_or_default().to_owned();
+        if n.attribute("fill") == Some("none") && n.attribute("stroke").is_some_and(|s| s.starts_with("#fff")) {
+            halos.push((x, y, text));
+        } else {
+            labels.push((x, y, fs, text));
+        }
+    }
+    labels
+        .into_iter()
+        .map(|(x, y, fs, text)| {
+            let halo = halos.iter().any(|h| (h.0, h.1, h.2.as_str()) == (x, y, text.as_str()));
+            (x, y, fs, text, halo)
+        })
+        .collect()
+}
+
+/// Every guide label whose text box is crossed by a horizontal dashed guide and has no halo knockout.
+fn struck_guide_labels(p: &Params) -> (usize, Vec<String>) {
+    let svg = render(p);
+    let xml = Document::parse(&svg).unwrap();
+    let clip = xml.descendants().find(|n| n.has_tag_name("clipPath")).unwrap().first_element_child().unwrap();
+    let left = attr(clip, "x");
+    let guides: Vec<(f64, f64, f64)> = xml
+        .descendants()
+        .filter(|n| n.has_tag_name("line") && n.attribute("stroke-dasharray") == Some("4 3"))
+        .filter(|n| attr(*n, "y1") == attr(*n, "y2"))
+        .map(|n| (attr(n, "y1"), attr(n, "x1").min(attr(n, "x2")), attr(n, "x1").max(attr(n, "x2"))))
+        .collect();
+    let labels = guide_labels(&xml, left);
+    let mut struck = Vec::new();
+    for (x, baseline, fs, text, halo) in &labels {
+        // The text box: cap height above the baseline, descender below, the codebase's width estimate across.
+        let (top, bottom, right) = (baseline - 0.78 * fs, baseline + 0.25 * fs, x + super::super::ratesgraph::text_w(text, *fs));
+        for (gy, gx0, gx1) in &guides {
+            if (top..=bottom).contains(gy) && *gx0 < right && *gx1 > *x && !halo {
+                struck.push(format!("{text} at y {baseline:.1} (size {fs}) is crossed by the guide at y {gy:.1}"));
+            }
+        }
+    }
+    (labels.len(), struck)
+}
+
+#[test]
+fn guide_labels_pushed_apart_are_not_struck_through_by_guides() {
+    let cases: [(i64, [f64; 3]); 5] = [
+        (2, [300.0, 312.0, 400.0]),
+        (2, [300.0, 399.0, 400.0]),
+        (2, [300.0, 306.0, 400.0]),
+        (3, [300.0, 306.0, 312.0]),
+        (3, [300.0, 312.0, 324.0]),
+    ];
+    let mut failures = Vec::new();
+    for (count, energies) in cases {
+        for size in ["Small", "Medium", "Large"] {
+            let mut p = Params::defaults(&params());
+            p.set_i("count", count);
+            p.set_b("guides", true);
+            p.set_s("guide_labels", "Values");
+            p.set_s("label_size", size);
+            for (i, e) in energies.iter().enumerate() {
+                p.set_f(ENERGY_KEYS[i], *e);
+            }
+            let (labels, struck) = struck_guide_labels(&p);
+            assert_eq!(labels, count as usize, "{count} bonds, {size}: every guide label is found");
+            failures.extend(struck.into_iter().map(|s| format!("{count} bonds {energies:?} {size}: {s}")));
+        }
+    }
+    assert!(failures.is_empty(), "guide lines run through label text:\n{}", failures.join("\n"));
+}
+
+#[test]
+fn well_separated_guide_labels_keep_their_plain_text() {
+    let mut p = example(0);
+    p.set_b("guides", true);
+    let svg = render(&p);
+    let xml = Document::parse(&svg).unwrap();
+    let left = attr(xml.descendants().find(|n| n.has_tag_name("clipPath")).unwrap().first_element_child().unwrap(), "x");
+    let labels = guide_labels(&xml, left);
+    assert_eq!(labels.len(), 2);
+    assert!(labels.iter().all(|l| !l.4), "{labels:?}");
+    let outlined = xml.descendants().filter(|n| n.has_tag_name("text") && n.attribute("stroke").is_some()).count();
+    assert_eq!(outlined, 0, "well-separated labels need no halo");
+}
+
 #[test]
 fn dense_manual_steps_explain_the_rendered_spacing() {
     let mut p = Params::defaults(&params());

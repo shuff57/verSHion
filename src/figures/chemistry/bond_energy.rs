@@ -1,6 +1,7 @@
 //! Distance–energy diagrams for teaching bond length and dissociation energy.
 
 use super::frame::{NUMS, TITLE3, answer_param};
+use super::ratesgraph::{halo_el, text_w};
 use crate::figures::chart::{self, AxesOpts, Frame, INK, Tick, fmt, nice_step};
 use crate::figures::svg::{self, Doc, Fills};
 use crate::figures::{Example, FigureDef, ParamDef, Params, Subject, Value};
@@ -529,6 +530,12 @@ fn render(p: &Params) -> String {
             super::dashed(&mut doc, x, y, x, b, "#595959", 1.3);
         }
     }
+    // Where each horizontal guide ends (x of its minimum) and its height, for the label halo test below.
+    let guides: Vec<(f64, f64)> = if p.b("guides") {
+        visible_minima.iter().map(|(_, bond)| (frame.px(bond.length), frame.py(-bond.depth))).collect()
+    } else {
+        Vec::new()
+    };
     doc.raw(r#"<g clip-path="url(#bond-plot)">"#);
     for (i, bond) in bonds.iter().enumerate() {
         curve(&mut doc, &frame, bond, &fills, i);
@@ -566,12 +573,21 @@ fn render(p: &Params) -> String {
         positioned.push((guide_y, target, baseline, label));
     }
     let overflow = positioned.last().map_or(0.0, |(_, _, y, _)| (y - b).max(0.0));
-    for (guide_y, target, baseline, label) in positioned {
+    for (i, &(guide_y, target, baseline, ref label)) in positioned.iter().enumerate() {
         let baseline = baseline - overflow;
         if (baseline - target).abs() > 0.5 {
             doc.line(l + 1.0, guide_y, l + 6.0, baseline - 4.0, "#595959", 0.8);
         }
-        doc.text(l + 7.0, baseline, 11.0 * lf, "start", &label);
+        // A label pushed off its own guide can land on a neighbour's (or still on its own): give any label a
+        // dashed guide crosses the white halo the other chemistry plots use, so the text is never struck through.
+        let fs = 11.0 * lf;
+        let (top, bottom, right) = (baseline - 0.78 * fs, baseline + 0.25 * fs, l + 7.0 + text_w(label, fs));
+        let struck = guides.iter().any(|&(gx, gy)| (top..=bottom).contains(&gy) && gx > l + 7.0 && l < right);
+        if struck {
+            doc.raw(&halo_el(l + 7.0, baseline, fs, "start", "#000", label, "guide-label", i));
+        } else {
+            doc.text(l + 7.0, baseline, fs, "start", label);
+        }
     }
     if bonds.len() == 1 && p.s("regions") != "None" {
         let x = frame.px(bonds[0].length).clamp(l, r);
