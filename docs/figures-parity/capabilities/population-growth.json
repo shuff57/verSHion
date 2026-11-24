@@ -147,8 +147,8 @@
    "id": "cap-05e",
    "text": "The inflection point and phase labels as blank lines, or unlabeled",
    "class": "version",
-   "evidence": "",
-   "note": "Wider form of cap-05d: only the K label has a blank/none choice."
+   "evidence": "changes:{\"mark_infl\":true,\"infl_label_style\":\"Blank line\"} + changes:{\"mark_infl\":true,\"infl_label_style\":\"None\"} + changes:{\"mark_phases\":true,\"phase_label_style\":\"Blank line\"} + changes:{\"mark_phases\":true,\"phase_label_style\":\"None\"}",
+   "note": "Wider form of cap-05d. Round 410: each mode checked by hand over its mark alone (mark_infl or mark_phases on, label Text)."
   },
   {
    "id": "cap-06a",

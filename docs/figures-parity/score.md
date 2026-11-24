@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-21T17:30:07+00:00 · probe: 2026-11-21T09:30:07
+Generated: 2026-11-24T17:09:06+00:00 · probe: 2026-11-24T09:09:06
 
-**Pooled 97.0** · mean 97.0 over 77 figures · built 78 of 78 reference figures
+**Pooled 97.1** · mean 97.0 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -34,8 +34,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [version 3] Leave a single probability empty for students to fill in — no evidence
   - cap-03b [control 3] Write path names run together (HT) — no evidence
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
-- `population-growth`: 98 (128/131)
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
@@ -83,6 +81,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `population-growth`: 100 (131/131)
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)

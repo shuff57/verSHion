@@ -8,22 +8,22 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 | figure | ours | params | handles | bullets | hints | score |
 |---|---|---:|---:|---:|---|---:|
-| angles | `angles` | 52 | 3 | 6 | — | 100 |
-| bar-graph | `bar-chart` | 35 | 0 | 7 | — | 100 |
+| angles | `angles` | 59 | 3 | 6 | — | 100 |
+| bar-graph | `bar-chart` | 38 | 0 | 7 | — | 100 |
 | box-plot | `box-plot` | 39 | 0 | 6 | reference has a student version; ours has no show_answers | 100 |
 | circle | `circle` | 81 | 3 | 7 | — | 99 |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
 | cone | `cone` | 30 | 4 | 6 | — | 100 |
-| coordinate-grid | `coordinate-grid` | 59 | 2 | 7 | — | 100 |
+| coordinate-grid | `coordinate-grid` | 83 | 2 | 7 | — | 100 |
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
 | cylinder | `cylinder` | 31 | 4 | 6 | — | 100 |
 | dot-plot | `dot-plot` | 13 | 0 | 5 | — | 42 |
-| histogram | `histogram` | 34 | 0 | 8 | — | 100 |
+| histogram | `histogram` | 36 | 0 | 8 | — | 100 |
 | kite | `kite` | 64 | 10 | 5 | — | 100 |
 | length-reading | `ruler-reading` | 17 | 3 | 6 | — | 100 |
 | mapping-diagram | `mapping-diagram` | 14 | 0 | 4 | reference mentions click/drag; ours has no handles; reference has a student version; ours has no show_answers | 100 |
 | net | `solid-net` | 54 | 3 | 9 | — | 100 |
-| normal-curve | `normal-curve` | 13 | 0 | 7 | — | 42 |
+| normal-curve | `normal-curve` | 14 | 0 | 7 | — | 42 |
 | number-line | `number-line` | 30 | 0 | 6 | — | 100 |
 | parallel-lines | `parallel-lines` | 51 | 15 | 7 | — | 100 |
 | parallelogram | `parallelogram` | 66 | 9 | 6 | — | 100 |
@@ -32,7 +32,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | pyramid | `pyramid` | 38 | 6 | 7 | — | 100 |
 | rectangle | `rectangle` | 55 | 9 | 6 | — | 100 |
 | regular-polygon | `regular-polygon` | 33 | 8 | 6 | — | 100 |
-| scatter-plot | `scatterplot` | 12 | 0 | 7 | reference pastes a table; ours has no data/list control | 37 |
+| scatter-plot | `scatterplot` | 45 | 0 | 7 | — | 37 |
 | segment-addition | `segment-addition` | 62 | 0 | 6 | — | 100 |
 | sphere | `sphere` | 17 | 2 | 6 | — | 100 |
 | stem-and-leaf | `stem-and-leaf` | 23 | 0 | 8 | — | 100 |
@@ -98,7 +98,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 100 |
 | photosynthesis-rate | `photosynthesis` | 51 | 0 | 8 | — | 100 |
-| population-growth | `population-growth` | 55 | 7 | 7 | reference has a student version; ours has no show_answers | 98 |
+| population-growth | `population-growth` | 55 | 7 | 7 | reference has a student version; ours has no show_answers | 100 |
 | predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 100 |
 | punnett-square | `punnett-square` | 24 | 7 | 8 | — | 100 |
 
@@ -106,11 +106,11 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 (none)
 
-Our figures with no reference page: 116
+Our figures with no reference page: 136
 
-Generated: 2026-11-21T17:30:07+00:00 · probe: 2026-11-21T09:30:07
+Generated: 2026-11-24T17:09:06+00:00 · probe: 2026-11-24T09:09:06
 
-**Pooled 97.0** · mean 97.0 over 77 figures · built 78 of 78 reference figures
+**Pooled 97.1** · mean 97.0 over 77 figures · built 78 of 78 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -142,8 +142,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [version 3] Leave a single probability empty for students to fill in — no evidence
   - cap-03b [control 3] Write path names run together (HT) — no evidence
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
-- `population-growth`: 98 (128/131)
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
@@ -191,6 +189,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `population-growth`: 100 (131/131)
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)
