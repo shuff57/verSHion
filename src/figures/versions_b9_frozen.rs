@@ -218,16 +218,19 @@ fn corrections(id: &str) -> std::path::PathBuf {
 /// The old rows allowed a renewed hash. (Batch 9 first gave the gel a Show answers switch and renewed one row; round 1
 /// took the switch out again, so every gel row draws exactly as at batch9-base.) Population growth: a figure on fixed
 /// axes with the carrying capacity's words drawn, whose words the page's top edge cut in half (a fixed axis far below
-/// K with the phase brackets' room above the plot) now leaves them off; the render renews only such a row, as the
-/// check by hash shows.
+/// K with the phase brackets' room above the plot) now leaves them off; and at Large label size the y-axis title moves
+/// out clear of the numbers grown with it, with the left margin and census table widened to match. The render renews
+/// only such rows, as the check by hash shows.
 fn correctable(id: &str, saved: &str) -> bool {
-    id == "population-growth" && saved.contains(r#""fit":false"#) && saved.contains(r#""mark_k":true"#) && saved.contains(r#""k_label_style":"Text""#)
+    id == "population-growth"
+        && (saved.contains(r#""label_size":"Large""#)
+            || saved.contains(r#""fit":false"#) && saved.contains(r#""mark_k":true"#) && saved.contains(r#""k_label_style":"Text""#))
 }
 
 fn correction_reason(id: &str) -> &'static str {
     match id {
         "gel-electrophoresis" => "renewed hashes (row, saved spec, links v1 v4 v5 v6 v7) of the frozen rows holding \"show_answers\":false, a key the gel only gains in batch 9: they now draw the student copy, without the printed answer key",
-        "population-growth" => "renewed hashes (row, saved spec, links v1 v4 v5 v6 v7) of the frozen rows on fixed axes far below K whose carrying-capacity words the page's top edge cut in half: they now leave the words off (round 410 follow-up)",
+        "population-growth" => "renewed hashes (row, saved spec, links v1 v4 v5 v6 v7) of the frozen rows on fixed axes far below K whose carrying-capacity words the page's top edge cut in half: they now leave the words off; and of the rows at Large label size: the y-axis title moves out clear of the grown numbers, with the left margin and census table widened to match (round 410 follow-ups)",
         _ => "",
     }
 }
