@@ -1,0 +1,222 @@
+//! Tests of the coordinate grid's limit questions (src/figures/math/limits_grid.rs). Every limit, value and kind here was
+//! worked by hand (the working is in the comments), not read back from the code.
+use super::limits::{grid, Lim, Model};
+use crate::figures::{examples_for, registry, start_params, FigureDef, Params};
+use serde_json::{json, Value as J};
+
+fn def() -> FigureDef { registry().into_iter().find(|d| d.id == "coordinate-grid").unwrap() }
+fn with(kv: J) -> Params {
+    let mut p = start_params(&def());
+    let over = crate::figures::params_from_json(&def(), &kv);
+    for (k, v) in over.0 { if kv.get(&k).is_some() { p.0.insert(k, v); } }
+    p
+}
+fn svg(p: &Params) -> String { super::coordinate_grid_render(p) }
+fn model(kv: J) -> Model { grid::model_for(&with(kv)) }
+fn kk(v: f64) -> super::limits::cas::K { let mut k = super::limits::Num::read(&format!("{v}")).unwrap().k; k.dec = false; k }
+fn val(l: &Lim) -> String { match l { Lim::Val(_, t) => t.clone(), other => format!("{other:?}") } }
+fn kinds(md: &Model) -> Vec<String> { md.discontinuities().0.iter().map(|d| format!("{} {}", d.text, d.kind)).collect() }
+/// The text a reader sees in one data-lim group, tags dropped, the true minus read as a hyphen.
+fn words_in(svg: &str, group: &str) -> String {
+    let tag = format!(r#"<g data-lim="{group}">"#);
+    let Some(a) = svg.find(&tag) else { return String::new() };
+    let rest = &svg[a + tag.len()..];
+    // (the groups hold no nested <g>)
+    let body = &rest[..rest.find("</g>").unwrap_or(rest.len())];
+    let mut out = String::new();
+    let mut inside = false;
+    // (a label's white halo repeats its words under it: it is not read)
+    let mut halo = false;
+    let mut tg = String::new();
+    for c in body.chars() {
+        match c {
+            '<' => { inside = true; tg.clear(); }
+            '>' => {
+                inside = false;
+                if tg.starts_with("text") { halo = tg.contains(r##"fill="#fff""##); }
+                if tg.starts_with("/text") { halo = false; }
+                if tg.starts_with("/text") || tg.starts_with("text") { out.push(' '); }
+            }
+            _ if inside => tg.push(c),
+            _ if halo => {}
+            _ => out.push(if c == '\u{2212}' { '-' } else { c }),
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+const JUMP: &str = "y = x + 2, x < 1; y = 4 - 2x, x >= 1";
+const THREE: &str = "y = -x - 1, x < -2; y = x^2/2 - 1, -2 <= x <= 2; y = 3, x > 2";
+const EVERY: &str = "y = (x^2 - 1)/(x - 1), x < 2; y = x - 3, 2 <= x < 4; y = 2/(x - 5), x >= 4";
+
+/// Off by default: every grid drawing the app ships (its opening state, its examples, rows of every kind) is the grid's
+/// own drawing byte for byte.
+#[test]
+fn off_by_default_the_grid_draws_as_before() {
+    let mut cases: Vec<Params> = vec![start_params(&def())];
+    for e in examples_for("coordinate-grid") {
+        let mut p = start_params(&def());
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        cases.push(p);
+    }
+    for kv in [
+        json!({"equations": JUMP, "xmin": -5.0, "xmax": 5.0, "ymin": -3.0, "ymax": 6.0}),
+        json!({"equations": EVERY, "points": "(1, 2)", "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "asymptotes": true}),
+        json!({"equations": "x^2 + y^2 = 25; y > x - 2; x = 4", "xmin": -6.0, "xmax": 6.0, "ymin": -6.0, "ymax": 6.0}),
+        json!({"equations": "y = sin(x)", "xunits": "Multiples of \u{3c0}", "xmin": -2.0, "xmax": 2.0, "xstep": 0.5, "style": "Print"}),
+        json!({"equations": "y = 2x + 1", "show_answers": false}),
+    ] { cases.push(with(kv)); }
+    for p in &cases {
+        assert!(!grid::active(p));
+        assert_eq!(svg(p), super::coordinate_grid_build(p, &mut vec![]));
+        assert!(!svg(p).contains("data-lim"));
+    }
+}
+
+/// A jump at 1: from the left x + 2 → 3, from the right 4 - 2x → 2, so the limit does not exist; f(1) = 4 - 2 = 2.
+#[test]
+fn a_jump_worked_by_hand() {
+    let kv = json!({"equations": JUMP, "xmin": -5.0, "xmax": 5.0, "ymin": -3.0, "ymax": 6.0, "lim_ask_at": "1"});
+    let md = model(kv.clone());
+    assert_eq!(val(&md.side(&kk(1.0), -1.0)), "3");
+    assert_eq!(val(&md.side(&kk(1.0), 1.0)), "2");
+    assert_eq!(md.two(&kk(1.0)), Lim::Dne);
+    assert_eq!(val(&md.value(&kk(1.0))), "2");
+    assert_eq!(kinds(&md), vec!["1 jump"]);
+    let key = words_in(&svg(&with(kv.clone())), "block");
+    assert!(key.contains("3") && key.contains("2") && key.contains("does not exist"), "{key}");
+    // the student copy: the same questions, no answers
+    let mut stu = kv.clone();
+    stu["show_answers"] = json!(false);
+    let q = words_in(&svg(&with(stu)), "block");
+    assert!(q.contains("lim") && !q.contains("does not exist") && !q.contains('3'), "{q}");
+}
+
+/// Three pieces, asked at -2, 0 and 2: at -2, -(-2) - 1 = 1 and (-2)²/2 - 1 = 1, continuous with f(-2) = 1 (closed);
+/// at 0, 0/2 - 1 = -1 on both sides; at 2, 4/2 - 1 = 1 from the left and 3 from the right (a jump), f(2) = 1.
+#[test]
+fn several_values_of_a_worked_by_hand() {
+    let kv = json!({"equations": THREE, "xmin": -6.0, "xmax": 6.0, "ymin": -4.0, "ymax": 6.0, "lim_ask_at": "-2, 0, 2"});
+    let md = model(kv.clone());
+    assert_eq!(md.asks.len(), 3);
+    for (a, l, r, f) in [(-2.0, "1", "1", "1"), (0.0, "-1", "-1", "-1"), (2.0, "1", "3", "1")] {
+        assert_eq!(val(&md.side(&kk(a), -1.0)), l, "left at {a}");
+        assert_eq!(val(&md.side(&kk(a), 1.0)), r, "right at {a}");
+        assert_eq!(val(&md.value(&kk(a))), f, "f({a})");
+    }
+    assert_eq!(val(&md.two(&kk(-2.0))), "1");
+    assert_eq!(md.two(&kk(2.0)), Lim::Dne);
+    assert_eq!(kinds(&md), vec!["2 jump"]);
+}
+
+/// 2/(x - 3) at 3: x - 3 → 0⁻ from the left, so 2/(x - 3) → -∞, and +∞ from the right; the limit does not exist and
+/// f(3) is undefined. Only row 1 is f (row 2 is another curve on the same grid).
+#[test]
+fn infinite_limits_and_the_rows_of_f() {
+    let kv = json!({"equations": "y = 2/(x - 3); y = 1/(x + 2)^2", "xmin": -6.0, "xmax": 8.0, "ymin": -7.0, "ymax": 7.0, "lim_rows": "1", "lim_ask_at": "3"});
+    let md = model(kv.clone());
+    assert_eq!(md.pieces.len(), 1);
+    assert_eq!(md.side(&kk(3.0), -1.0), Lim::NInf);
+    assert_eq!(md.side(&kk(3.0), 1.0), Lim::PInf);
+    assert_eq!(md.value(&kk(3.0)), Lim::Undef);
+    let key = words_in(&svg(&with(kv.clone())), "block");
+    assert!(key.contains("-\u{221e}") && key.contains("\u{221e}") && key.contains("undefined"), "{key}");
+    // written as "does not exist" when the teacher asks for it
+    let mut dne = kv.clone();
+    dne["lim_inf_answer"] = json!("does not exist");
+    let key = words_in(&svg(&with(dne)), "block");
+    assert!(!key.contains('\u{221e}') && key.contains("does not exist"), "{key}");
+    // with no rows named, both y = rows are f, and they overlap: the editor says so
+    let mut both = kv.clone();
+    both["lim_rows"] = json!("");
+    let notes = super::grid_warnings(&with(both));
+    assert!(notes.iter().any(|n| n.starts_with("Rows 1 and 2 both cover")), "{notes:?}");
+}
+
+/// A circle row is no function of x: with no rows named, f is the y = row only.
+#[test]
+fn rows_that_are_not_functions_are_not_f() {
+    let md = model(json!({"equations": "x^2 + y^2 = 25; y = x + 1", "xmin": -6.0, "xmax": 6.0, "ymin": -6.0, "ymax": 6.0, "lim_ask_at": "0"}));
+    assert_eq!(md.pieces.len(), 1);
+    assert_eq!(val(&md.two(&kk(0.0))), "1");
+    let notes = super::grid_warnings(&with(json!({"equations": "x^2 + y^2 = 25; y = x + 1", "lim_rows": "1", "lim_ask_at": "0"})));
+    assert!(notes.iter().any(|n| n.starts_with("Row 1 is not a function of x")), "{notes:?}");
+}
+
+/// (2x² + 1)/(x² + 1) = 2 - 1/(x² + 1) → 2 as x → ±∞: one horizontal asymptote y = 2, dashed, labelled.
+#[test]
+fn the_horizontal_asymptote_from_the_end_behaviour() {
+    let kv = json!({"equations": "y = (2x^2 + 1)/(x^2 + 1)", "xmin": -8.0, "xmax": 8.0, "ymin": -3.0, "ymax": 6.0, "lim_hasym": true, "lim_inf": "Both"});
+    let md = model(kv.clone());
+    assert_eq!(md.at_inf(1.0).map(|l| val(&l)), Some("2".into()));
+    assert_eq!(md.at_inf(-1.0).map(|l| val(&l)), Some("2".into()));
+    let s = svg(&with(kv));
+    assert_eq!(s.matches(r#"data-lim="hasym""#).count(), 1);
+    // y = 2 is at the plot's height for 2
+    let g = super::grid_layout(&with(json!({"xmin": -8.0, "xmax": 8.0, "ymin": -3.0, "ymax": 6.0})));
+    let y2 = g.mt + g.ph - (2.0 - g.y0) * g.uy;
+    assert!(s.contains(&format!(r#"y1="{y2:.2}""#)), "the asymptote is not at y = 2");
+    assert!(words_in(&s, "labels").contains("y = 2"));
+    let key = words_in(&s, "block");
+    assert!(key.contains("\u{221e}") && key.contains('2'), "{key}");
+}
+
+/// Every kind: (x² - 1)/(x - 1) = x + 1 with a hole at 1 (removable, limit 2, no value); at 2, 2 + 1 = 3 from the left
+/// and 2 - 3 = -1 from the right (jump); at 4, 4 - 3 = 1 and 2/(4 - 5) = -2 (jump); at 5, 2/(x - 5) is infinite.
+#[test]
+fn every_kind_labelled_and_listed() {
+    let kv = json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_disc": true});
+    let md = model(kv.clone());
+    assert_eq!(kinds(&md), vec!["1 removable", "2 jump", "4 jump", "5 infinite"]);
+    let s = svg(&with(kv.clone()));
+    let labels = words_in(&s, "labels");
+    assert_eq!(labels.matches("removable").count(), 1, "{labels}");
+    assert_eq!(labels.matches("jump").count(), 2, "{labels}");
+    assert_eq!(labels.matches("infinite").count(), 1, "{labels}");
+    let key = words_in(&s, "block");
+    assert!(key.contains("x = 1 (removable)") && key.contains("x = 2 (jump)") && key.contains("x = 4 (jump)") && key.contains("x = 5 (infinite)"), "{key}");
+    // the student copy leaves the kinds and the list off
+    let mut stu = kv.clone();
+    stu["show_answers"] = json!(false);
+    let s = svg(&with(stu));
+    assert_eq!(words_in(&s, "labels"), "");
+    assert!(!words_in(&s, "block").contains("removable"));
+}
+
+/// The hole with its point moved: (x² - 4)/(x - 2) = x + 2 away from 2, so the limit at 2 is 4; the point (2, 1) is f(2).
+#[test]
+fn a_moved_hole_takes_its_value_from_the_point() {
+    let md = model(json!({"equations": "y = (x^2 - 4)/(x - 2)", "points": "(2, 1)", "xmin": -4.0, "xmax": 6.0, "ymin": -2.0, "ymax": 7.0, "lim_ask_at": "2"}));
+    assert_eq!(val(&md.two(&kk(2.0))), "4");
+    assert_eq!(val(&md.value(&kk(2.0))), "1");
+    assert_eq!(kinds(&md), vec!["2 removable"]);
+    // the points can be left out of f
+    let md = model(json!({"equations": "y = (x^2 - 4)/(x - 2)", "points": "(2, 1)", "lim_points": false, "lim_ask_at": "2"}));
+    assert_eq!(md.value(&kk(2.0)), Lim::Undef);
+}
+
+/// Print stays grey: nothing the limit work adds is in colour.
+#[test]
+fn print_is_grey() {
+    let s = svg(&with(json!({"equations": EVERY, "xmin": -3.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "lim_hasym": true, "lim_ask_at": "1, 2", "style": "Print"})));
+    let added = &s[s.find(r#"<g data-lim="lines">"#).unwrap()..];
+    for hex in added.match_indices('#').map(|(i, _)| &added[i + 1..(i + 7).min(added.len())]) {
+        if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) { assert!(hex[0..2] == hex[2..4] && hex[2..4] == hex[4..6], "colour #{hex} in Print"); }
+    }
+}
+
+/// The four classic setups each ask something, and each draws without a note about f.
+#[test]
+fn the_classic_setups() {
+    let setups = crate::figures::classic_setups("coordinate-grid");
+    assert_eq!(setups.len(), 4);
+    for e in setups {
+        let mut p = start_params(&def());
+        for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+        assert!(grid::active(&p), "{}", e.name);
+        let s = svg(&p);
+        assert!(!words_in(&s, "block").is_empty(), "{}", e.name);
+        let notes = super::grid_warnings(&p);
+        assert!(notes.iter().all(|n| !n.contains("f ") && !n.starts_with("Row")), "{}: {notes:?}", e.name);
+    }
+}

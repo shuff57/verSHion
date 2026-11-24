@@ -2976,6 +2976,8 @@ fn coordinate_grid_params() -> Vec<ParamDef> {
     ];
     // (batch 7: each row's line, thickness and arrows, each axis end, fraction numbering; every default draws as before)
     v.extend(grid_b7::params());
+    // (new figures: limit questions on the grid's own rows; every default adds nothing)
+    v.extend(limits::grid::params());
     for d in &mut v {
         if grid_b7::END_KEYS.contains(&d.key) {
             d.hint = "Automatic follows Arrowheads on axes. None removes this endpoint's marker; the separate extension control can still lengthen its plain shaft. With extension set to -1, None has no extension. These controls do not change grid strokes or the window.";
@@ -3134,7 +3136,11 @@ fn greyify(svg: &str) -> String {
 }
 fn wide_flat(p: &Params, g: &GridL) -> bool { p.b("square") && g.pw / g.ph.max(1.0) > 6.0 }
 
-fn coordinate_grid_render(p: &Params) -> String { coordinate_grid_build(p, &mut vec![]) }
+fn coordinate_grid_render(p: &Params) -> String {
+    // (the limit questions, when one is asked, are added over the grid's own drawing; off, the drawing is returned as built)
+    if !limits::grid::active(p) { return coordinate_grid_build(p, &mut vec![]); }
+    limits::grid::render(p, &mut vec![])
+}
 
 /// Candidate-only inventory from the same drawing pass; SVG bytes equal the ordinary renderer.
 /// It reports emitted vector geometry, never expected source facts or raster/source fidelity.
@@ -3275,7 +3281,8 @@ fn coordinate_grid_number_halo_off_preserves_literal_ticks_and_geometry() {
 /// stay clean.
 pub fn grid_warnings(p: &Params) -> Vec<String> {
     let mut notes = vec![];
-    let _ = coordinate_grid_build(p, &mut notes);
+    // (with a limit question asked, the limit work's notes too; otherwise the grid's own, as before)
+    let _ = limits::grid::render(p, &mut notes);
     // (batch 7: a reversed or zero-width range is said in the editor only, so the figure draws as it always has)
     let mut pn = p.clone();
     pn.normalize(&coordinate_grid_params(), false);
@@ -4364,6 +4371,8 @@ mod conics_r2_tests;
 pub(crate) mod limits;
 #[cfg(test)]
 mod limits_tests;
+#[cfg(test)]
+mod limits_grid_tests;
 pub(crate) mod tangent;
 pub(crate) mod tangent_expr;
 pub(crate) mod polar;
