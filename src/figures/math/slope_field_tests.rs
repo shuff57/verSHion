@@ -1480,9 +1480,23 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
         ("y^pi", -1.0, 5.0, vec![0.0]), ("y^sqrt(2)", -3.7, 4.1, vec![0.0]), ("y^e", -1.0, 5.0, vec![0.0]),
         ("y ln(y^(1/3))", -1.0, 5.0, vec![1.0]), ("(1 - y^2)/(1 - y^2)^(1/4)", -3.0, 3.0, vec![]), ("y/y^(1/4)", -1.0, 5.0, vec![]),
         ("e^(-y^3)", -10.0, 10.0, vec![]), ("e^(-1/y)", -1.0, 5.0, vec![]),
+        // check 10: windows whose left edge zeroes f (x√y from x = 0), touching roots of fractional order (√|y|, (y − 0.37)^(2/3),
+        // (y² − 2)^(2/3)), underflow toward denormals (y e^(−y²) far out), powers in x (0^(x² + 1) = 0)
+        ("x sqrt(y)", -1.0, 5.0, vec![0.0]), ("x sqrt(4 - y^2)", -3.0, 3.0, vec![-2.0, 2.0]), ("x(y - 1)^(1/3)", -3.0, 3.0, vec![1.0]),
+        ("sqrt(abs(y))", -1.0, 5.0, vec![0.0]), ("sqrt(abs(y))", -3.7, 4.1, vec![0.0]), ("(y - 0.37)^(2/3)", -3.0, 3.0, vec![0.37]),
+        ("(y^2 - 2)^(2/3)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]), ("y e^(-y^2)", -31.0, 29.0, vec![0.0]), ("y^(x^2 + 1)", -1.0, 5.0, vec![0.0]),
         // still found: a true root beside a pole, and a polynomial
         ("y/(x + y)", -3.7, 4.1, vec![0.0]), ("y(4 - y)", -3.7, 4.1, vec![0.0, 4.0]), ("(y - 1)^2", -3.7, 4.1, vec![1.0]),
     ];
+    // (windows that start at x = 0, the usual ones for time: f is 0 along x = 0 when it has a factor x)
+    for (eqt, xa, xb, y0, y1, want) in [("x sqrt(y)", 0.0, 6.0, -1.0, 5.0, vec![0.0]), ("x sqrt(4 - y^2)", 0.0, 6.0, -3.0, 3.0, vec![-2.0, 2.0]),
+                                        ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.5, vec![-1.0, 1.0]), ("(x - 1) sqrt(1 - y^2)", 1.0, 5.0, -2.0, 2.5, vec![-1.0, 1.0]),
+                                        ("x(y - 1)^(1/3)", 0.0, 5.0, -3.0, 3.0, vec![1.0]), ("sqrt(x y)", 0.0, 10.0, -1.0, 5.0, vec![0.0])] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("xmin", f(xa)), ("xmax", f(xb)), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on x [{xa}, {xb}], y [{y0}, {y1}]: {got:?}");
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-9, "{eqt}: {got:?}"); }
+    }
     for (eqt, y0, y1, want) in cases {
         let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
         let q = out.equils.as_ref().unwrap();
