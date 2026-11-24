@@ -399,7 +399,7 @@ fn corrected_render_time_under_200ms() {
                 "extra",
                 "A, 1, 1\nB, -2, 1\nC, 3, -2\nD, -3, -3\nE, 4, 4\nF, -4, 2",
             );
-            let start = std::time::Instant::now();
+            let start = crate::testclock::Stopwatch::start();
             assert!(!render(&p).is_empty());
             let elapsed = start.elapsed();
             worst = worst.max(elapsed);

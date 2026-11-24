@@ -936,7 +936,7 @@ fn drawing_is_pure_and_fast() {
             let mut l = toggle_list(mask);
             l.extend([b(SHOW_ANSWERS, key), s("label_size", "Large")]);
             let p = with(&l);
-            let t = std::time::Instant::now();
+            let t = crate::testclock::Stopwatch::start();
             let svg = (def().render)(&p);
             let dt = t.elapsed();
             assert!(svg.len() > 1000);

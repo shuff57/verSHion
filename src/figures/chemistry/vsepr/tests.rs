@@ -1110,7 +1110,7 @@ fn drawing_is_pure_and_within_a_cpu_budget() {
         for (turn, tilt) in [(0.0, 0.0), (TURN_DEFAULT, TILT_DEFAULT), (90.0, 0.0), (300.0, 60.0)] {
             for ans in [true, false] {
                 let p = with(&[s("molecule", name), f("turn", turn), f("tilt", tilt), b(SHOW_ANSWERS, ans), s("label_size", "Large")]);
-                let t = std::time::Instant::now();
+                let t = crate::testclock::Stopwatch::start();
                 let svg = (def().render)(&p);
                 let dt = t.elapsed();
                 assert!(svg.len() > 1500, "{name}");

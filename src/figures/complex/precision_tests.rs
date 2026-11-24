@@ -495,7 +495,7 @@ fn corrected_irrational_render_time_and_pngs() {
         ),
     ] {
         let p = params_from_json(&def, &changes);
-        let start = std::time::Instant::now();
+        let start = crate::testclock::Stopwatch::start();
         let svg = render(&p);
         let elapsed = start.elapsed();
         worst = worst.max(elapsed);

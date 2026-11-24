@@ -744,7 +744,7 @@ fn extremes_stay_bounded() {
         vec![("curves", s(&format!("r = {}", "θ+".repeat(150) + "1"))), ("title", s(&"T".repeat(300)))],
         vec![("trace_at", s("1000000")), ("tangent", b(true)), ("tangent_at", s("-1000000")), ("shade", s(polar::SHADE[1])), ("shade_from", s("-1000000")), ("shade_to", s("1000000"))],
     ] {
-        let t0 = std::time::Instant::now();
+        let t0 = crate::testclock::Stopwatch::start();
         let r = build(&with(&o));
         let el = t0.elapsed().as_secs_f64();
         assert!(el < 0.3, "{el} s for {:?}", o.iter().map(|x| x.0).collect::<Vec<_>>());
@@ -1384,7 +1384,7 @@ fn printers_used_across_the_sweep() {
     println!("printers: textbook {a}, tree {b}, fully bracketed {c}, none {none}; fully bracketed for {full_examples:?}");
     // what choosing and verifying the print costs, per curve (reading a curve without it is the baseline)
     let rows: Vec<&str> = data.iter().filter(|e| e["kind"] != "refused" && e["kind"] != "nested" && e["kind"] != "unsupported").map(|e| e["typed"].as_str().unwrap()).collect();
-    let t0 = std::time::Instant::now();
+    let t0 = crate::testclock::Stopwatch::start();
     let mut n = 0;
     for r in &rows { n += read_row(r).0.len(); }
     let per = t0.elapsed().as_secs_f64() / n as f64;

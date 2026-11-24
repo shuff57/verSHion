@@ -991,7 +991,7 @@ fn drawing_is_pure_and_within_a_cpu_budget() {
             for key in [true, false] {
                 let list = [s("gas", gas), s("curves", curves), f("ea", 20.0), f("mark", 845.3), b(SHOW_ANSWERS, key), s("label_size", "Large")];
                 let p = with(&list);
-                let t = std::time::Instant::now();
+                let t = crate::testclock::Stopwatch::start();
                 let svg = (def().render)(&p);
                 let dt = t.elapsed();
                 assert!(svg.len() > 1500);

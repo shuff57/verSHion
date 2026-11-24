@@ -425,7 +425,7 @@ mod tests {
             assert!(svg.contains("data-sigma-bound=\"lower\""));
             p.set_b(SHOW_ANSWERS, true);
             p.set_i("sum_count", 1000);
-            let now = std::time::Instant::now();
+            let now = crate::testclock::Stopwatch::start();
             let _ = render(&p);
             assert!(now.elapsed().as_secs_f64() < 0.5);
         }
@@ -483,7 +483,7 @@ mod r2_tests {
             for k in ["sigma", "point_values", "sums", "sum", "convergence"] {
                 p.set_b(k, true);
             }
-            let start = std::time::Instant::now();
+            let start = crate::testclock::Stopwatch::start();
             let _ = render(&p);
             let _ = warnings(&p);
             let _ = handles(&p);

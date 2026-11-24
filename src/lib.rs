@@ -58,5 +58,7 @@ pub mod theme;
 pub mod time;
 pub mod tidy;
 pub mod wysiwyg;
+#[cfg(test)]
+pub(crate) mod testclock;
 
 pub use app::{App, Screen, Settings};

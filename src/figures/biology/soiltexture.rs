@@ -3441,10 +3441,10 @@ mod tests {
 
     #[test]
     fn a_first_draw_is_fast_enough_to_follow_a_checkbox() {
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let first = render_of(&[]);
         let first_ms = t.elapsed().as_secs_f64() * 1000.0;
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let mut n = 0;
         for k in 0..30 { let _ = render_of(&[s("sand", &(30 + k).to_string()), s("clay", "20"), s("label_size", "Large"), b("guides", true)]); n += 1; }
         let each = t.elapsed().as_secs_f64() * 1000.0 / n as f64;

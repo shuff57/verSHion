@@ -143,7 +143,7 @@ fn sequences_fraction_oracles_and_labels() {
                 ] {
                     p.set_b(key, option == "all" || option == key);
                 }
-                let now = std::time::Instant::now();
+                let now = crate::testclock::Stopwatch::start();
                 let svg = render(&p);
                 assert!(now.elapsed().as_secs_f64() < 0.5);
                 let xml = roxmltree::Document::parse(&svg).unwrap();
@@ -503,7 +503,7 @@ fn sequences_hidden_controls_and_extremes() {
         for v in value {
             let mut p = base.clone();
             p.0.insert(pd.into(), v);
-            let now = std::time::Instant::now();
+            let now = crate::testclock::Stopwatch::start();
             let s = render(&p);
             assert!(now.elapsed().as_secs_f64() < 0.5);
             assert!(!s.contains("NaN"));
@@ -1475,7 +1475,7 @@ fn sequences_exact_trig_render_bound_r1() {
     }
     for layout in ["One grid", "Two aligned graphs"] {
         p.set_s("layout", layout);
-        let start = std::time::Instant::now();
+        let start = crate::testclock::Stopwatch::start();
         let svg = render(&p);
         assert!(start.elapsed().as_secs_f64() < 0.5);
         assert!(svg.len() < 150000);

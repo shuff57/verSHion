@@ -732,7 +732,7 @@ fn examples_pure_and_fast() {
         let mut p = Params::defaults(&(d.params)());
         for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
         p.normalize(&(d.params)(), false);
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let a = build(&p);
         worst = worst.max(t.elapsed().as_secs_f64());
         assert_eq!(a.svg, build(&p).svg, "{}", e.name);
@@ -749,7 +749,7 @@ fn examples_pure_and_fast() {
     }
     for o in [vec![("spacing", s("4 per gridline")), ("xstep", f(0.5)), ("ystep", f(0.5)), ("draw_as", s("Arrows"))], vec![("points", s("(0,1);(0,2);(0,3);(0,-1);(0,-2);(0,-3)")), ("euler", b(true)), ("n", Value::I(50)), ("h", s("0.1")), ("equilibria", b(true)), ("student_copy", s(STUDENT[3]))], vec![("dydx", s("sin(10x)*10 + y")), ("points", s("(0,1);(0,2);(0,3);(0,-1);(0,-2);(0,-3)")), ("xmin", f(-1000.0)), ("xmax", f(1000.0)), ("ymin", f(-1000.0)), ("ymax", f(1000.0))], vec![("dydx", s("y^2")), ("points", s("(0,1);(0,-1)")), ("ymin", f(-1000.0)), ("ymax", f(1000.0)), ("ystep", f(100.0))]] {
         let p = with(&o);
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let a = build(&p);
         worst = worst.max(t.elapsed().as_secs_f64());
         assert!(a.svg.len() < 3_000_000);
