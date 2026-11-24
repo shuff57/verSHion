@@ -43,6 +43,13 @@ class SourceMapTests(unittest.TestCase):
         # Holdout v8, Lebl appendix exercises: "A.3.1".
         page={'items':[{'number':None,'label':'A.3.1','question_index':0,'status':'saved'},{'number':None,'label':'A.3.2','question_index':1,'status':'saved'}]}
         self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2]),page,qs)['by_number'],{1:qs[0],2:qs[1]})
+    def test_a_declared_label_map_keys_letter_prefixed_numbers(self):
+        # Holdout v17, Maths4Everyone: questions A1-A3, B1-B3 ...
+        labels=['A1','A2','(B1)','b2.'];qs=[{'stem':l} for l in labels]
+        page={'items':[{'number':None,'label':l,'question_index':k,'status':'saved'} for k,l in enumerate(labels)]}
+        case={'source_id':'s','question_numbers':[101,102,201,202],'label_numbers':{'A1':101,'A2':102,'B1':201,'B2':202}}
+        self.assertEqual(h.parsed_source_map(case,page,qs)['numbers'],[101,102,201,202])
+        self.assertEqual(h.parsed_source_map(case,dict(page,items=[dict(page['items'][0],label='C9')]),qs[:1])['numbers'],[None])
     def test_full_dotted_numbers_keep_sections_apart(self):
         # Holdout v16, Williamwood: questions 5.3, 6.1, 6.2, 6.3, with 6.3 split into 6.3a and 6.3b.
         labels=['5.3','6.1','6.2','6.3a','6.3b'];qs=[{'stem':l} for l in labels]

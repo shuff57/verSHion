@@ -223,7 +223,12 @@ def parsed_source_map(case,page,questions,previous=None):
     # A case declaring dotted labels ("Exercise 2.15") keys each item by the label's last part.
     # Section-numbered items whose last parts repeat across sections ("5.3" and "6.3") key by the
     # whole number, section*100+item, with a trailing part letter ("6.3a") kept on its item.
-    if case.get('dotted_full'):
+    # A case printing letter-prefixed numbers ("A1", "B3") declares its own label -> number map.
+    if case.get('label_numbers'):
+        lab=lambda l:re.sub(r'[\s().]','',str(l or '')).upper()
+        table={lab(k):v for k,v in case['label_numbers'].items()}
+        numbers=[table.get(lab(i.get('label'))) for i in items]
+    elif case.get('dotted_full'):
         numbers=[int(m.group(1))*100+int(m.group(2)) if (m:=re.fullmatch(r'\s*(?:Q(?:uestion)?\s*)?(\d+)\.(\d+)\s*(?:\(?[a-z]\)?)?\s*',str(i.get('label') or ''),re.I)) else None for i in items]
     elif case.get('dotted_labels'):
         numbers=[n if n is not None else (int(m.group(1)) if (m:=re.fullmatch(r'\s*(?:[A-Za-z]\.)?\d+(?:\.\d+)*\.(\d+)\s*',str(i.get('label') or ''))) else None) for n,i in zip(numbers,items)]
