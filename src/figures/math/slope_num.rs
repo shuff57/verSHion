@@ -419,18 +419,18 @@ impl Q {
         for k in 0..20 { let s = v * (1u64 << k) as f64; if s.fract() == 0.0 && s.abs() < 1e15 { return Q::new(s as i128, 1i128 << k); } }
         None
     }
-    /// Any finite float, exactly (None where its numerator or denominator would not fit): 0.3333333333333333 is
-    /// 6004799503160661/2⁵⁴, which is less than 1/3.
-    pub(crate) fn of_f64_exact(v: f64) -> Option<Q> {
+    /// A window edge as the teacher typed it: the shortest decimal that gives back its float (None where it would not
+    /// fit). 0.7 is 7/10, though its float is 0.69999999999999995559…; 0.3333333333333333 is 3333333333333333/10¹⁶,
+    /// which is less than 1/3.
+    pub(crate) fn of_f64_decimal(v: f64) -> Option<Q> {
         if !v.is_finite() { return None; }
-        if v == 0.0 { return Some(Q(0, 1)); }
-        let bits = v.to_bits();
-        let ex = ((bits >> 52) & 0x7ff) as i32;
-        let fr = (bits & ((1u64 << 52) - 1)) as i128;
-        let (mut m, mut e) = if ex == 0 { (fr, -1074) } else { (fr | (1i128 << 52), ex - 1075) };
-        while m & 1 == 0 && e < 0 { m >>= 1; e += 1; }
-        let m = if v < 0.0 { -m } else { m };
-        if e >= 0 { if e > 70 { return None; } Q::new(m.checked_mul(1i128 << e)?, 1) } else { if -e > 125 { return None; } Q::new(m, 1i128 << (-e)) }
+        let t = format!("{v}");
+        let (neg, t) = match t.strip_prefix('-') { Some(r) => (true, r), None => (false, t.as_str()) };
+        let (ip, fp) = t.split_once('.').unwrap_or((t, ""));
+        if ip.len() + fp.len() > 36 || fp.len() > 36 || !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) { return None; }
+        let n: i128 = format!("{ip}{fp}").parse().ok()?;
+        let d = 10i128.checked_pow(fp.len() as u32)?;
+        Q::new(if neg { -n } else { n }, d)
     }
     fn le(self, o: Q) -> Option<bool> { Some(o.sub(self)?.0 >= 0) }
 }
@@ -931,8 +931,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             let mut lines = vec![];
             let mut unsure = vec![];
             // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1; and a root whose float is the
-            // edge's, exactly: 1/3 is not in y 0..0.3333333333333333, whose top is 6004799503160661/2⁵⁴ < 1/3)
-            let (e0, e1) = (Q::of_f64_exact(y0), Q::of_f64_exact(y1));
+            // edge's, against the edge as typed: 7/10 is in y 0..0.7, 1/3 is not in y 0..0.3333333333333333)
+            let (e0, e1) = (Q::of_f64_decimal(y0), Q::of_f64_decimal(y1));
             let count_in = |a: Q, b: Q| -> Option<usize> { Some(sturm_count(&sf, a, b)? - (poly_eval(&sf, a)?.0 == 0) as usize) };
             let in_window = |r: f64, rq: Option<Q>, (a, b): (Q, Q)| -> bool {
                 if r < y0 || r > y1 { return false; }
@@ -1031,14 +1031,14 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         // 0.5000001, is another line's)
         // (and inside the window: a root found alone has no neighbour found, and the root just outside the window, 2 beside
         // 2.0000003 on y 2.0000001..2.0000005, is not this line. A value whose float is the window edge's is inside only when
-        // it is exactly a rational the edge holds: 1/3 is outside y 0..0.3333333333333333)
+        // it is exactly the edge as typed: 3/10 is inside y 0..0.3, 1/3 is outside y 0..0.3333333333333333)
         let gap = found.iter().filter(|o| o.0 != r).map(|o| (o.0 - r).abs()).fold(f64::INFINITY, f64::min);
         let inside = |c: &Node| -> bool {
             let v = ev(c, 0.0, 0.0);
             if !(v >= y0 && v <= y1) { return false; }
             if v != y0 && v != y1 { return true; }
             let q = ex::exact(c, None).and_then(|e| e.rational()).and_then(|(p, q)| Q::new(p, q));
-            let edge = Q::of_f64_exact(v);
+            let edge = Q::of_f64_decimal(v);
             matches!((q, edge), (Some(a), Some(b)) if a == b)
         };
         let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap && inside(c)).find(|c| proves(&f.tree, c));

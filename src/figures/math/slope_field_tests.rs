@@ -1575,3 +1575,34 @@ fn round18_no_line_takes_a_value_outside_the_window() {
         assert_eq!(got, want, "{eqt} on [{y0}, {y1}]");
     }
 }
+
+/// Check 19: an equilibrium on a window edge typed as a decimal is in the window: the edge is the decimal typed, not the
+/// binary value of its float (0.7 is stored as 0.69999999999999995559…, below 7/10). y(y − 0.7) on y 0..0.7 has the lines
+/// y = 0 and y = 0.7, every one; y − d on y 0..d and on y d..1 has y = d for every two-place d, with or without sin x; and
+/// a list called complete is.
+#[test]
+fn round19_a_root_on_a_typed_decimal_edge_is_in_the_window() {
+    let cases: Vec<(&str, f64, f64, Vec<f64>)> = vec![
+        ("y(y - 0.7)", 0.0, 0.7, vec![0.0, 0.7]), ("y - 0.3", 0.0, 0.3, vec![0.3]), ("y - 0.1", 0.1, 1.0, vec![0.1]), ("10y - 1", 0.1, 1.0, vec![0.1]),
+        ("(y - 0.3)(y + 1)", -2.0, 0.3, vec![-1.0, 0.3]), ("(y - 0.2)(1 - y)", 0.2, 1.0, vec![0.2, 1.0]), ("y - 0.6", 0.0, 0.6, vec![0.6]),
+        ("(y - 0.3)x", 0.0, 0.3, vec![0.3]), ("(y - 0.3) sin(x)", 0.0, 0.3, vec![0.3]), ("(y - 0.3) e^(-x)", 0.0, 0.3, vec![0.3]), ("y(1 - y/0.7)", 0.0, 0.7, vec![0.0, 0.7]),
+    ];
+    for (eqt, y0, y1, want) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}");
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-12, "{eqt} on [{y0}, {y1}]: {got:?}"); }
+    }
+    for k in 1..100 {
+        let d = k as f64 / 100.0;
+        let ds = format!("{d}");
+        for (eqt, y0, y1) in [(format!("y - {ds}"), 0.0, d), (format!("y - {ds}"), d, 1.0), (format!("y(y - {ds}) sin(x)"), 0.0, d), (format!("y(y - {ds})"), 0.0, d)] {
+            let out = build(&with(&[("dydx", s(&eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+            let q = out.equils.as_ref().unwrap();
+            let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+            // (d is a line, drawn; a list called complete holds every root in the window)
+            assert!(got.iter().any(|g| (g - d).abs() < 1e-12), "{eqt} on [{y0}, {y1}]: no line at {d}: {got:?}, unsure {:?}", q.unsure);
+            if q.complete && eqt.starts_with("y(") { assert!(got.iter().any(|g| *g == 0.0), "{eqt} on [{y0}, {y1}]: complete without 0: {got:?}"); }
+        }
+    }
+}
