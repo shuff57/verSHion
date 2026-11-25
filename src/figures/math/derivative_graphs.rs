@@ -2089,6 +2089,27 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             }
             other => (other, ve),
         };
+        // (and a value from the typed formula is written only where its own rounding bound shows it to four figures: beside
+        // a hole with no series (at the end of the domain, √x⁵ added; at a corner, |x − 1| added) the formula's terms cancel
+        // to a steady but wrong float, (eˣ − 1)/x + √x⁵″ ≈ 0.26 at 0.00001 for 0.345, and f itself, (1 − cos x)/x² + √x⁵ ≈ 0 at
+        // 10⁻⁷ for 1/2. Exact rationals, series values and values settled by their sides are not formula floats.)
+        let from_formula = !rational && !settled.get() && !proven_zero && !m.is_isolated(t.v) && !m.local_covers(t.v)
+            && ve.as_ref().is_none_or(|e| e.rational().is_none());
+        let v = match v {
+            // (a 0 the formula's rounding was read as, too: "≈ 0" only where that rounding is itself tiny)
+            Some(w) if from_formula => {
+                // (the better of the expanded derivative's bound and, for a rational piece, its typed form's, which the value
+                // uses beside a pole: 1/(x² − 2)″ at 1.414215)
+                let bound = m.piece_at(t.v).and_then(|pi| {
+                    let a = m.fexpr(pi, fi).map(|e| sym::ev_err(e, t.v).1);
+                    let b = (matches!(m.mode, Mode::F) && fi > 0 && m.pieces[pi].rat.is_some()).then(|| { let mut e = m.pieces[pi].e.clone(); for _ in 0..fi { e = sym::deriv(&e); } sym::ev_err(&e, t.v).1 });
+                    match (a, b) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) }
+                });
+                let lost = bound.is_some_and(|b| if w == 0.0 { !(b <= 1e-9) } else { !(b <= 1e-4 * w.abs()) });
+                if lost { let mut u = undecided.get(); u[fi] = true; undecided.set(u); None } else { Some(w) }
+            }
+            other => other,
+        };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
     // (f″ where f′ does not exist does not exist either; where f′ is only undecided, f″ is worked out on its own)
@@ -2102,8 +2123,8 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let nm = &names[fi];
         Some(match tval(fi) {
             Some((v, ve)) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
-            None if fi == 0 => format!("{nm}({}) has no value", t.show),
             None if undecided.get()[fi] => format!("{nm}({}) cannot be decided here", t.show),
+            None if fi == 0 => format!("{nm}({}) has no value", t.show),
             None => format!("{nm}({}) does not exist", t.show),
         })
     };

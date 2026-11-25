@@ -116,3 +116,29 @@ fn f_beside_a_hole_and_exact_values_beside_a_corner() {
         assert!(out.notes.iter().all(|n| !n.contains("cannot be decided")), "{fx} at {tx}: {:?}", out.notes);
     }
 }
+
+/// Check 18: a hole at the end of the domain or at a corner has no series, and two holes 10⁻⁴ apart none either; there the
+/// tracer writes a formula value only where its rounding bound shows it to four figures. (eˣ − 1)/x + √x⁵ has f″ = 1/3 +
+/// x/4 + (15/4)√x + … = 0.34519 at 0.00001; (1 − cos x)/x² + √x⁵ has f = 1/2 at 10⁻⁷; |x − 1| + (e^(x−1) − 1)/(x − 1) has
+/// f′ = −1 + 1/2 = −1/2 left of 1; the two-hole sum has f″ = 2/3 near 0. Each reading is that value to its places, or undecided.
+#[test]
+fn holes_without_a_series_write_no_lost_value() {
+    let cases: Vec<(&str, &str, usize, f64)> = vec![
+        ("(e^x - 1)/x + sqrt(x)^5", "0.00001", 2, 0.345194375), ("(e^x - 1)/x + sqrt(x)^5", "0.00000001", 1, 0.5),
+        ("(1 - cos(x))/x^2 + sqrt(x)^5", "0.0000001", 0, 0.5), ("ln(1 + x)/x + x^(5/2)", "0.0000001", 2, 0.6679),
+        ("abs(x - 1) + (e^(x - 1) - 1)/(x - 1)", "0.99999999", 1, -0.5),
+        ("(e^x - 1)/x + (e^(x - 0.0001) - 1)/(x - 0.0001)", "0.000005", 2, 0.666644), ("(e^x - 1)/x + (e^(x - 0.0001) - 1)/(x - 0.0001)", "0.00002", 2, 0.6666),
+    ];
+    for (fx, tx, k, want) in cases {
+        let x = typed(tx).unwrap().v;
+        let p = with(&[("f", s(fx)), ("xmin", f((x - 1.0).floor())), ("xmax", f((x + 2.0).ceil())), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let reads: Vec<String> = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+        let r = &reads[k];
+        if r.contains("cannot be decided") { continue; }
+        assert!(!r.contains("does not exist") && !r.contains("has no value"), "{fx} at {tx}: {r}");
+        let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-");
+        let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+        let places = v.trim().split('.').nth(1).map_or(0, |d| d.chars().take_while(|c| c.is_ascii_digit()).count());
+        assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) + 1e-9, "{fx} at {tx}: reading {k} {r}, true {want}");
+    }
+}
