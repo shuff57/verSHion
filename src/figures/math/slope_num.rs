@@ -546,7 +546,11 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>)>> {
                 let (Some(h2), Some(k2)) = (h2, k2) else { break };
                 if k2 > 1_000_000_000_000 { break; }
                 (h0, h1, k0, k1) = (h1, h2, k1, k2);
-                if let Some(q) = Q::new(h1, k1) { if poly_eval(c, q).is_some_and(|v| v.0 == 0) { rq = Some(q); break; } }
+                // (only a root inside this root's own interval: another root of the polynomial is another line)
+                if let Some(q) = Q::new(h1, k1) {
+                    let inside = q.sub(a).is_some_and(|d| d.0 > 0) && b.sub(q).is_some_and(|d| d.0 >= 0);
+                    if inside && poly_eval(c, q).is_some_and(|v| v.0 == 0) { rq = Some(q); break; }
+                }
                 let fr = xv - ai;
                 if fr.abs() < 1e-18 { break; }
                 xv = 1.0 / fr;
@@ -703,6 +707,24 @@ fn candidates(y: f64) -> Vec<Node> {
     for q in 1..=12i128 {
         let p = (y / PI * q as f64).round() as i128;
         if p != 0 && ((p as f64 / q as f64) * PI - y).abs() < 1e-6 { if let Some(c) = rat_node(p, q) { out.push(Node::Mul(b(c), b(Node::Pi))); } }
+    }
+    // (fractions of e, as y − e or y(1 − ln y) have them)
+    for q in 1..=12i128 {
+        let p = (y / EULER * q as f64).round() as i128;
+        if p != 0 && ((p as f64 / q as f64) * EULER - y).abs() < 1e-9 * (1.0 + y.abs()) { if let Some(c) = rat_node(p, q) { out.push(Node::Mul(b(c), b(Node::Euler))); } }
+    }
+    // (quadratic surds (p ± √n)/q, the roots of a quadratic with whole coefficients: (3 ± √5)/2)
+    for n in [2i128, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23] {
+        let sn = (n as f64).sqrt();
+        for q in 1..=12i128 {
+            for sg in [1.0, -1.0] {
+                let p = (y * q as f64 - sg * sn).round() as i128;
+                if p == 0 || ((p as f64 + sg * sn) / q as f64 - y).abs() >= 1e-9 * (1.0 + y.abs()) { continue; }
+                let root = Node::Func("sqrt", b(Node::Num(n as f64, R::new(n, 1))));
+                let top = if sg > 0.0 { Node::Add(b(Node::Num(p as f64, R::new(p, 1))), b(root)) } else { Node::Sub(b(Node::Num(p as f64, R::new(p, 1))), b(root)) };
+                out.push(Node::Div(b(top), b(Node::Num(q as f64, R::new(q, 1)))));
+            }
+        }
     }
     // (short decimals, as typed: 0.15, 0.0625, 0.0001)
     for k in 1..=6u32 {
