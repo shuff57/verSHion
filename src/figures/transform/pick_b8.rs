@@ -14,6 +14,8 @@
 //! Before the click the line or the centre the click would choose is outlined under the pointer with its own tip
 //! (the workspace's area hover, `interact::Hover`), the reference's preview. The click writes the choice (a later
 //! transformation's into its own "Then" line, through the figure's own reader and writer) and turns Pick back to Off.
+//! Under the outline the image the click would make is drawn faint and dashed (`ghost`): the transformation picked
+//! for applied to the shape it acts on, with the line or centre under the pointer.
 //! The setting never changes the drawing: a figure saved or shared while picking draws exactly as without it, and
 //! opens with the next click on the grid still picking.
 use super::*;
@@ -112,8 +114,16 @@ pub(super) fn handles(p: &Params, lay: &Layout) -> Option<Vec<Handle>> {
         p.set_s("pick", PICKS[0]);
     };
     let q = lay.steps[k].p.clone();
+    let closed = p.b("closed") && lay.pre.len() > 2;
+    // the hover's and the ghost's own copies of the transformation (the click's closure takes `q`)
+    let (gq, hq) = (q.clone(), q.clone());
+    // what this click would draw, from the figure as it is now (see `preview`)
+    let preview = {
+        let (base, commit, zoom) = (p.clone(), commit.clone(), lay.zoom);
+        move |r: &Params| preview(&base, &commit, r, k, &fr, zoom, closed)
+    };
     let h = if q.s("op") == "Reflect" {
-        let tip = format!("Click near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in it{whose}");
+        let tip = format!("Click near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in it{whose}; a dashed image under the pointer shows where it lands");
         let whose2 = whose.clone();
         Handle::area(mid, size, &tip, move |p, m| {
             let g = fr.to_xy(m);
@@ -122,16 +132,32 @@ pub(super) fn handles(p: &Params, lay: &Layout) -> Option<Vec<Handle>> {
             r.set_s("axis", nearest_line(g));
             commit(p, r);
         })
-        .with_hover(move |m| {
-            let g = fr.to_xy(m);
-            if !(g.0.is_finite() && g.1.is_finite() && fr.holds(g)) { return None; }
-            let axis = nearest_line(g);
-            let (a, b) = line_across(axis, &fr);
-            Some(Hover { outline: vec![fr.to_svg(a), fr.to_svg(b)], closed: false, tip: format!("Click to reflect in {}{whose2}", line_words(axis)) })
+        .with_hover({
+            let (q, preview) = (hq, preview.clone());
+            move |m| {
+                let g = fr.to_xy(m);
+                if !(g.0.is_finite() && g.1.is_finite() && fr.holds(g)) { return None; }
+                let axis = nearest_line(g);
+                let (a, b) = line_across(axis, &fr);
+                let mut r = q.clone();
+                r.set_s("axis", axis);
+                let more = preview(&r).err().unwrap_or("");
+                Some(Hover { outline: vec![fr.to_svg(a), fr.to_svg(b)], closed: false, tip: format!("Click to reflect in {}{whose2}{more}", line_words(axis)) })
+            }
+        })
+        .with_ghost({
+            let q = gq;
+            move |m| {
+                let g = fr.to_xy(m);
+                if !(g.0.is_finite() && g.1.is_finite() && fr.holds(g)) { return vec![]; }
+                let mut r = q.clone();
+                r.set_s("axis", nearest_line(g));
+                preview(&r).unwrap_or_default()
+            }
         })
     } else {
         let what = if q.s("op") == "Rotate" { "turn about" } else { "enlarge from" };
-        let tip = format!("Click a grid point to {what} it{whose}");
+        let tip = format!("Click a grid point to {what} it{whose}; a dashed image under the pointer shows where it lands");
         let whose2 = whose.clone();
         Handle::area(mid, size, &tip, move |p, m| {
             let Some(c) = centre_at(&fr, m, bounds) else { return };
@@ -140,14 +166,83 @@ pub(super) fn handles(p: &Params, lay: &Layout) -> Option<Vec<Handle>> {
             r.set_f("cy", c.1);
             commit(p, r);
         })
-        .with_hover(move |m| {
-            let c = centre_at(&fr, m, bounds)?;
-            let at = fr.to_svg(c);
-            let ring = (0..16).map(|i| interact::polar(at, i as f64 * 22.5, 7.0)).collect();
-            Some(Hover { outline: ring, closed: true, tip: format!("Click to {what} ({}, {}){whose2}", num(c.0, 2), num(c.1, 2)) })
+        .with_hover({
+            let (q, preview) = (hq, preview.clone());
+            move |m| {
+                let c = centre_at(&fr, m, bounds)?;
+                let at = fr.to_svg(c);
+                let ring = (0..16).map(|i| interact::polar(at, i as f64 * 22.5, 7.0)).collect();
+                let mut r = q.clone();
+                r.set_f("cx", c.0);
+                r.set_f("cy", c.1);
+                let more = preview(&r).err().unwrap_or("");
+                Some(Hover { outline: ring, closed: true, tip: format!("Click to {what} ({}, {}){whose2}{more}", num(c.0, 2), num(c.1, 2)) })
+            }
+        })
+        .with_ghost({
+            let q = gq;
+            move |m| {
+                let Some(c) = centre_at(&fr, m, bounds) else { return vec![] };
+                let mut r = q.clone();
+                r.set_f("cx", c.0);
+                r.set_f("cy", c.1);
+                preview(&r).unwrap_or_default()
+            }
         })
     };
     Some(vec![h])
+}
+
+// Why a hover has no dashed preview, added to its tip.
+/// The picked transformation's own image runs past the stated grid, which the click grows.
+pub(super) const GROWS: &str = "; the image runs past this grid, which grows to fit it";
+/// A later transformation's image, moved by this one, runs past the stated grid, which the click grows.
+pub(super) const LATER_GROWS: &str = "; a later image then runs past this grid, which grows to fit it";
+/// The stated grid is grown now, and the click brings every shape back inside its range.
+pub(super) const SHRINKS_BACK: &str = "; the grid then shrinks back to its range";
+/// The stated grid is grown now, and the click lets it shrink, though not all the way back to its range.
+pub(super) const SHRINKS: &str = "; the grid then shrinks";
+/// A grid shrunk to the shapes refits to them.
+pub(super) const REFITS: &str = "; the grid then refits to the shapes";
+/// The image runs past the largest grid and is cut off at its edge.
+pub(super) const CUT: &str = "; the image runs past the largest grid and is cut off";
+/// None of the images this click moves is drawn on this copy (the student copy, or an in-between image left out).
+pub(super) const HIDDEN: &str = "; the image is not drawn on this copy";
+
+/// Two frames that put every grid point at the same place on the canvas.
+pub(super) fn same_frame(a: &Frame, b: &Frame) -> bool {
+    [a.x0 - b.x0, a.x1 - b.x1, a.y0 - b.y0, a.y1 - b.y1, a.u - b.u, a.ox - b.ox, a.oy - b.oy].iter().all(|d| d.abs() < 1e-6)
+}
+
+/// What the click that makes transformation k `r` would draw, as dashed rings in canvas units: every image it moves
+/// (k and the ones after it) that is drawn, when they land on the grid exactly as it is drawn now. Otherwise the
+/// reason there is no preview, for the tip. The would-be figure is laid out at the zoom it is drawn at now (the zoom
+/// search places every label and is far too slow per hover); only a figure with coordinate labels can change zoom.
+fn preview(base: &Params, commit: &impl Fn(&mut Params, Params), r: &Params, k: usize, fr: &Frame, zoom: f64, closed: bool) -> Result<Vec<(Vec<Pt>, bool)>, &'static str> {
+    let mut after = base.clone();
+    commit(&mut after, r.clone());
+    let lay = layout_at(&after, zoom);
+    let n = lay.images.len();
+    // no shape yet: nothing to preview, and nothing to explain
+    if lay.images.get(k).is_none_or(|im| im.is_empty()) { return Ok(vec![]); }
+    let shown: Vec<usize> = (k..n).filter(|&j| image_drawn(&after, n, j)).collect();
+    if shown.is_empty() { return Err(HIDDEN); }
+    let off = |v: &Pt| !fr.holds(*v);
+    let g = lay.frame;
+    if !same_frame(&g, fr) {
+        if base.b("fit") { return Err(REFITS); }
+        let grew = g.x0 < fr.x0 - 1e-9 || g.x1 > fr.x1 + 1e-9 || g.y0 < fr.y0 - 1e-9 || g.y1 > fr.y1 + 1e-9;
+        if !grew {
+            // the stated range as drawn: a range of no width is drawn one unit wide, as `layout_at` does
+            let (a, b, c, d) = stated(base);
+            let (b, d) = (if b - a < 1.0 { a + 1.0 } else { b }, if d - c < 1.0 { c + 1.0 } else { d });
+            let back = [g.x0 - a, g.x1 - b, g.y0 - c, g.y1 - d].iter().all(|e| e.abs() < 1e-9);
+            return Err(if back { SHRINKS_BACK } else { SHRINKS });
+        }
+        return Err(if lay.images[k].iter().any(off) { GROWS } else { LATER_GROWS });
+    }
+    if shown.iter().any(|&j| lay.images[j].iter().any(off)) { return Err(CUT); }
+    Ok(shown.iter().map(|&j| (lay.images[j].iter().map(|&v| fr.to_svg(v)).collect(), closed)).collect())
 }
 
 #[cfg(test)]

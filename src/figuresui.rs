@@ -2177,6 +2177,19 @@ impl Workspace {
                 _ => None,
             };
             if let Some(hv) = &part {
+                // what the click would draw, faint and dashed under the outline (a transformation's image when picking)
+                if let (Some(g), Some(ptr)) = (&h.ghost_at, ui.input(|inp| inp.pointer.hover_pos())) {
+                    let faint = Stroke::new(2.0, acc.gamma_multiply(0.55));
+                    for (ring, closed) in g(to_svg(ptr)) {
+                        let mut pts: Vec<egui::Pos2> = ring.iter().map(|q| to_screen(*q)).collect();
+                        if pts.len() == 1 {
+                            painter.circle_stroke(pts[0], 5.0, faint);
+                            continue;
+                        }
+                        if closed && pts.len() > 2 { pts.push(pts[0]); }
+                        painter.extend(egui::Shape::dashed_line(&pts, faint, 6.0, 4.0));
+                    }
+                }
                 let pts: Vec<egui::Pos2> = hv.outline.iter().map(|q| to_screen(*q)).collect();
                 let st = Stroke::new(2.5, acc);
                 if hv.closed && pts.len() > 2 {

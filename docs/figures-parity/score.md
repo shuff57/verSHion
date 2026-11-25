@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-24T19:02:21+00:00 · probe: 2026-11-24T11:02:20
+Generated: 2026-11-25T00:15:46+00:00 · probe: 2026-11-24T16:15:46
 
 **Pooled 92.6** · mean 92.4 over 92 figures · built 93 of 93 reference figures
 
@@ -98,8 +98,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03c [control 3] Number the springs k₁, k₂, k₃ instead of labeling each k — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
-- `transformations`: 98 (120/122)
-  - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
   - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
@@ -166,6 +164,7 @@ Comparable with the frozen baseline: **yes**
 - `table-of-values`: 100 (146/146)
 - `temperature-reading`: 100 (48/48)
 - `titration-curve`: 100 (64/64)
+- `transformations`: 100 (122/122)
 - `trapezoid`: 100 (85/85)
 - `triangle`: 100 (77/77)
 - `two-way-table`: 100 (68/68)

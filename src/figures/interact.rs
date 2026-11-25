@@ -22,6 +22,9 @@ pub type ScrollFn = Arc<dyn Fn(&mut Params, f64) + Send + Sync>;
 pub type ClickAtFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
 /// What an area's click would act on under the pointer (SVG units), for the hover: None when nothing.
 pub type HoverFn = Arc<dyn Fn(Pt) -> Option<Hover> + Send + Sync>;
+/// With `hover_at`: what a click at the pointer (SVG units) would draw, as polylines (points, closed) the workspace draws
+/// faint and dashed under the hover outline; empty where nothing would change.
+pub type GhostFn = Arc<dyn Fn(Pt) -> Vec<(Vec<Pt>, bool)> + Send + Sync>;
 /// Writes text typed in an inline edit box back into the params.
 pub type SetFn = Arc<dyn Fn(&mut Params, &str) + Send + Sync>;
 /// The text a double-click at a point (SVG units) edits in place: None where there is nothing to type.
@@ -80,6 +83,9 @@ pub struct Handle {
     pub click_at: Option<ClickAtFn>,
     /// With `click_at`: the part under the pointer, outlined on hover with its own tip (the area's `tip` is its summary).
     pub hover_at: Option<HoverFn>,
+    /// With `hover_at`: a preview of what the click there would draw (a transformation's image under the line or centre
+    /// the click would pick).
+    pub ghost_at: Option<GhostFn>,
     /// Text param edited inline on double-click.
     pub edit: Option<&'static str>,
     /// With `click_at`: a double-click edits the text of the part under the pointer in place (the param it writes, for
@@ -92,7 +98,7 @@ pub struct Handle {
 
 impl Handle {
     fn base(pos: Pt, shape: Shape, cursor: Cursor, tip: &str) -> Self {
-        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, hover_at: None, edit: None, edit_at: None, label_drag: false }
+        Handle { pos, half: (7.0, 7.0), shape, cursor, tip: tip.to_string(), drag: None, click: None, scroll: None, click_at: None, hover_at: None, ghost_at: None, edit: None, edit_at: None, label_drag: false }
     }
     /// Round knob that drives params when dragged.
     pub fn knob(pos: Pt, tip: &str, f: impl Fn(&mut Params, Pt) + Send + Sync + 'static) -> Self {
@@ -124,6 +130,11 @@ impl Handle {
     }
     pub fn with_hover(mut self, f: impl Fn(Pt) -> Option<Hover> + Send + Sync + 'static) -> Self {
         self.hover_at = Some(Arc::new(f));
+        self
+    }
+    /// With `with_hover`: the preview drawn under the hover (see `ghost_at`).
+    pub fn with_ghost(mut self, f: impl Fn(Pt) -> Vec<(Vec<Pt>, bool)> + Send + Sync + 'static) -> Self {
+        self.ghost_at = Some(Arc::new(f));
         self
     }
     /// Double-click a part of this area to type its text in place (see `edit_at`); `key` is the param it writes.

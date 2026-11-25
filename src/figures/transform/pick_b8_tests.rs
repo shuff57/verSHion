@@ -177,7 +177,7 @@ fn a_reflection_is_picked_by_a_click_and_the_hover_shows_it_first() {
             // the hover before it named the same line and outlined it across the grid
             let hv = hover(&p, at).unwrap();
             let words = match want { "the y-axis" => "the y-axis", "the line y = x" => "y = x", "the line y = -x" => "y = \u{2212}x", _ => "the x-axis" };
-            assert_eq!(hv.tip, format!("Click to reflect in {words}"));
+            assert_eq!(hv.tip, format!("Click to reflect in {words}{}", ending(&p, &q, 0)));
             assert!(!hv.closed && hv.outline.len() == 2);
             let (a, b) = (fr.to_xy(hv.outline[0]), fr.to_xy(hv.outline[1]));
             for e in [a, b] {
@@ -241,7 +241,7 @@ fn a_centre_is_placed_by_a_click_with_a_ring_where_it_will_go() {
             let cs_after = layout(&q).frame.to_svg(want);
             assert!((mid.0 - cs.0).abs() < 1e-6 && (mid.1 - cs.1).abs() < 1e-6, "ring at {mid:?}, centre at {cs:?}");
             let nm = |v: f64| crate::figures::circle::num(v, 2);
-            assert_eq!(hv.tip, format!("Click to {} ({}, {})", if turn { "turn about" } else { "enlarge from" }, nm(want.0), nm(want.1)));
+            assert_eq!(hv.tip, format!("Click to {} ({}, {}){}", if turn { "turn about" } else { "enlarge from" }, nm(want.0), nm(want.1), ending(&p, &q, 0)));
             // the centre's diamond is back, on the point, once the pick is over
             assert!(handles(&q).iter().any(|h| h.tip.starts_with("Drag the centre of") && h.pos == cs_after));
         }
@@ -275,15 +275,16 @@ fn a_later_transformation_s_line_or_centre_is_picked_into_its_own_then_line() {
     // the second transformation's centre
     let mut p = with(&[base[0].clone(), base[1].clone(), base[2].clone(), s("pick", "Second")]);
     let fr = layout(&p).frame;
-    assert_eq!(click(&mut p, fr.to_svg((-4.1, 6.2))).unwrap(), "Click a grid point to turn about it (transformation 2)");
+    assert_eq!(click(&mut p, fr.to_svg((-4.1, 6.2))).unwrap(), "Click a grid point to turn about it (transformation 2); a dashed image under the pointer shows where it lands");
     assert_eq!(p.s("then"), "rotate 90 clockwise about (-4, 6) red\n\nreflect in x = -3 dotted\ntranslate 1, 1", "only its own line, its colour kept");
     assert_eq!(p.s("axis"), AXES[0], "the first transformation untouched");
     assert_eq!(p.s("pick"), "Off");
     // the third: a click near y = -x makes it "reflect in y = -x", read back by the figure's own reader as that line
     p.set_s("pick", "Third");
     let hv = hover(&p, fr.to_svg((4.0, -4.3))).unwrap();
-    assert_eq!(hv.tip, "Click to reflect in y = \u{2212}x (transformation 3)");
+    let before = p.clone();
     click(&mut p, fr.to_svg((4.0, -4.3))).unwrap();
+    assert_eq!(hv.tip, format!("Click to reflect in y = \u{2212}x (transformation 3){}", ending(&before, &p, 2)));
     assert_eq!(p.s("then"), "rotate 90 clockwise about (-4, 6) red\n\nreflect in y = -x dotted\ntranslate 1, 1");
     let st = steps(&p);
     assert_eq!(st[2].p.s("axis"), AXES[3]);
@@ -427,4 +428,183 @@ fn a_pick_that_can_no_longer_pick_is_switched_off_by_the_panel() {
     change(&mut p, "pick", "Second");
     assert_eq!(p.s("pick"), "Second");
     assert!(warnings(&p).iter().any(|w| w.contains("there is no second transformation")));
+}
+
+/// The preview under the pointer while picking (the workspace draws it faint and dashed): grid units, by the frame the
+/// hover was shown in.
+
+#[test]
+fn no_ghost_without_pick_or_off_the_grid() {
+    for c in cases() {
+        let p = with(&c);
+        assert!(handles(&p).iter().all(|h| h.ghost_at.is_none()), "no preview while Pick is off: {c:?}");
+        let mut l = c.clone();
+        l.push(s("pick", "First"));
+        let p = with(&l);
+        if super::picking(&p, &steps(&p)).is_none() { continue; }
+        let fr = layout(&p).frame;
+        // the canvas corner is off the grid: no preview there
+        let corner = (fr.ox - 20.0, fr.oy - 20.0);
+        let hs = handles(&p);
+        for h in hs.iter().filter_map(|h| h.ghost_at.as_ref()) { assert!(h(corner).is_empty(), "{c:?}"); }
+    }
+}
+
+/// The ghost as drawn, in canvas units (None where the click area or its ghost is not under `at`).
+fn ghost_svg(p: &Params, at: Pt) -> Option<Vec<Pt>> {
+    let hs = handles(p);
+    let i = interact::pick(&hs, at, 1.0)?;
+    let g = hs[i].ghost_at.as_ref()?(at);
+    g.first().map(|(ring, _)| ring.clone())
+}
+
+#[test]
+fn the_ghost_is_drawn_where_the_images_land_on_the_canvas_or_the_tip_says_why() {
+    // checkers, round 411: the ghost must be where the click's images are then drawn on the canvas (not merely the
+    // same grid units), and where there is none the tip must give the true reason
+    let mut seen = std::collections::BTreeMap::<&str, usize>::new();
+    let mut extra: Vec<Vec<(&'static str, Value)>> = cases();
+    extra.push(vec![s("op", "Rotate"), f("cx", -10.0), f("cy", 10.0)]); // a grid already grown
+    extra.push(vec![s("op", "Dilate"), f("scale", 3.0)]);
+    extra.push(vec![s("op", "Dilate"), f("scale", 3.0), f("cx", -1.0), f("cy", -2.0)]); // shrinks only partway
+    extra.push(vec![s("op", "Dilate"), f("scale", 2.0), i("x_from", 0), i("x_to", 0), i("y_from", 0), i("y_to", 0)]); // a range of no width
+    extra.push(vec![s("op", "Rotate"), s("then", "reflect in y = x red\nrotate 180 about (0, 0)"), b("show_between", true)]);
+    extra.push(vec![s("op", "Rotate"), s("then", "reflect in y = x red\nrotate 180 about (0, 0)")]);
+    extra.push(vec![s("op", "Reflect"), b(SHOW_ANSWERS, false)]);
+    extra.push(vec![s("op", "Reflect"), b(SHOW_ANSWERS, false), b("question", true)]);
+    for c in extra {
+        for o in ["First", "Second", "Third"] {
+            let mut l = c.clone();
+            l.push(s("pick", o));
+            let p = with(&l);
+            let Some(k) = super::picking(&p, &steps(&p)) else { continue };
+            for (n, at) in sweep(&p).into_iter().enumerate() {
+                if n % 3 != 0 { continue; }
+                let Some(tip) = hover(&p, at).map(|h| h.tip) else { continue };
+                let mut q = p.clone();
+                click(&mut q, at).expect("the area takes the click");
+                let want = ending(&p, &q, k);
+                *seen.entry(if want.is_empty() { "drawn" } else { want }).or_default() += 1;
+                let g = ghost_svg_all(&p, at);
+                if !want.is_empty() {
+                    assert!(g.is_empty(), "no ghost: {c:?} {o} {at:?} {want}");
+                    assert!(tip.ends_with(want), "the tip says why: {c:?} {o} {at:?}: {tip} / {want}");
+                    continue;
+                }
+                let after = layout(&q);
+                let nimg = after.images.len();
+                let drawn: Vec<Vec<Pt>> = (k..nimg).filter(|&j| super::super::image_drawn(&q, nimg, j)).map(|j| after.images[j].iter().map(|&v| after.frame.to_svg(v)).collect()).collect();
+                if after.images[k].is_empty() { assert!(g.is_empty()); continue; }
+                assert_eq!(g.len(), drawn.len(), "one ring per drawn image: {c:?} {o} {at:?}");
+                for (ring, im) in g.iter().zip(&drawn) {
+                    assert_eq!(ring.len(), im.len());
+                    for (a, b) in ring.iter().zip(im) {
+                        assert!((a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6, "{c:?} {o} {at:?}: ghost {a:?}, lands {b:?}");
+                    }
+                }
+                for w in [super::GROWS, super::LATER_GROWS, super::SHRINKS_BACK, super::SHRINKS, super::REFITS, super::CUT, super::HIDDEN] { assert!(!tip.ends_with(w), "{c:?} {o} {at:?} {tip}"); }
+            }
+        }
+    }
+    for want in ["drawn", super::GROWS, super::LATER_GROWS, super::SHRINKS_BACK, super::SHRINKS, super::REFITS, super::HIDDEN] {
+        assert!(seen.get(want).copied().unwrap_or(0) > 0, "the sweep met {want:?}: {seen:?}");
+    }
+}
+
+/// Every ring of the ghost as drawn, in canvas units.
+fn ghost_svg_all(p: &Params, at: Pt) -> Vec<Vec<Pt>> {
+    let hs = handles(p);
+    let Some(i) = interact::pick(&hs, at, 1.0) else { return vec![] };
+    hs[i].ghost_at.as_ref().map(|g| g(at).into_iter().map(|r| r.0).collect()).unwrap_or_default()
+}
+
+#[test]
+fn a_turn_about_the_corner_says_the_grid_grows_and_draws_no_ghost() {
+    // the checker's repro: the default figure, a turn about (-10, 10)
+    let p = with(&[s("op", "Rotate"), s("pick", "First")]);
+    let fr = layout(&p).frame;
+    let at = fr.to_svg((-10.0, 10.0));
+    assert!(ghost_svg(&p, at).is_none());
+    let tip = hover(&p, at).unwrap().tip;
+    assert_eq!(tip, format!("Click to turn about (\u{2212}10, 10){}", super::GROWS));
+    // about the origin it lands on the grid: a ghost, and the plain tip
+    let at = fr.to_svg((0.0, 0.0));
+    assert!(ghost_svg(&p, at).is_some());
+    assert_eq!(hover(&p, at).unwrap().tip, "Click to turn about (0, 0)");
+}
+
+
+/// The hover tip's ending for a click from `p` (picking transformation k) that gave `q`, worked out from the figure
+/// laid out in full (its real zoom) before and after: none where every image the click moves that is drawn lands on
+/// the canvas where the grid is drawn now, else the reason.
+fn ending(p: &Params, q: &Params, k: usize) -> &'static str {
+    let (before, after) = (layout(p), layout(q));
+    let (a, g) = (before.frame, after.frame);
+    let n = after.images.len();
+    if after.images[k].is_empty() { return ""; }
+    let shown: Vec<usize> = (k..n).filter(|&j| super::super::image_drawn(q, n, j)).collect();
+    if shown.is_empty() { return super::HIDDEN; }
+    let range_same = [a.x0 - g.x0, a.x1 - g.x1, a.y0 - g.y0, a.y1 - g.y1].iter().all(|d| d.abs() < 1e-9);
+    if !range_same {
+        if p.b("fit") { return super::REFITS; }
+        let contains = g.x0 >= a.x0 && g.x1 <= a.x1 && g.y0 >= a.y0 && g.y1 <= a.y1;
+        if contains {
+            // back to the stated range exactly, or only partway
+            let (x0, x1, y0, y1) = super::super::stated(q);
+            let (x1, y1) = (if x1 - x0 < 1.0 { x0 + 1.0 } else { x1 }, if y1 - y0 < 1.0 { y0 + 1.0 } else { y1 });
+            return if (g.x0, g.x1, g.y0, g.y1) == (x0, x1, y0, y1) { super::SHRINKS_BACK } else { super::SHRINKS };
+        }
+        return if after.images[k].iter().any(|v| !a.holds(*v)) { super::GROWS } else { super::LATER_GROWS };
+    }
+    assert!(super::same_frame(&a, &g), "same range, same canvas: {a:?} {g:?}");
+    if shown.iter().any(|&j| after.images[j].iter().any(|v| !a.holds(*v))) { return super::CUT; }
+    ""
+}
+
+#[test]
+fn a_grid_shrunk_to_the_shapes_previews_only_where_it_keeps_its_frame() {
+    let p = with(&[s("op", "Reflect"), b("fit", true), s("pick", "First")]);
+    let fr = layout(&p).frame;
+    // reflecting in the y-axis widens the fitted grid to the left: no ghost, and the tip says it refits
+    let at = fr.to_svg((-0.2, 3.0));
+    assert!(ghost_svg(&p, at).is_none());
+    assert!(hover(&p, at).unwrap().tip.ends_with(super::REFITS));
+}
+
+#[test]
+fn hovering_stays_fast_with_coordinate_labels_and_a_long_chain() {
+    // checker, round 411: laying out the would-be figure with its label search took seconds per grid point here
+    let ten = "0, 0\n2, 0\n3, 1\n4, 0\n5, 2\n4, 4\n3, 3\n2, 5\n1, 3\n0, 2";
+    let p = with(&[s("op", "Rotate"), s("pre", ten), s("pt_labels", "Letters and coordinates"), s("then", "reflect in y = x\nrotate 180 about (0, 0)\ndilate 2 about (1, 1)"), s("pick", "First")]);
+    let _ = (def().render)(&p); // the figure itself is drawn (and its zoom found) once, as in the workspace
+    let fr = layout(&p).frame;
+    let t = std::time::Instant::now();
+    let mut n = 0;
+    for x in -8..=8 {
+        for y in [-3, 0, 3] {
+            let at = fr.to_svg((x as f64, y as f64));
+            let _ = hover(&p, at);
+            let _ = ghost_svg_all(&p, at);
+            n += 1;
+        }
+    }
+    let each = t.elapsed().as_secs_f64() * 1000.0 / n as f64;
+    assert!(each < 20.0, "{each:.1} ms per hover and ghost");
+}
+
+#[test]
+fn a_grid_that_shrinks_only_partway_is_not_said_to_shrink_back() {
+    // checker 3, round 411: an enlargement by 3 about (-1, -2) grows the grid to about x -10..14, y -10..13; a centre
+    // at (-1, 3) brings y back to 10 but not x, so the grid shrinks, though not back to its range
+    let p = with(&[s("op", "Dilate"), f("scale", 3.0), f("cx", -1.0), f("cy", -2.0), s("pick", "First")]);
+    let fr = layout(&p).frame;
+    assert!(fr.x1 > 10.0, "{fr:?}");
+    let at = fr.to_svg((-1.0, 3.0));
+    let tip = hover(&p, at).unwrap().tip;
+    let mut q = p.clone();
+    click(&mut q, at).unwrap();
+    let g = layout(&q).frame;
+    assert!(g.x1 > 10.0 && g.y1 < fr.y1, "partway: {g:?}");
+    assert!(tip.ends_with(super::SHRINKS) && !tip.ends_with(super::SHRINKS_BACK), "{tip}");
+    assert!(ghost_svg_all(&p, at).is_empty());
 }

@@ -98,8 +98,8 @@
    "id": "cap-02j",
    "text": "Place a transformation's line or center on the grid with a preview",
    "class": "interaction",
-   "evidence": "",
-   "note": "Unscored (handles are read at the opening state only). Built in batch 8 (2026-11-11) and passed by an independent checker: a 'Pick a line or centre on the grid' switch; one click picks the nearest of the x-axis, y-axis, y = x, y = -x for a reflection or puts a turn's or enlargement's centre on the nearest grid point, first and later transformations, with the line or centre outlined on hover; translation, centres and numbered mirror lines are also dragged. Still short of the reference: no image preview under the hover, Esc does not leave the mode, one switch instead of a button per step, and the turn is not picked on the grid."
+   "evidence": "handle@{\"op\":\"Reflect\",\"pick\":\"First\"}:click:a dashed image under the pointer + handle@{\"op\":\"Rotate\",\"pick\":\"First\"}:click:a dashed image under the pointer",
+   "note": "Built in batch 8 (2026-11-11, independent checker passed): a 'Pick a line or centre on the grid' switch; one click picks the nearest of the x-axis, y-axis, y = x, y = -x for a reflection or puts a turn's or enlargement's centre on the nearest grid point, for the first and later transformations, outlined on hover. Round 411 (2026-11-24) adds the preview: dashed ghosts of every drawn image the click moves follow the pointer, drawn only where they land exactly on the grid as drawn; elsewhere the hover tip says why (the image or a later image grows the grid, the grid shrinks or shrinks back, a fitted grid refits, cut off at the largest grid, or not drawn on this copy). Read with the handle@ token (owner-approved 2026-11-24). Known limit: with 'Letters and coordinates' labels the click can re-zoom the figure, which the preview does not foresee (checker measured about 0.5% of previews misplaced, all with coordinate labels and long chains). Still unlike the reference: Esc does not leave the mode, one switch instead of a button per step, and the turn itself is not picked from previews."
   },
   {
    "id": "cap-03a",

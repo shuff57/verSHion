@@ -1,0 +1,29 @@
+{
+ "round": 411,
+ "figure": "transformations",
+ "capability": "cap-02j",
+ "hypothesis": "Batch transformations: the Pick mode already places a mirror line or a centre with a click and outlines it on hover (batch 8); adding a dashed ghost of the image the click would make, under the pointer, completes 'with a preview'. Evidence handle@{\"op\":\"Reflect\",\"pick\":\"First\"}:click:a dashed image under the pointer + handle@{\"op\":\"Rotate\",\"pick\":\"First\"}:click:click a grid point to turn about it (new handle@ token, owner-approved 2026-11-24). Shared additive change: interact::Handle gains ghost_at, the workspace draws it; no render change, census unchanged expected. Expected transformations 98.4 -> 100.",
+ "started_at": "2026-11-24T11:03:09",
+ "git": "98d3397",
+ "before": {
+  "figure": 98.4,
+  "pooled": 92.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-24T16:15:46",
+ "after": {
+  "figure": 100.0,
+  "pooled": 92.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass on the third check: every drawn dashed preview lands exactly where the click's images are drawn (10,147 checked); where none is drawn the tip's reason is true (grows, a later image grows, shrinks or shrinks back, refits, cut off, not drawn on this copy); hover 0.04-0.15 ms on the heaviest case; renders byte-identical for every Pick value; known limit: with coordinate labels about 0.5% of previews misplaced by a re-zoom",
+ "result": "hit",
+ "evidence": "transform tests (59) incl. the canvas oracle sweep, partway-shrink and coordinate-label timing tests; figuresui (119); faq (24); figures suite 3709/3710 (riemann timing assert under load, passes alone); census unchanged; handle dump unchanged for all 213 figures",
+ "next": "circle cap-01g evidence (B and C drag via handle@); dot-plot batch (dot_b10 drafted); probability-tree, scatterplot, normal-curve; electric-field six gaps"
+}

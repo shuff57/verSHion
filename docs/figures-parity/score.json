@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-24T19:02:21+00:00",
- "probe_checked_at": "2026-11-24T11:02:20",
+ "generated_at": "2026-11-25T00:15:46+00:00",
+ "probe_checked_at": "2026-11-24T16:15:46",
  "comparable": true,
  "drift": [],
  "pooled": 92.6,
@@ -1701,19 +1701,11 @@
    ]
   },
   "transformations": {
-   "score": 98.4,
-   "got": 120.0,
+   "score": 100.0,
+   "got": 122.0,
    "total": 122.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-02j",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Place a transformation's line or center on the grid with a preview",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "trapezoid": {
    "score": 100.0,

@@ -1,7 +1,7 @@
 {
- "checked_at": "2026-11-24T11:02:20",
- "ours_built_at": "2026-11-24T17:34:32+00:00",
- "git": "a4bc452+dirty",
+ "checked_at": "2026-11-24T16:15:46",
+ "ours_built_at": "2026-11-25T00:15:45+00:00",
+ "git": "98d3397+dirty",
  "figures": {
   "normal-curve": {
    "caps": {
@@ -4014,7 +4014,7 @@
       {
        "token": "changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\\n2, 4\\n-1, 3\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/093935f9c529c881.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/deea0fda86f08cba.png"
       }
      ]
     },
@@ -4026,12 +4026,12 @@
       {
        "token": "changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\",\"closed\":false}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/e04dff3a58af7cfd.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/43ed29787f3fd5cf.png"
       },
       {
        "token": "changes:{\"pre\":\"2, 3\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ca83254d7f1517da.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/32d8723ae6353ee8.png"
       }
      ]
     },
@@ -4043,7 +4043,7 @@
       {
        "token": "changes:{\"names\":\"P, Q, R\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2d7401154238afff.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/9d2e297a62577e07.png"
       }
      ]
     },
@@ -4055,7 +4055,7 @@
       {
        "token": "changes:{\"then\":\"reflect in the y-axis\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/c240dbba5220b541.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/d02e2141b2cb2b47.png"
       }
      ]
     },
@@ -4067,12 +4067,12 @@
       {
        "token": "changes:dx=5",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/04d1de5a5a2fb9d4.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/7fac68abe7a90e25.png"
       },
       {
        "token": "changes:dy=1",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ca9be9ef7d40cd89.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/177cc15bc2baf99b.png"
       }
      ]
     },
@@ -4084,12 +4084,12 @@
       {
        "token": "changes:op=Reflect",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ca91724e7ff9da89.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/cf2db1b619249e3c.png"
       },
       {
        "token": "changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/1c5a38fa37341e2f.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/0d16af42a49448cb.png"
       }
      ]
     },
@@ -4101,7 +4101,7 @@
       {
        "token": "changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x + a\",\"line_a\":2}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/b42f407222bb4509.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/28625babc1c24176.png"
       }
      ]
     },
@@ -4113,12 +4113,12 @@
       {
        "token": "changes:op=Rotate",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/465f36349025d76b.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/41179be2ae741e0b.png"
       },
       {
        "token": "changes:{\"op\":\"Rotate\",\"angle\":\"180 degrees\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/189fde622f09a178.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/51bd348000156bf1.png"
       }
      ]
     },
@@ -4130,7 +4130,7 @@
       {
        "token": "changes:{\"op\":\"Rotate\",\"angle\":\"90 degrees clockwise\",\"cx\":2,\"cy\":-1}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/0e735e64f31cf458.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ea0aff42fad0bce3.png"
       }
      ]
     },
@@ -4142,7 +4142,7 @@
       {
        "token": "changes:{\"op\":\"Rotate\",\"cx\":2,\"cy\":-1}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/bb799d6896f8d900.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/66ad96c844393e42.png"
       }
      ]
     },
@@ -4154,7 +4154,7 @@
       {
        "token": "changes:{\"op\":\"Dilate\",\"scale\":\"0.5\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/a1837c6b9d7b8681.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f292458fb349f7eb.png"
       }
      ]
     },
@@ -4166,13 +4166,13 @@
       {
        "token": "changes:{\"op\":\"Dilate\",\"cx\":-2,\"cy\":1}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f2969108397c1023.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/421ba4e03ab2de8c.png"
       }
      ]
     },
     "cap-02j": {
-     "pass": false,
-     "why": "no evidence",
+     "pass": true,
+     "why": "ok",
      "class": "interaction",
      "renders": []
     },
@@ -4184,7 +4184,7 @@
       {
        "token": "changes:style=Print",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/e9c2076f56676abc.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f4b0a83c33a957a4.png"
       }
      ]
     },
@@ -4196,7 +4196,7 @@
       {
        "token": "changes:{\"then\":\"reflect in the y-axis\\nrotate 180\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ca53361cefd9e352.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/e2758cc88cb89cb4.png"
       }
      ]
     },
@@ -4208,12 +4208,12 @@
       {
        "token": "changes:pre_colour=#c0392b",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/fc1f71538f7347ae.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/46bcd1a5dccdd8f5.png"
       },
       {
        "token": "changes:image_colour=#1e7b34",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2e9e3dc97d20054f.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2b87882c57315dea.png"
       }
      ]
     },
@@ -4225,12 +4225,12 @@
       {
        "token": "changes:pre_line=Dotted",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/bf00dd0576733b21.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f69cd7e427434935.png"
       },
       {
        "token": "changes:image_line=Dashed",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/8f69d275089f48a9.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/bc18a80b735d5a05.png"
       }
      ]
     },
@@ -4242,12 +4242,12 @@
       {
        "token": "changes:pre_weight=Thick",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/d8228f4c48ec6d17.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/a6a73d21fe5a3304.png"
       },
       {
        "token": "changes:image_weight=Thin",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/a387bb8cd9f7bc28.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/029ce0b3896c69bc.png"
       }
      ]
     },
@@ -4259,7 +4259,7 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/81d081ca13d9a83f.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/1e9246a07d815dce.png"
       }
      ]
     },
@@ -4271,7 +4271,7 @@
       {
        "token": "changes:{\"show_answers\":false,\"question\":true}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/e617b7ac7d5204ae.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ff52cb7a801c6351.png"
       }
      ]
     },
@@ -4283,7 +4283,7 @@
       {
        "token": "changes:show_answers=false",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/81d081ca13d9a83f.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/1e9246a07d815dce.png"
       }
      ]
     },
@@ -4295,7 +4295,7 @@
       {
        "token": "changes:show_pre=false",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/d3baf9698ebfc6f5.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f6a67b26901ff242.png"
       }
      ]
     },
@@ -4307,7 +4307,7 @@
       {
        "token": "changes:{\"then\":\"reflect in the y-axis\",\"show_between\":false}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/f9b65ac23a0e0018.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/0d89f02eb1d07425.png"
       }
      ]
     },
@@ -4319,7 +4319,7 @@
       {
        "token": "changes:{\"op\":\"Reflect\",\"axis\":\"the line x = a\",\"show_guides\":false}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/40d9a09f686f6868.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/beb3e175e42563b9.png"
       }
      ]
     },
@@ -4331,7 +4331,7 @@
       {
        "token": "changes:show_arrows=true",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/646d29428bebe2a8.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ecaefbf1fcde4ef4.png"
       }
      ]
     },
@@ -4343,7 +4343,7 @@
       {
        "token": "changes:pt_labels=Letters and coordinates",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/bc02b7ee15b3b6b1.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/16b14ba861b1e172.png"
       }
      ]
     },
@@ -4355,7 +4355,7 @@
       {
        "token": "changes:{\"x_from\":-5,\"x_to\":15,\"y_from\":-3,\"y_to\":8}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/6c55c824d4c3b5a6.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/261df6f5e490e83a.png"
       }
      ]
     },
@@ -4367,12 +4367,12 @@
       {
        "token": "changes:x_step=2",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/34db9ede542e413c.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2258895c4b5f7dd1.png"
       },
       {
        "token": "changes:x_num=Every line",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/34c27a3f6c422b01.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/06e9a2fbf8867604.png"
       }
      ]
     },
@@ -4384,12 +4384,12 @@
       {
        "token": "changes:{\"title_mode\":\"Text\",\"title\":\"Transformations\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2b2734941760c96e.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/9ebe31e43ff525b7.png"
       },
       {
        "token": "changes:{\"xtitle_mode\":\"Text\",\"xtitle\":\"x\"}",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/76b88f147c223430.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/86b4b880cbe0d3dc.png"
       }
      ]
     },
@@ -4401,12 +4401,12 @@
       {
        "token": "changes:x_label=x",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/b4e19c1c6ba10de3.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/64761ddc29df90c6.png"
       },
       {
        "token": "changes:ends=Positive ends",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/0af815d8e362a088.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/7e81079b48638e68.png"
       }
      ]
     },
@@ -4418,12 +4418,12 @@
       {
        "token": "changes:gridlines=Bold",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/3cfe29ac38a3224c.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/ab6c9bbd5a659c73.png"
       },
       {
        "token": "changes:minor=2 per block",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/b03ee14d91096246.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/2a97541c4be85612.png"
       }
      ]
     },
@@ -4435,7 +4435,7 @@
       {
        "token": "changes:label_size=Large",
        "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/opening.png",
-       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/795a519e4f57b292.png"
+       "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/transformations/375e4e21a7a46a85.png"
       }
      ]
     },

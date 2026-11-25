@@ -104,7 +104,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("cy", "Turn or enlarge about y", -10.0, 10.0, 0.5, 0.0),
         // ---- batch 8: Off draws and acts as the figure always did (see `pick_b8`)
         ParamDef::choice("pick", "Pick a line or centre on the grid", &pick_b8::PICKS, pick_b8::PICKS[0])
-            .hint("Choose which transformation, then click the grid: near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what a click will choose; Pick goes back to Off after the click."),
+            .hint("Choose which transformation, then click the grid: near the x-axis, the y-axis, y = x or y = \u{2212}x to reflect in that line, or at a grid point to turn or enlarge about it. The grid outlines what a click will choose, with the image it makes dashed under the pointer; Pick goes back to Off after the click."),
         ParamDef::bool("show_pre", "Show the pre-image", true),
         ParamDef::int("x_from", "x-axis from", -30, 0, -10),
         ParamDef::int("x_to", "x-axis to", 0, 30, 10),
@@ -1049,6 +1049,14 @@ struct Drawn {
 
 pub fn build(p: &Params) -> (String, Report) { let (svg, rep, _) = draw(p); (svg, rep) }
 
+/// Whether image k of n is drawn: the last one, the in-between ones when asked, on the key or the question copy. The
+/// question copy shows the pre-image and the last image only: an in-between image would name the steps.
+pub(super) fn image_drawn(p: &Params, n: usize, k: usize) -> bool {
+    let ans = p.b(SHOW_ANSWERS);
+    let qv = !ans && p.b("question");
+    (ans || qv) && (k + 1 == n || (p.b("show_between") && !qv))
+}
+
 /// The figure drawn with its grid `zoom` times the usual size, and whether every long label found a clear spot.
 fn build_at(p: &Params, zoom: f64) -> (String, Report, bool) {
     let dec = p.i("dec").clamp(0, 2);
@@ -1070,7 +1078,7 @@ fn build_at(p: &Params, zoom: f64) -> (String, Report, bool) {
     // which images are drawn (and listed): the last one, the in-between ones when asked; on the key or the question.
     // The question copy shows the pre-image and the last image only: an in-between image would name the steps.
     let listed = |k: usize| k + 1 == n || (p.b("show_between") && !qv);
-    let drawn_img = |k: usize| (ans || qv) && listed(k);
+    let drawn_img = |k: usize| image_drawn(p, n, k);
     // mirror lines and centres: part of the question on the student copy, the answer on the question copy
     let guides = p.b("show_guides") && !qv;
 
