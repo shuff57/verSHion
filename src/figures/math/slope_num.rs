@@ -585,8 +585,9 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64
         stack.push((m, b, depth + 1));
     }
     out.sort_by(|p, q| p.0.total_cmp(&q.0));
-    // (a root on the end of two intervals is found twice)
-    out.dedup_by(|p, q| (p.0 - q.0).abs() <= 1e-12 * (1.0 + q.0.abs()));
+    // (a root on the end of two intervals is found twice, as the same exact value; two roots the Sturm counts keep apart are
+    // never merged, however close: 100 and 100.0000000001 are two lines)
+    out.dedup_by(|p, q| p.1.is_some() && p.1 == q.1);
     Some(out)
 }
 
@@ -913,7 +914,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             let proven_all_x = dx.is_some() && distinct;
             let mut lines = vec![];
             let mut unsure = vec![];
-            for (r, rq, (ia, ib)) in roots.into_iter().filter(|(r, _, _)| *r >= y0 - 1e-12 * (1.0 + y0.abs()) && *r <= y1 + 1e-12 * (1.0 + y1.abs())) {
+            // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1)
+            for (r, rq, (ia, ib)) in roots.into_iter().filter(|(r, _, _)| *r >= y0 && *r <= y1) {
                 // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x, and
                 // only one inside this root's own isolating interval: a neighbouring root's value is another line's)
                 let cand = candidates(r).into_iter().filter(|c| { let v = ev(c, 0.0, 0.0); v > ia && v <= ib + 1e-15 * (1.0 + ib.abs()) }).find(|c| proves(&f.tree, c));
