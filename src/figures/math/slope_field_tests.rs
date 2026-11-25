@@ -1628,3 +1628,25 @@ fn round20_edge_roots_decided_exactly_at_any_degree() {
         assert!(got.iter().any(|g| (g - want).abs() < 1e-12) || (!q.complete && q.unsure.iter().any(|u| (u - want).abs() < 1e-9)), "{eqt} on [{y0}, {y1}]: {got:?}, unsure {:?}, complete {}", q.unsure, q.complete);
     }
 }
+
+/// Check 21: two equilibria 2·10⁻⁷ apart whose polynomial's coefficients pass 2⁵³ are each found at its own height: the
+/// root is halved exactly, so (y − 20.0000001)(y − 20.0000003) on y 19.9999999..20.0000005 has the lines 20.0000001 and
+/// 20.0000003, and (y − 10.0000001)(y − 10.0000003) on y 9..10.0000002 has y = 10.0000001, never "No equilibrium solutions".
+#[test]
+fn round21_close_roots_with_large_coefficients_keep_their_heights() {
+    for c in [10.0, 12.0, 15.0, 20.0, 30.0, 100.0] {
+        let (r1, r2) = (c + 1e-7, c + 3e-7);
+        let (t1, t2) = (format!("{}", r1), format!("{}", r2));
+        let eqt = format!("(y - {t1})(y - {t2})");
+        for (y0, y1, want) in [(c - 1e-7, c + 5e-7, vec![r1, r2]), (c - 1.0, c + 2e-7, vec![r1]), (c - 1.0, c + 1.0, vec![r1, r2])] {
+            let out = build(&with(&[("dydx", s(&eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+            let q = out.equils.as_ref().unwrap();
+            let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+            // (every line drawn is a true root at its own height; fewer than all only where the list is not called complete)
+            for g in &got { assert!(want.iter().any(|w| (g - w).abs() <= 2e-15 * w.abs()), "{eqt} on [{y0}, {y1}]: {got:?}"); }
+            assert!(got.windows(2).all(|p| p[1] > p[0]), "{eqt}: {got:?}");
+            if got.len() != want.len() { assert!(!q.complete, "{eqt} on [{y0}, {y1}]: {got:?} called complete"); }
+            if (y1 - y0) < 1e-5 || c < 50.0 { assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}, unsure {:?}", q.unsure); }
+        }
+    }
+}

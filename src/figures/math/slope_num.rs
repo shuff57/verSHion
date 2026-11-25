@@ -519,29 +519,6 @@ fn poly_div(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
     Some(trim(q))
 }
 fn is_zero_poly(c: &[Q]) -> bool { c.iter().all(|q| q.0 == 0) }
-/// The distinct real roots of a square-free c in (lo, hi], each isolated by Sturm counts and then found by halving: (its
-/// float, its exact value where it is a rational the halving lands on or a short fraction). None on overflow.
-/// A polynomial with rational coefficients at a float, in double-double arithmetic (about 32 digits): beside two roots
-/// 10⁻⁹ apart its value, about 10⁻¹⁹, is far below a float's rounding of its terms, but not of these.
-fn dd_eval(c: &[Q], y: f64) -> f64 {
-    let two_sum = |a: f64, b: f64| { let s = a + b; let bb = s - a; (s, (a - (s - bb)) + (b - bb)) };
-    let two_prod = |a: f64, b: f64| { let p = a * b; (p, a.mul_add(b, -p)) };
-    // (each coefficient p/q as hi + lo: hi the float quotient, lo the exact residual p − hi·q over q)
-    let coef = |q: &Q| { let (n, d) = (q.0 as f64, q.1 as f64); let hi = n / d; let r = (-hi).mul_add(d, n); (hi, r / d) };
-    let mut acc = (0.0f64, 0.0f64);
-    for q in c.iter().rev() {
-        // acc = acc·y + q
-        let (p, pe) = two_prod(acc.0, y);
-        let pe = pe + acc.1 * y;
-        let (ch, cl) = coef(q);
-        let (s, se) = two_sum(p, ch);
-        let lo = se + pe + cl;
-        let (h, l) = two_sum(s, lo);
-        acc = (h, l);
-    }
-    acc.0 + acc.1
-}
-
 /// A rational exactly, without overflow.
 fn big(q: Q) -> num_rational::BigRational { num_rational::BigRational::new(q.0.into(), q.1.into()) }
 /// A window edge as typed: the shortest decimal that gives back its float, exactly (0.7 is 7/10, 1.7320508075688772 is
@@ -566,11 +543,11 @@ fn sign_big(c: &[Q], x: &num_rational::BigRational) -> i32 {
 /// Within a few float steps of an edge: too near for the floats to say which side a value is on.
 fn near_edge(v: f64, e: f64) -> bool { (v - e).abs() <= 4.0 * f64::EPSILON * v.abs().max(e.abs()) + 4.0 * f64::MIN_POSITIVE }
 
+/// The distinct real roots of a square-free c in [lo, hi], each isolated by Sturm counts and then found by exact halving.
 /// Each distinct real root in [lo, hi]: its float, its exact value where rational, its interval as floats and exactly (the
 /// root is the only one in (a, b], or b itself).
 fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64), (Q, Q))>> {
     let count = |a: Q, b: Q| -> Option<usize> { let n = sturm_count(c, a, b)?; Some(n - (poly_eval(c, a)?.0 == 0) as usize) };
-    let ev = |y: f64| dd_eval(c, y);
     let mut out = vec![];
     let mut stack = vec![(lo, hi, 0u32)];
     while let Some((a, b, depth)) = stack.pop() {
@@ -578,15 +555,28 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64
         if n == 0 { continue; }
         if poly_eval(c, b)?.0 == 0 { let bf = b.0 as f64 / b.1 as f64; out.push((bf, Some(b), (bf, bf), (b, b))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
         if n == 1 || depth > 90 {
-            let (mut u, mut v) = (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64);
-            // (oriented by the exact sign at the right end, which is no root here; a, the left end, may be one)
-            let sv = poly_eval(c, b)?.0 > 0;
-            for _ in 0..200 { let mm = 0.5 * (u + v); if mm <= u || mm >= v { break; } let vm = ev(mm); if vm == 0.0 { u = mm; v = mm; break; } if (vm > 0.0) == sv { v = mm; } else { u = mm; } }
-            let r = 0.5 * (u + v);
+            // (halved exactly, in big rationals, oriented by the exact sign at the right end, which is no root here (a, the left
+            // end, may be one), until the two ends are one float apart: the float is the root's to the last place however
+            // large the coefficients, and a midpoint where the polynomial is exactly 0 is the root itself)
+            use num_traits::ToPrimitive;
+            let sv = sign_big(c, &big(b));
+            let (mut ua, mut ub) = (big(a), big(b));
+            let two = num_rational::BigRational::from_integer(2.into());
+            let mut hit: Option<num_rational::BigRational> = None;
+            for _ in 0..400 {
+                let (fa, fb) = (ua.to_f64().unwrap_or(f64::NAN), ub.to_f64().unwrap_or(f64::NAN));
+                if !(fa < fb) || fa.next_up() >= fb { break; }
+                let mid = (&ua + &ub) / &two;
+                let sm = sign_big(c, &mid);
+                if sm == 0 { hit = Some(mid); break; }
+                if sm == sv { ub = mid; } else { ua = mid; }
+            }
+            let r = match &hit { Some(h) => h.to_f64().unwrap_or(f64::NAN), None => ((&ua + &ub) / &two).to_f64().unwrap_or(f64::NAN) };
+            let hit_q = hit.as_ref().and_then(|h| Q::new(h.numer().to_i128()?, h.denom().to_i128()?));
             // (a rational root, recovered from its float by continued fractions and checked exactly)
-            let mut rq = None;
+            let mut rq = hit_q;
             let (mut h0, mut h1, mut k0, mut k1, mut xv) = (0i128, 1i128, 1i128, 0i128, r);
-            for _ in 0..40 {
+            for _ in 0..if rq.is_some() { 0 } else { 40 } {
                 let ai = xv.floor();
                 if ai.abs() > 1e15 { break; }
                 let ai_i = ai as i128;
@@ -596,8 +586,8 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64
                 (h0, h1, k0, k1) = (h1, h2, k1, k2);
                 // (only a root inside this root's own interval: another root of the polynomial is another line)
                 if let Some(q) = Q::new(h1, k1) {
-                    let inside = q.sub(a).is_some_and(|d| d.0 > 0) && b.sub(q).is_some_and(|d| d.0 >= 0);
-                    if inside && poly_eval(c, q).is_some_and(|v| v.0 == 0) { rq = Some(q); break; }
+                    let inside = big(q) > big(a) && big(q) <= big(b);
+                    if inside && sign_big(c, &big(q)) == 0 { rq = Some(q); break; }
                 }
                 let fr = xv - ai;
                 if fr.abs() < 1e-18 { break; }
