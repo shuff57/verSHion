@@ -224,3 +224,35 @@ fn small_values_show_only_known_figures() {
         assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit + 1e-6 * want.abs(), "{fx} at {tx}: reading {k} {r}, true {want}");
     }
 }
+
+/// Check 23: a value is rounded once, at the finest place both ends of its error round alike, never to its known figures and
+/// then again by the printer: e^11.70 = 120571.714986… reads 120571.71 for f, f′ and f″ alike; tan 1.5330 = 26.444997… reads
+/// 26.44; 1/sin x at 3.14159263 = 42391215.13 is never 42391210. A smooth side form beside an |u| carries its own rounding:
+/// |x| − sin x has f′ = 1 − cos x = 4.99999… × 10⁻¹³ at 10⁻⁶, whose float 5.0004 × 10⁻¹³ is good to three figures. Truth by
+/// mpmath at 40 digits; right in every figure shown (an integer's trailing zeros are not counted as figures), or undecided.
+#[test]
+fn values_are_rounded_once_and_side_forms_carry_their_rounding() {
+    let cases: Vec<(&str, &str, usize, f64)> = vec![
+        ("e^x", "11.70", 0, 120571.71498645061), ("e^x", "11.70", 1, 120571.71498645061), ("e^x", "11.70", 2, 120571.71498645061),
+        ("e^x", "14.534738", 0, 2052846.6548370085), ("e^x", "14.534738", 1, 2052846.6548370085), ("e^x", "14.534738", 2, 2052846.6548370085),
+        ("tan(x)", "1.5330", 0, 26.444997489495816), ("tan(x)", "1.570796323", 1, 6.9438463330322434e16),
+        ("1/sin(x)", "3.14159263", 0, 42391215.128139483), ("1/(x - e)", "2.7182808", 1, -945422634831.69517),
+        ("1/(x - pi)", "3.1415956", 0, 339396.05480091024), ("sqrt(1 + x) - 1 - x/2", "0.0006", 0, -4.4986505060374706e-8),
+        ("sin(x) - 0.5", "0.5235988", 0, 2.1132492922609833e-8), ("abs(x) - sin(x)", "0.000001", 1, 4.9999999999995833e-13),
+        ("abs(x) - tan(x)", "0.0000001", 1, -1.0000000000000067e-14),
+    ];
+    for (fx, tx, k, want) in cases {
+        let x = typed(tx).unwrap().v;
+        let p = with(&[("f", s(fx)), ("xmin", f((x - 1.0).floor())), ("xmax", f((x + 1.0).ceil())), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let r = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).nth(k).unwrap();
+        if r.contains("cannot be decided") { continue; }
+        let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-").replace(" \u{d7} 10", "e").replace('\u{207b}', "-");
+        let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
+        let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+        let mant = v.trim().split('e').next().unwrap();
+        let places = mant.split('.').nth(1).map_or(0, |d| d.len()) as i32;
+        let zeros = if mant.contains('.') { 0 } else { (mant.len() - mant.trim_end_matches('0').len()) as i32 };
+        let unit = v.split('e').nth(1).map_or(1.0, |e| 10f64.powi(e.trim().parse().unwrap_or(0))) * 10f64.powi(zeros - places);
+        assert!((got - want).abs() <= 0.5 * unit * 1.0001, "{fx} at {tx}: reading {k} {r}, true {want}");
+    }
+}
