@@ -857,7 +857,7 @@ pub(super) fn build(p0: &Params) -> Out {
             lines.push(line(sw, vec![pr("Equilibrium solutions: "), Part::Blank]));
         } else if eqs.lines.is_empty() {
             lines.push(line(None, vec![pr(if eqs.complete { "No equilibrium solutions in this window" } else { "No equilibrium solution found in this window" })]));
-            if !eqs.complete { lines.push(ind(vec![pr("(a search of the window: it cannot rule them out)")])); }
+            if !eqs.complete && eqs.unsure.is_empty() { lines.push(ind(vec![pr("(a search of the window: it cannot rule them out)")])); }
             key.push(vec![pr(if eqs.complete { "no equilibrium solutions in the window" } else { "no equilibrium solution found" })]);
         } else {
             let list: Vec<String> = eqs.lines.iter().map(ywrite).collect();
@@ -866,6 +866,11 @@ pub(super) fn build(p0: &Params) -> Out {
             for chunk in list.chunks(3) { lines.push(ind(vec![mt(&chunk.join(", "))])); }
             lines.push(ind(vec![pr(if eqs.complete { "(every one in this window)" } else { "(a search of the window: there may be others)" })]));
             key.push(vec![pr(if eqs.complete { "equilibrium solutions " } else { "equilibrium solutions found " }), mt(&list.join(", "))]);
+        }
+        // (heights where f comes near 0 but no exact value shows a line: named as possible, never drawn or put in the key)
+        if answers && !eqs.everywhere && !eqs.unsure.is_empty() {
+            let near: Vec<String> = eqs.unsure.iter().map(|y| format!("{} \u{2248} {}", m.vs.dep, tg::decimal(*y, m.dec))).collect();
+            lines.push(ind(vec![pr("Near "), mt(&near.join(", ")), pr(&format!(" {l} comes close to 0, but no line could be shown to be an equilibrium solution exactly, so none is drawn there"))]));
         }
     }
     if let (true, Some((_, shown)), Some(s0)) = (answers, &solution_ok, m.starts.first()) {
