@@ -455,3 +455,19 @@ fn kind_labels_are_centred_by_their_own_break() {
         assert_eq!(jumps.len(), n, "{eq} at {size}: two jump labels by one break");
     }
 }
+
+/// Check 8: a removable hole the grid's own drawing leaves unbroken (at 1/3 and 1.3, which no sample lands on) gets its open
+/// circle when a limit question is asked; and the roomy example with equation labels at Large labels x = −2 on the graph.
+#[test]
+fn every_removable_hole_is_drawn_and_labelled() {
+    for (eq, a) in [("y = (3x - 1)(x + 1)/(3x - 1)", 1.0 / 3.0), ("y = (x - 1.3)(x + 2)/(x - 1.3)", 1.3)] {
+        let kv = json!({"equations": eq, "xmin": -4.0, "xmax": 4.0, "ymin": -2.0, "ymax": 6.0, "lim_ask_at": "0", "lim_kinds": true});
+        let s = svg(&with(kv.clone()));
+        let g = super::grid_layout(&with(kv));
+        let (cx, cy) = (g.ml + (a - g.x0) * g.ux, g.mt + g.ph - (a + if a > 1.0 { 2.0 } else { 1.0 } - g.y0) * g.uy);
+        let circles: Vec<(f64, f64)> = s.split("<circle").skip(1).filter_map(|p| { let n = |k: &str| -> Option<f64> { p.split(&format!(" {k}=\"")).nth(1)?.split('"').next()?.parse().ok() }; Some((n("cx")?, n("cy")?)) }).collect();
+        assert!(circles.iter().any(|(x, y)| (x - cx).abs() < 1.0 && (y - cy).abs() < 1.0), "{eq}: no open circle at the hole ({a}): {circles:?}");
+    }
+    let s = svg(&with(json!({"equations": ROOMY, "xmin": -5.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "eq_labels": true, "label_size": "Large"})));
+    assert!(!words_in(&s, "block").contains("Not labelled"), "{}", words_in(&s, "block"));
+}

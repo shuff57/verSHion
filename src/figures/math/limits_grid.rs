@@ -243,6 +243,24 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     }
     let (_, gtexts) = grid_texts(&body);
     for t in &gtexts { board.boxes.push(grow(t.bx, 1.0)); }
+    // (a removable discontinuity the grid's own drawing leaves unbroken (it marks a hole only where a sample lands on it:
+    // 1/4 and 5/4, not 1/3 or 1.3) gets its open circle, so the graph shows what the questions and the key say: a circle in
+    // its row's colour over the curve, at the height the curve runs to there)
+    let mut hole_svg = String::new();
+    {
+        let (discs0, _) = m.discontinuities();
+        let row_of = |x: f64| -> usize { rows.iter().find(|(_, t)| { let mut tmp = vec![]; read_line(1, 0, t, &mut tmp).is_some_and(|pc| pc.covers_side(x, -1.0) || pc.covers_side(x, 1.0)) }).map_or(1, |r| r.0) };
+        for d in discs0.iter().filter(|d| d.kind == "removable") {
+            let Some(l) = d.left.num().or(d.right.num()) else { continue };
+            if !inside_y(l) || d.x < g.x0 || d.x > g.x1 { continue; }
+            let (cx, cy) = (sx(d.x), sy(l));
+            if board.dots.iter().any(|(q, _)| (q.0 - cx).abs() < 2.0 && (q.1 - cy).abs() < 2.0) { continue; }
+            let ci = row_of(d.x) - 1;
+            let col = if print { ["#000000", "#444444", "#1c1c1c", "#3a3a3a", "#2e2e2e"][ci % 5].to_string() } else if ci < 4 { crate::figures::math::colp(p, &format!("eq{}_color", ci + 1), crate::figures::math::PALETTE[ci]) } else { crate::figures::math::PALETTE[ci % 5].to_string() };
+            hole_svg.push_str(&format!(r##"<circle cx="{cx:.2}" cy="{cy:.2}" r="4.5" fill="#fff" stroke="{col}" stroke-width="2" data-lim="hole"/>"##));
+            board.dots.push(((cx, cy), 5.5));
+        }
+    }
     // (the gridlines are drawn as lines, not polylines: a label may sit over one on its white plate)
 
     for (_, a, b) in &asym_lines { board.dashed.push((*a, *b)); }
@@ -361,7 +379,7 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
             let bx = label_box_for(*c, &r.text, size);
             let Some(i) = own_i else { return false };
             let own = mark_d(&disc_marks[i].1, bx);
-            if own > 40.0 || !board.free(grow(bx, pad.max(if size >= 20.0 { 0.15 * size } else { 1.5 }))) { return false; }
+            if own > 40.0 || !board.free(grow(bx, pad)) { return false; }
             // (centred nearer its own break's x than any other break's, by 4 px: a label is read by the column it is in)
             let own_x = disc_marks[i].1.first().map_or(c.0, |m| m.0 .0);
             let off_centre = disc_marks.iter().enumerate().filter(|(j, _)| *j != i).any(|(_, (_, ms))| ms.first().is_some_and(|m| (c.0 - m.0 .0).abs() < (c.0 - own_x).abs() + 4.0));
@@ -375,10 +393,12 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
             });
             if crosses { return false; }
             let own_pts: Vec<Pt> = disc_marks[i].1.iter().flat_map(|(a, c)| [*a, *c]).collect();
-            board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 1.0 && (o.1 - q.1).abs() < 1.0)).all(|(q, _)| box_pt(bx, *q) >= own + 6.0)
+            // (the graph's points and circles, radius 4 px or so; not an equation label's small leader dot)
+            board.dots.iter().filter(|(_, rr)| *rr >= 4.5).filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 1.0 && (o.1 - q.1).abs() < 1.0)).all(|(q, _)| box_pt(bx, *q) >= own + 6.0)
         }) };
         // (4 px clear of tick numbers and curves where it can be; else as close as the placer itself allows)
-        let clear = clear_with(4.0).or_else(|| clear_with(0.0));
+        // (the label sits on a white halo, so a pixel clear is enough where 4 are not to be had)
+        let clear = clear_with(4.0).or_else(|| clear_with(1.0));
         if let Some(c) = clear {
             board.boxes.push(grow(label_box_for(c, &r.text, size), 1.0));
             labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true));
@@ -427,6 +447,7 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
     let mut out = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0}" height="{h:.0}" viewBox="0 0 {w:.0} {h:.0}"><rect width="100%" height="100%" fill="#fff"/>"##);
     out.push_str(&svg[head_end..body_end]);
     let mut add = String::new();
+    add.push_str(&format!(r#"<g data-lim="holes">{hole_svg}</g>"#));
     add.push_str(&format!(r#"<g data-lim="labels">{labels_svg}</g>"#));
     add.push_str(&format!(r#"<g data-lim="block">{block_svg}</g>"#));
     out.push_str(&if print { grey(&add) } else { add });
