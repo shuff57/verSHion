@@ -43,6 +43,16 @@ class SourceMapTests(unittest.TestCase):
         # Holdout v8, Lebl appendix exercises: "A.3.1".
         page={'items':[{'number':None,'label':'A.3.1','question_index':0,'status':'saved'},{'number':None,'label':'A.3.2','question_index':1,'status':'saved'}]}
         self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2]),page,qs)['by_number'],{1:qs[0],2:qs[1]})
+    def test_a_page_without_printed_numbers_maps_its_items_in_order(self):
+        # Holdout v19, maths-school: a lettered block (split per figure) and one exam question, no numbers printed.
+        ids=['q1.a','q1.b','q1.c','q2'];qs=[{'stem':i} for i in ids]
+        page={'items':[{'id':i,'number':None,'label':i[-1],'question_index':k,'status':'saved'} for k,i in enumerate(ids)]}
+        case={'source_id':'s','question_numbers':[1,2],'ordinal_items':True}
+        got=h.parsed_source_map(case,page,qs)
+        self.assertEqual(got['numbers'],[1,1,1,2]);self.assertEqual(got['groups'][1],[0,1,2])
+        # A count that does not agree maps nothing; without the flag nothing is guessed.
+        self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2,3]),page,qs)['numbers'],[None]*4)
+        self.assertEqual(h.parsed_source_map(dict(case,ordinal_items=False),page,qs)['numbers'],[None]*4)
     def test_a_declared_label_map_keys_letter_prefixed_numbers(self):
         # Holdout v17, Maths4Everyone: questions A1-A3, B1-B3 ...
         labels=['A1','A2','(B1)','b2.'];qs=[{'stem':l} for l in labels]
