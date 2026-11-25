@@ -176,7 +176,7 @@ pub(super) fn find(ps: &[Piece], win: (f64, f64)) -> Vec<Local> {
             }).filter(|c| c.len() >= 12) else { continue };
             // (two holes closer than a hundredth: the series' radius would be so small that its joins with the formula, whose
             // rounding there is as large as the value, prove nothing; no series is built, and the tracer says so)
-            if xs.iter().any(|o| (o.x - x).abs() > 1e-12 * (1.0 + x.abs()) && (o.x - x).abs() < 1e-2 * (1.0 + x.abs())) { continue; }
+            if xs.iter().any(|o| (o.x - x).abs() > 1e-12 * (1.0 + x.abs()) && (o.x - x).abs() < 1e-2) { continue; }
             let mut local = Local { pi, x, radius: 0.125, xe: cut.exact.clone(), c };
             for other in &xs { if (other.x - x).abs() > 1e-12 * (1.0+x.abs()) { local.radius = local.radius.min(0.25 * (other.x - x).abs()); } }
             // The last half of the available series must be negligible, also after three derivatives. Shrink for

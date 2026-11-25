@@ -142,3 +142,31 @@ fn holes_without_a_series_write_no_lost_value() {
         assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) + 1e-9, "{fx} at {tx}: reading {k} {r}, true {want}");
     }
 }
+
+/// Check 19: at a typed x that is no break of f, f′ and f″ exist; the tracer writes them, or says they cannot be decided,
+/// never that they do not exist. And readings the floats can give are written: ln(1 + x − 100)/(x − 100) = 1 − u/2 + u²/3
+/// with u = x − 100 has f′ ≈ −0.5 and f″ ≈ 0.67 at 100.00001 (a domain end 1 away is no reason to refuse them).
+#[test]
+fn no_false_absence_and_no_needless_refusal() {
+    for (fx, tx, a, z) in [("(1 - cos(x))/x^2 + sqrt(x)^5", "0.0001", -1.0, 4.0), ("abs(x) + (1 - cos(x))/x^2", "0.00001", -2.0, 2.0),
+                           ("abs(x) + (1 - cos(x))/x^2", "-0.00001", -2.0, 2.0), ("abs(x) (1 - cos(x))/x^2", "0.00000001", -2.0, 2.0),
+                           ("sqrt(x) + (1 - cos(x))/x^2", "0.0000001", -1.0, 4.0), ("(e^x - 1)/x + (e^(x - 0.0001) - 1)/(x - 0.0001)", "0.0000051", -1.0, 1.0),
+                           ("sin(pi x)/((x - 100)(x - 101))", "100.00001", 98.0, 103.0), ("sin(pi x)/((x - 100)(x - 101))", "99.99999", 98.0, 103.0)] {
+        let p = with(&[("f", s(fx)), ("xmin", f(a)), ("xmax", f(z)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let reads: Vec<String> = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+        for r in &reads[1..] { assert!(!r.contains("does not exist"), "{fx} at {tx}: {r}"); }
+    }
+    let p = with(&[("f", s("ln(1 + x - 100)/(x - 100)")), ("xmin", f(98.0)), ("xmax", f(102.0)), ("show_fpp", b(true)), ("tracer_x", s("100.00001"))]);
+    let reads: Vec<String> = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+    assert!(reads[1].ends_with("\u{2248} \u{2212}0.5"), "{}", reads[1]);
+    assert!(reads[2].contains("0.67"), "{}", reads[2]);
+    // (the note names what is undecided: f alone here)
+    let out = build(&with(&[("f", s("abs(x) - sin(x)")), ("xmin", f(-2.0)), ("xmax", f(2.0)), ("show_fpp", b(true)), ("tracer_x", s("0.000001"))]));
+    for n in out.notes.iter().filter(|n| n.contains("cannot be decided")) {
+        let reads: Vec<String> = out.labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).collect();
+        for (k, nm) in ["f", "f\u{2032}", "f\u{2033}"].iter().enumerate() {
+            let named = n.split(" at x").next().unwrap().split([',', ' ']).any(|w| w == *nm);
+            assert_eq!(named, reads[k].contains("cannot be decided"), "{n} / {reads:?}");
+        }
+    }
+}

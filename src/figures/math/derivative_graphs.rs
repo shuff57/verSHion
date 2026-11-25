@@ -1910,7 +1910,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     // (a value settled by its two one-sided limits meeting, at a zero of a root's base typed exactly: (x³)^(1/3) at 0 has
     // f′(0) = 1 from both sides, though its plain formula underflows to no value at the neighbouring floats)
     let settled: std::cell::Cell<bool> = std::cell::Cell::new(false);
-    let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
+    let tval_raw = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
         settled.set(false);
         if !m.has_value(t.v, te.as_ref()) { return None; }
@@ -2048,6 +2048,39 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         };
         // (an exact rational value is exact: f′(1.0000001) = 1 for |x − 1| beside its corner is never questioned)
         let rational = ve.as_ref().is_some_and(|e| e.rational().is_some());
+        // A difference of what is below the value (f itself for f; f for f′; f′ for f″), a thousandth, half and a quarter of that
+        // away, central or one-sided beside the edge of the domain, extrapolated; for f itself, the average of its two sides,
+        // extrapolated the same way. Sound only where the three steps agree (so it says nothing across a kink or a cusp).
+        // Some((estimate, its error)) where sound.
+        let x = t.v;
+        let est: Option<(f64, f64)> = {
+            let h1 = 1e-3;
+            let step = |h: f64| -> Option<f64> {
+                if fi == 0 {
+                    let g = |y: f64| m.d(0, y);
+                    match (g(x + h), g(x - h)) {
+                        (Some(a), Some(c)) => Some(0.5 * (a + c)),
+                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(3.0 * g(x + sd * h)? - 3.0 * g(x + 2.0 * sd * h)? + g(x + 3.0 * sd * h)?) }
+                    }
+                } else {
+                    let g = |y: f64| m.d(fi - 1, y);
+                    match (g(x + h), g(x - h)) {
+                        (Some(a), Some(c)) => Some((a - c) / (2.0 * h)),
+                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(sd * (-2.5 * g(x + sd * h)? + 4.0 * g(x + 2.0 * sd * h)? - 1.5 * g(x + 3.0 * sd * h)?) / h) }
+                    }
+                }
+            };
+            match (step(h1), step(h1 / 2.0), step(h1 / 4.0)) {
+                (Some(d1), Some(d2), Some(d3)) => {
+                    let (f12, f23) = ((4.0 * d2 - d1) / 3.0, (4.0 * d3 - d2) / 3.0);
+                    let err = (f12 - f23).abs();
+                    (f23.is_finite() && err <= 1e-6 * (1.0 + f23.abs())).then_some((f23, err))
+                }
+                _ => None,
+            }
+        };
+        let agrees = |w: f64| est.is_some_and(|(e, err)| (w - e).abs() <= 1e-6 * w.abs().max(e.abs()) + 10.0 * err + 1e-11);
+        let mut set_undecided = || { let mut u = undecided.get(); u[fi] = true; undecided.set(u); };
         let (v, ve) = match v {
             // (inside a removable hole's local series, f and its derivatives are the series' own, as on the curves: beside
             // the hole the typed formula, and an exact form of it (−2·10¹⁵ + 1999980000100000·e^(1/100000) for (eˣ − 1)/x″ at
@@ -2055,64 +2088,52 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             // does not. So (1 − cos x)/x² reads f(0.0000001) ≈ 0.5, (eˣ − e⁻ˣ)/(2x) reads f′(0.00001) ≈ 3.3333 × 10⁻⁶, and a
             // hole at 100 reads as one at 0.)
             Some(w) if !rational && !m.is_isolated(t.v) && m.local_covers(t.v) => match m.d(fi, t.v) { Some(dv) => (Some(dv), None), None => (Some(w), ve) },
-            // (elsewhere a value can still be lost to cancellation: it is checked against differences of the derivative below
-            // it, a thousandth, half and a quarter of that away (central, or one-sided beside the edge of the domain),
-            // extrapolated. Only where the three steps agree is the difference sound; then a value that disagrees with it,
-            // by more than a millionth of either, is replaced by the model's own value if that agrees, and otherwise not
-            // written: undecided. Across a kink or a cusp the steps disagree and the check says nothing.)
-            Some(w) if fi > 0 && !rational && !settled.get() && !proven_zero && !m.is_isolated(t.v) => {
-                let g = |y: f64| m.d(fi - 1, y);
-                let x = t.v;
-                let dh = |h: f64| -> Option<f64> {
-                    match (g(x + h), g(x - h)) {
-                        (Some(a), Some(c)) => Some((a - c) / (2.0 * h)),
-                        // (one side only: from three points on it, not from x itself)
-                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(sd * (-2.5 * g(x + sd * h)? + 4.0 * g(x + 2.0 * sd * h)? - 1.5 * g(x + 3.0 * sd * h)?) / h) }
-                    }
-                };
-                let h1 = 1e-3;
-                match (dh(h1), dh(h1 / 2.0), dh(h1 / 4.0)) {
-                    (Some(d1), Some(d2), Some(d3)) => {
-                        let (f12, f23) = ((4.0 * d2 - d1) / 3.0, (4.0 * d3 - d2) / 3.0);
-                        let fd_err = (f12 - f23).abs();
-                        let sound = f23.is_finite() && fd_err <= 1e-6 * (1.0 + f23.abs());
-                        let tol = |u: f64| 1e-6 * u.abs().max(f23.abs()) + 10.0 * fd_err + 1e-11;
-                        if sound && (w - f23).abs() > tol(w) {
-                            match m.d(fi, t.v).filter(|dv| (dv - f23).abs() <= tol(*dv)) {
-                                Some(dv) => (Some(dv), None),
-                                None => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
-                            }
-                        } else { (Some(w), ve) }
-                    }
-                    _ => (Some(w), ve),
+            // (an exact rational, a value settled by its two sides or a proven zero is written as it is)
+            Some(w) if rational || settled.get() || proven_zero || m.is_isolated(t.v) => (Some(w), ve),
+            // (otherwise: a value the sound difference confirms is written; one it contradicts is replaced by the model's own
+            // value if that agrees, and else not written; where no difference is sound (a kink or a cusp within a thousandth),
+            // the value's own rounding bound decides, to four figures, and a 0 the rounding was read as only below 10⁻⁹)
+            Some(w) => {
+                if agrees(w) { (Some(w), ve) }
+                else if est.is_some() {
+                    match m.d(fi, t.v).filter(|dv| agrees(*dv)) { Some(dv) => (Some(dv), None), None => { set_undecided(); (None, None) } }
+                } else {
+                    let bound = m.piece_at(t.v).and_then(|pi| {
+                        let a = m.fexpr(pi, fi).map(|e| sym::ev_err(e, t.v).1);
+                        let b = (matches!(m.mode, Mode::F) && fi > 0 && m.pieces[pi].rat.is_some()).then(|| { let mut e = m.pieces[pi].e.clone(); for _ in 0..fi { e = sym::deriv(&e); } sym::ev_err(&e, t.v).1 });
+                        match (a, b) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) }
+                    });
+                    let lost = bound.is_some_and(|b| if w == 0.0 { !(b <= 1e-9) } else { !(b <= 1e-4 * w.abs()) });
+                    if lost { set_undecided(); (None, None) } else { (Some(w), ve) }
                 }
             }
-            other => (other, ve),
-        };
-        // (and a value from the typed formula is written only where its own rounding bound shows it to four figures: beside
-        // a hole with no series (at the end of the domain, √x⁵ added; at a corner, |x − 1| added) the formula's terms cancel
-        // to a steady but wrong float, (eˣ − 1)/x + √x⁵″ ≈ 0.26 at 0.00001 for 0.345, and f itself, (1 − cos x)/x² + √x⁵ ≈ 0 at
-        // 10⁻⁷ for 1/2. Exact rationals, series values and values settled by their sides are not formula floats.)
-        let from_formula = !rational && !settled.get() && !proven_zero && !m.is_isolated(t.v) && !m.local_covers(t.v)
-            && ve.as_ref().is_none_or(|e| e.rational().is_none());
-        let v = match v {
-            // (a 0 the formula's rounding was read as, too: "≈ 0" only where that rounding is itself tiny)
-            Some(w) if from_formula => {
-                // (the better of the expanded derivative's bound and, for a rational piece, its typed form's, which the value
-                // uses beside a pole: 1/(x² − 2)″ at 1.414215)
-                let bound = m.piece_at(t.v).and_then(|pi| {
-                    let a = m.fexpr(pi, fi).map(|e| sym::ev_err(e, t.v).1);
-                    let b = (matches!(m.mode, Mode::F) && fi > 0 && m.pieces[pi].rat.is_some()).then(|| { let mut e = m.pieces[pi].e.clone(); for _ in 0..fi { e = sym::deriv(&e); } sym::ev_err(&e, t.v).1 });
-                    match (a, b) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) }
-                });
-                let lost = bound.is_some_and(|b| if w == 0.0 { !(b <= 1e-9) } else { !(b <= 1e-4 * w.abs()) });
-                if lost { let mut u = undecided.get(); u[fi] = true; undecided.set(u); None } else { Some(w) }
-            }
-            other => other,
+            // (no value: a derivative does not exist only at a break the analysis found exactly there (a corner, a cusp, a
+            // pole, a jump, the end of the domain), or where f has no value; at any other typed x it exists, and a value the
+            // floats could not give is undecided, never absent)
+            None => (None, ve),
         };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
     // (f″ where f′ does not exist does not exist either; where f′ is only undecided, f″ is worked out on its own)
+    // (no value for f′ or f″: a derivative does not exist only at a break the analysis found exactly there (a corner, a cusp,
+    // a pole, a jump), at the end of the domain, where f has no value, or at an exactly typed x where the derivative's own
+    // expression has none (sin(x)^(4/3)″ at π); at any other typed x it exists, and a value the floats could not give is
+    // undecided, never absent: |x| + (1 − cos x)/x² at 0.00001, sin(πx)/((x − 100)(x − 101))″ at 100.00001)
+    let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
+        let r = tval_raw(fi);
+        if r.is_some() || fi == 0 || undecided.get()[fi] { return r; }
+        let (Some(m), Some(t)) = (model.as_ref(), tx.as_ref()) else { return r };
+        let x = t.v;
+        if !m.has_value(x, te.as_ref()) { return r; }
+        let near = |q: f64| (q - x).abs() <= 1e-12 * (1.0 + x.abs());
+        let at_break = an.as_ref().is_some_and(|a| a.breaks.iter().any(|q| near(*q)) || a.fp_marks.iter().chain(a.fpp_marks.iter()).any(|mk| mk.k == EvK::Undef && near(mk.x)));
+        let edge = [-1.0, 1.0].iter().any(|sd: &f64| m.f(x + sd * 1e-9 * (1.0 + x.abs())).is_none());
+        let own_undefined = te.as_ref().is_some_and(|xe| [m.piece_at(x - 1e-9 * (1.0 + x.abs())), m.piece_at(x + 1e-9 * (1.0 + x.abs()))].iter().flatten().any(|&pi| {
+            m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, xe)) || domain::singular_at(&m.pieces[pi].e, x, Some(xe))
+        }));
+        if !at_break && !edge && !own_undefined { let mut u = undecided.get(); u[fi] = true; undecided.set(u); }
+        r
+    };
     let tval = |fi: usize| -> Option<(f64, Option<XV>)> {
         if fi == 2 && tval_one(1).is_none() && !undecided.get()[1] { return None; }
         tval_one(fi)
@@ -2487,7 +2508,8 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     if let Some(t) = tx.as_ref() {
         let u = undecided.get();
         if u.iter().any(|u| *u) {
-            let which = if u[1] && u[2] { format!("{name}{PRIME} and {name}{DPRIME}") } else if u[1] { format!("{name}{PRIME}") } else { format!("{name}{DPRIME}") };
+            let names: Vec<String> = [(0usize, name.to_string()), (1, format!("{name}{PRIME}")), (2, format!("{name}{DPRIME}"))].into_iter().filter(|(i, _)| u[*i]).map(|(_, n)| n).collect();
+            let which = match names.len() { 1 => names[0].clone(), 2 => format!("{} and {}", names[0], names[1]), _ => format!("{}, {} and {}", names[0], names[1], names[2]) };
             let advice = if model.as_ref().is_some_and(|m| m.pieces.iter().any(|pc| domain::root_product(&pc.e))) { ": typed as a single power (x^(4/3) for x\u{b7}x^(1/3)) it can be decided" } else { "" };
             notes.push(format!("{which} at x = {} cannot be decided here (the arithmetic loses its digits at this x), so it is not written{advice}", t.show));
         }
