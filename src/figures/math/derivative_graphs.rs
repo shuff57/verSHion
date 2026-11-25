@@ -1153,17 +1153,32 @@ fn printed_place(v: f64, d: i64) -> i32 {
 fn round_at(v: f64, e: i32) -> f64 { let n = v.signum() * 1e-9; if e >= 0 { let k = 10f64.powi(e); (v / k + n).round() * k } else { let k = 10f64.powi(-e); (v * k + n).round() / k } }
 /// A value w known to within ±u, rounded once, at the finest place both ends of [w − u, w + u] round to the same digit and
 /// no finer than `val_text` prints with `d` decimals: every figure written is then right, whatever the true value in the
-/// range (e^x at 11.70 = 120571.714986…, known to 9 figures, is 120571.71, never 120571.715 and then 120571.72). None when
-/// not even its first figure is known.
-pub(crate) fn round_known(w: f64, u: f64, d: i64) -> Option<f64> {
+/// range (e^x at 11.70 = 120571.714986…, known to 9 figures, is 120571.71, never 120571.715 and then 120571.72). With the
+/// place it is rounded at, which is where it is to be written (`text_at`); None when not even its first figure is known.
+pub(crate) fn round_known(w: f64, u: f64, d: i64) -> Option<(f64, i32)> {
     let e0 = printed_place(w, d);
-    if !(u > 0.0) || w == 0.0 { return Some(w); }
+    if !(u > 0.0) || w == 0.0 { return Some((w, e0)); }
     let lead = w.abs().log10().floor() as i32;
     for e in e0..=lead + 1 {
         let (lo, hi) = (round_at(w - u, e), round_at(w + u, e));
-        if lo == hi && lo != 0.0 { return Some(lo); }
+        if lo == hi && lo != 0.0 { return Some((lo, e)); }
     }
     None
+}
+/// A value already rounded at the place 10^e, written to that place and no other, in `val_text`'s forms (five figures and
+/// a power of ten past 10¹² or below 10⁻⁴): 0.00496 rounded at 10⁻⁴ is 0.005, never 0.01 when it crosses the printer's
+/// threshold of rounding to 0.
+pub(crate) fn text_at(v: f64, e: i32) -> String {
+    if v != 0.0 && (v.abs() >= 1e12 || v.abs() < 1e-4) && v.is_finite() {
+        let n = v.abs().log10().floor() as i32;
+        let k = (n - e).clamp(0, 4);
+        let mut n = n;
+        let mut m = round_at(v.abs() / 10f64.powi(n), -k);
+        if m >= 10.0 { m /= 10.0; n += 1; }
+        let sup: String = n.to_string().chars().map(|c| match c { '-' => '\u{207b}', '0' => '\u{2070}', '1' => '\u{b9}', '2' => '\u{b2}', '3' => '\u{b3}', c => char::from_u32(0x2070 + c.to_digit(10).unwrap_or(0)).unwrap_or(c) }).collect();
+        return format!("{}{} \u{d7} 10{sup}", if v < 0.0 { MINUS } else { "" }, fmt_full(m, k as i64));
+    }
+    fmt_full(v, (-e).max(0) as i64)
 }
 /// A large value as m × 10ⁿ, m to five significant figures (1.0686 × 10¹³).
 pub(crate) fn sci(v: f64) -> String {
@@ -1936,10 +1951,15 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     let settled: std::cell::Cell<bool> = std::cell::Cell::new(false);
     // (the rounding bound of a value taken from a smooth side form beside an |u|, 1 − cos x for |x| − sin x: part of its error)
     let side_err: std::cell::Cell<Option<f64>> = std::cell::Cell::new(None);
+    // (each reading's place, where it was rounded to its known figures, and its value before rounding: the text is written at
+    // that place; the tracer's dot and tangent stand at the value itself, on the curve)
+    let placed: std::cell::Cell<[Option<i32>; 3]> = std::cell::Cell::new([None; 3]);
+    let raw: std::cell::Cell<[Option<f64>; 3]> = std::cell::Cell::new([None; 3]);
     let tval_raw = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
         settled.set(false);
         side_err.set(None);
+        { let mut a = placed.get(); a[fi] = None; placed.set(a); let mut b = raw.get(); b[fi] = None; raw.set(b); }
         if !m.has_value(t.v, te.as_ref()) { return None; }
         // (f′ and f″ exist only where f is continuous: at a jump, whatever the slopes on its two sides, they do not; x for
         // x < 1 and x + 1 after has no f′(1), though both pieces have slope 1)
@@ -2165,11 +2185,16 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         // same figures, ln(250001/250000) − 1/250000 included; the form itself is exact and is never refused)
         let printed_as_decimal = ve.as_ref().is_some_and(|e| e.rational().is_none() && exact::text(e).chars().count() > 18);
         let unc = if printed_as_decimal { unc.max(fbound.unwrap_or(0.0)) } else { unc };
+        { let mut b = raw.get(); b[fi] = v; raw.set(b); }
+        let place = |e: i32| { let mut a = placed.get(); a[fi] = Some(e); placed.set(a); };
         let v = match (v, &ve) {
             (Some(w), Some(_)) if printed_as_decimal && w != 0.0 => {
                 let u = unc.max(x.abs() * f64::EPSILON * m.d(fi + 1, x).map_or(0.0, f64::abs));
                 // (the form itself is exact and is never refused: at worst its first figure)
-                Some(round_known(w, u, dec.unwrap_or(2)).unwrap_or_else(|| round_at(w, w.abs().log10().floor() as i32)))
+                let lead = w.abs().log10().floor() as i32;
+                let (r, e) = round_known(w, u, dec.unwrap_or(2)).unwrap_or_else(|| (round_at(w, lead), lead));
+                place(e);
+                Some(r)
             }
             (Some(w), None) if w != 0.0 => {
                 let gap = x.abs() * f64::EPSILON;
@@ -2177,7 +2202,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 let u = unc.max(next.map_or(0.0, |d| d.abs() * gap));
                 // (at any size: 37320539.6 known to 7 figures is written 37320540, not to its last decimal; rounded once, at the
                 // finest place both ends of its error round alike, so 1/sin x at 3.14159263 = 42391215.13 is never 42391210)
-                match round_known(w, u, dec.unwrap_or(2)) { Some(r) => Some(r), None => { set_undecided(); None } }
+                match round_known(w, u, dec.unwrap_or(2)) { Some((r, e)) => { place(e); Some(r) } None => { set_undecided(); None } }
             }
             (w, _) => w,
         };
@@ -2212,7 +2237,11 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         model.as_ref()?;
         let nm = &names[fi];
         Some(match tval(fi) {
-            Some((v, ve)) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
+            // (written at the place it was rounded at where the printer's own place, from the rounded value, would be coarser)
+            Some((v, ve)) => {
+                let text = match placed.get()[fi] { Some(e) if v != 0.0 && printed_place(v, dec.unwrap_or(2)) > e => format!("\u{2248}{}", text_at(v, e)), _ => val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal) };
+                eq_text(&format!("{nm}({})", t.show), &text)
+            }
             None if undecided.get()[fi] => format!("{nm}({}) cannot be decided here", t.show),
             None if fi == 0 => format!("{nm}({}) has no value", t.show),
             None => format!("{nm}({}) does not exist", t.show),
@@ -2378,10 +2407,11 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         for (k, pn) in panels.iter().enumerate() {
             for fi in fis_of(pn.kind) {
                 if !shows(p, fi) { continue; }
-                let v = tval(fi).map(|v| v.0);
+                let at = |fi: usize| tval(fi).map(|v| raw.get()[fi].unwrap_or(v.0));
+                let v = at(fi);
                 if let Some(v) = v { if inside(pn, t.v, v) { let q = (pn.sx(t.v), pn.sy(v)); dots.push((q, "tracer")); let _ = k; tracer_pts.push(q); } }
                 if fi == 0 {
-                    if let (Some(v), Some(s)) = (tval(0).map(|v| v.0), tval(1).map(|v| v.0)) {
+                    if let (Some(v), Some(s)) = (at(0), at(1)) {
                         if inside(pn, t.v, v) {
                             // the tangent: 75 px each way along it, cut at the plot's edge
                             let (cx, cy) = (pn.sx(t.v), pn.sy(v));

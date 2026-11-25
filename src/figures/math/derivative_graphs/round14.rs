@@ -256,3 +256,33 @@ fn values_are_rounded_once_and_side_forms_carry_their_rounding() {
         assert!((got - want).abs() <= 0.5 * unit * 1.0001, "{fx} at {tx}: reading {k} {r}, true {want}");
     }
 }
+
+/// Check 24: a value rounded to its known figures is written at that place, never rounded again where the printer's place
+/// from the rounded value is coarser: sin x at 0.00496 is 0.0049600 (f ≈ 0.005, f″ ≈ −0.005, never 0.01); x − sin x has
+/// f′(0.1) = 1 − cos 0.1 = 0.0049958; x sin x − x² has f″(0.05) = 2cos x − x sin x − 2 = −0.0049984; at "1 decimal", sin x
+/// at 0.0497 is 0.049680. And the tracer's dot stands on the curve, at the value itself, whatever the reading rounds to:
+/// at "1 decimal" sin x at 0.25 reads 0.2 and its dot is at sin 0.25 = 0.2474.
+#[test]
+fn rounded_readings_are_written_at_their_place_and_dots_stay_on_the_curve() {
+    let cases: Vec<(&str, &str, &str, usize, f64)> = vec![
+        ("sin(x)", "0.00496", "", 0, 0.0049599796637), ("sin(x)", "0.00496", "", 2, -0.0049599796637), ("x - sin(x)", "0.1", "", 1, 0.0049958347219742),
+        ("x sin(x) - x^2", "0.05", "", 2, 2.0 * 0.05f64.cos() - 0.05 * 0.05f64.sin() - 2.0), ("sin(x)", "0.0497", "1 decimal", 0, 0.0497f64.sin()),
+        ("sin(x)", "0.000496", "3 decimals", 0, 0.000496f64.sin()),
+    ];
+    for (fx, tx, rounding, k, want) in cases {
+        let mut o = vec![("f", s(fx)), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))];
+        if !rounding.is_empty() { o.push(("rounding", s(rounding))); }
+        let r = build(&with(&o)).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).nth(k).unwrap();
+        if r.contains("cannot be decided") { continue; }
+        let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-");
+        let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+        let places = v.trim().split('.').nth(1).map_or(0, |d| d.len()) as i32;
+        assert!((got - want).abs() <= 0.5 * 10f64.powi(-places) * 1.0001, "{fx} at {tx} ({rounding}): reading {k} {r}, true {want}");
+    }
+    for rounding in ["1 decimal", "2 decimals", "3 decimals"] {
+        let bt = build(&with(&[("f", s("sin(x)")), ("xmin", f(-1.0)), ("xmax", f(1.0)), ("tracer_x", s("0.25")), ("rounding", s(rounding))]));
+        let pn = bt.panels.iter().find(|q| q.kind == PK::F || q.kind == PK::One).unwrap();
+        let q = bt.tracer_pts[0];
+        assert!((q.1 - pn.sy(0.25f64.sin())).abs() < 0.01 && (q.0 - pn.sx(0.25)).abs() < 0.01, "{rounding}: the dot at {q:?}, the curve at {}", pn.sy(0.25f64.sin()));
+    }
+}
