@@ -7,70 +7,70 @@
    "id": "cap-01",
    "text": "Ask for the left limit, the right limit, the limit and f(a) at a chosen x = a on a graphed row, the answers in the key",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = x + 2, x < 1; y = 4 - 2x, x >= 1\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0, \"lim_ask_at\": \"1\"}",
    "note": ""
   },
   {
    "id": "cap-02",
    "text": "Ask for the limits as x → ∞ and x → -∞ of a graphed row",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = (2x^2 + 1)/(x^2 + 1)\", \"xmin\": -8.0, \"xmax\": 8.0, \"ymin\": -3.0, \"ymax\": 6.0, \"lim_inf\": \"Both\"}",
    "note": ""
   },
   {
    "id": "cap-03",
    "text": "Ask the questions at several values of a at once",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = -x - 1, x < -2; y = x^2/2 - 1, -2 <= x <= 2; y = 3, x > 2\", \"xmin\": -6.0, \"xmax\": 6.0, \"ymin\": -4.0, \"ymax\": 6.0, \"lim_ask_at\": \"-2, 0, 2\"}",
    "note": ""
   },
   {
    "id": "cap-04",
    "text": "Write answers as numbers, ∞, -∞ or 'does not exist'",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = 2/(x - 3); y = 1/(x + 2)^2\", \"xmin\": -6.0, \"xmax\": 8.0, \"ymin\": -7.0, \"ymax\": 7.0, \"lim_rows\": \"1\", \"lim_ask_at\": \"3\"}",
    "note": ""
   },
   {
    "id": "cap-05",
    "text": "Draw a row's horizontal asymptote, found from its end behaviour, dashed and labelled with its equation",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = (2x^2 + 1)/(x^2 + 1)\", \"xmin\": -8.0, \"xmax\": 8.0, \"ymin\": -3.0, \"ymax\": 6.0, \"lim_hasym\": true}",
    "note": "the grid's asymptote switch draws vertical asymptotes only"
   },
   {
    "id": "cap-06",
    "text": "Label each discontinuity's kind (removable, jump, infinite) on the graph",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = (x^2 - 4)/(x + 2), x < 1; y = 4 - x, 1 <= x < 3; y = 3/(x - 5), x >= 3\", \"xmin\": -5.0, \"xmax\": 9.0, \"ymin\": -6.0, \"ymax\": 6.0, \"lim_kinds\": true}",
    "note": ""
   },
   {
    "id": "cap-07",
    "text": "Ask where a row is not continuous, the key listing each x and its kind",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = (x^2 - 4)/(x + 2), x < 1; y = 4 - x, 1 <= x < 3; y = 3/(x - 5), x >= 3\", \"xmin\": -5.0, \"xmax\": 9.0, \"ymin\": -6.0, \"ymax\": 6.0, \"lim_disc\": true}",
    "note": ""
   },
   {
    "id": "cap-08",
    "text": "Load a limits example (a moved hole, a jump, a vertical asymptote, a limit at infinity)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = x + 2, x < 1; y = 4 - 2x, x >= 1\", \"points\": \"\", \"lim_ask_at\": \"1\", \"lim_kinds\": true, \"title\": \"A jump discontinuity\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0, \"xstep\": 1.0, \"ystep\": 1.0}",
    "note": "a setup choice, as the parity figures' Classic setups; an Examples-menu entry alone is not evidence the probe can read"
   },
   {
    "id": "cap-09",
    "text": "A student copy with blank lines for each limit asked",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = -x - 1, x < -2; y = x^2/2 - 1, -2 <= x <= 2; y = 3, x > 2\", \"xmin\": -6.0, \"xmax\": 6.0, \"ymin\": -4.0, \"ymax\": 6.0, \"lim_ask_at\": \"-2, 0, 2\", \"show_answers\": false}",
    "note": ""
   },
   {
    "id": "cap-10",
    "text": "A student copy without the discontinuity-kind labels",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"equations\": \"y = (x^2 - 4)/(x + 2), x < 1; y = 4 - x, 1 <= x < 3; y = 3/(x - 5), x >= 3\", \"xmin\": -5.0, \"xmax\": 9.0, \"ymin\": -6.0, \"ymax\": 6.0, \"lim_kinds\": true, \"lim_disc\": true, \"show_answers\": false}",
    "note": ""
   }
  ]
