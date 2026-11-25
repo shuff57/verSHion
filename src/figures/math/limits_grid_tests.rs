@@ -377,3 +377,42 @@ fn kinds_with_room_are_on_the_graph() {
         assert!(words_in(&s, "labels").contains("removable"), "{eq} at {size}: {}", words_in(&s, "labels"));
     }
 }
+
+/// Check 6: a kind label never sits across another break's column within that break's marks, nor nearer a plotted point
+/// than its own hole: the roomy example at Large and Small (x = 3's "jump" not across x = 1), and a hole at (1, 2) with a
+/// point at (1.8, 2) beside it.
+#[test]
+fn kind_labels_keep_to_their_own_column_and_mark() {
+    for size in ["Large", "Small", "Medium"] {
+        let kv = json!({"equations": ROOMY, "xmin": -5.0, "xmax": 9.0, "ymin": -6.0, "ymax": 6.0, "lim_kinds": true, "label_size": size});
+        let s = svg(&with(kv.clone()));
+        let g = super::grid_layout(&with(kv));
+        let (sx, sy) = (|x: f64| g.ml + (x - g.x0) * g.ux, |y: f64| g.mt + g.ph - (y - g.y0) * g.uy);
+        let fs = 15.0 * match size { "Large" => 1.4, "Small" => 0.8, _ => 1.0 };
+        let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
+        let body = &body[..body.find("</g>").unwrap()];
+        // (each break's column: its x and the height of its marks)
+        let cols = [(-2.0, "removable", -4.0, -4.0), (1.0, "jump", -1.0, 3.0), (3.0, "jump", -1.5, 1.0)];
+        for part in body.split("<text").skip(1).filter(|p| !p.contains(r##"fill="#fff""##)) {
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            let word: String = { let mut w = String::new(); let mut inside = true; for c in part.chars() { match c { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(c), _ => {} } } w.trim().to_string() };
+            if part.contains("data-lim=\"leader\"") { continue; }
+            let b = [num("x"), num("y") - 0.75 * fs, num("x") + super::limits::tw(&word, fs), num("y") + 0.25 * fs];
+            let crossed: Vec<f64> = cols.iter().filter(|(x, _, lo, hi)| sx(*x) >= b[0] - 4.0 && sx(*x) <= b[2] + 4.0 && b[3] >= sy(*hi) - 8.0 && b[1] <= sy(*lo) + 8.0).map(|c| c.0).collect();
+            // (a label may cross only its own column: one of its own kind there)
+            assert!(crossed.iter().all(|x| cols.iter().any(|c| c.0 == *x && c.1 == word)), "{size}: {word} {b:?} crosses {crossed:?}");
+        }
+    }
+    let kv = json!({"equations": "y = (x^2 - 1)/(x - 1)", "points": "(1.8, 2)", "xmin": -4.0, "xmax": 5.0, "ymin": -2.0, "ymax": 6.0, "lim_kinds": true});
+    let s = svg(&with(kv.clone()));
+    let g = super::grid_layout(&with(kv));
+    let (sx, sy) = (|x: f64| g.ml + (x - g.x0) * g.ux, |y: f64| g.mt + g.ph - (y - g.y0) * g.uy);
+    let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
+    let body = &body[..body.find("</g>").unwrap()];
+    for part in body.split("<text").skip(1).filter(|p| !p.contains(r##"fill="#fff""##) && p.contains("removable")) {
+        let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+        let b = [num("x"), num("y") - 11.0, num("x") + super::limits::tw("removable", 15.0), num("y") + 4.0];
+        let d = |px: f64, py: f64| { let dx = (b[0] - px).max(px - b[2]).max(0.0); let dy = (b[1] - py).max(py - b[3]).max(0.0); dx.hypot(dy) };
+        assert!(d(sx(1.0), sy(2.0)) + 6.0 <= d(sx(1.8), sy(2.0)), "removable is nearer the point (1.8, 2) than its hole");
+    }
+}

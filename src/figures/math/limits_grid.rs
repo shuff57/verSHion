@@ -346,10 +346,24 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
         // (first, the nearest offered spot beside the break that is clear of everything drawn and within 40 px of the break's
         // marks: the shared placer also wants a label nearer its own mark than any curve, which beside a hole, where the
         // curve runs through the mark, refuses the open side; then the placer, for a leader)
+        // (and is read as its own break's: it crosses no other break's column within the height of that break's marks
+        // (an infinite break's column is the plot's whole height), it is nearer its own marks than any other point or
+        // circle on the plot by 6 px, and it keeps 4 px from tick numbers and curves)
+        let own_i = owner(r);
         let clear = if *kind != 'k' { None } else { r.tries.iter().copied().find(|c| {
             let bx = label_box_for(*c, &r.text, size);
-            let own = owner(r).map_or(0.0, |i| mark_d(&disc_marks[i].1, bx));
-            own <= 40.0 && board.free(grow(bx, if size >= 20.0 { 0.15 * size } else { 1.5 }))
+            let Some(i) = own_i else { return false };
+            let own = mark_d(&disc_marks[i].1, bx);
+            if own > 40.0 || !board.free(grow(bx, 4.0f64.max(if size >= 20.0 { 0.15 * size } else { 1.5 }))) { return false; }
+            let crosses = disc_marks.iter().enumerate().filter(|(j, _)| *j != i).any(|(_, (_, ms))| {
+                let Some(cx) = ms.first().map(|m| m.0 .0) else { return false };
+                if cx < bx[0] - 4.0 || cx > bx[2] + 4.0 { return false; }
+                let (lo, hi) = ms.iter().flat_map(|(a, c)| [a.1, c.1]).fold((f64::MAX, f64::MIN), |(l, h), y| (l.min(y), h.max(y)));
+                bx[3] >= lo - 8.0 && bx[1] <= hi + 8.0
+            });
+            if crosses { return false; }
+            let own_pts: Vec<Pt> = disc_marks[i].1.iter().flat_map(|(a, c)| [*a, *c]).collect();
+            board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 1.0 && (o.1 - q.1).abs() < 1.0)).all(|(q, _)| box_pt(bx, *q) >= own + 6.0)
         }) };
         if let Some(c) = clear {
             board.boxes.push(grow(label_box_for(c, &r.text, size), 1.0));
