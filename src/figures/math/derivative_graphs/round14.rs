@@ -205,8 +205,9 @@ fn small_values_are_known_or_undecided() {
 fn small_values_show_only_known_figures() {
     let cases: Vec<(&str, &str, usize, f64)> = vec![
         ("sin(x)", "3.1415926535897", 0, 9.3238e-14), ("sin(x)", "3.1415926535897", 2, -9.3238e-14), ("cos(x)", "1.5707963267948", 0, 9.6619e-14),
-        ("x - sin(x)", "0.000005", 0, 2.0833e-17), ("tan(x) - x", "0.000003", 0, 9.0e-18), ("ln(1 + x) - x", "0.000004", 0, -8.0e-12),
-        ("(e^x - e^(-x))/(2x) + sqrt(x)^7", "0.0002", 1, 6.6669e-5),
+        ("x - sin(x)", "0.000005", 0, 2.0833e-17), ("tan(x) - x", "0.000003", 0, 9.0e-18), ("ln(1 + x) - x", "0.000004", 0, -7.999979e-12),
+        ("(e^x - e^(-x))/(2x) + sqrt(x)^7", "0.0002", 1, 6.666874e-5), ("sqrt(1 + x) - 1 - x/2", "0.000008", 0, -7.99992e-12),
+        ("sin(x + 3)", "0.141592653589", 0, 7.932384e-13), ("tan(x)", "1.5707963", 1, 1.392828e15), ("tan(x)", "1.5707963", 0, 37320539.59),
     ];
     for (fx, tx, k, want) in cases {
         let x = typed(tx).unwrap().v;
@@ -219,7 +220,7 @@ fn small_values_show_only_known_figures() {
         let mant = v.trim().split('e').next().unwrap();
         let places = mant.split('.').nth(1).map_or(0, |d| d.len());
         let unit = v.split('e').nth(1).map_or(1.0, |e| 10f64.powi(e.trim().parse().unwrap_or(0)));
-        // (the truth is known to 5 figures: within half a unit of the last place written, plus that)
-        assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit + 0.5e-4 * want.abs(), "{fx} at {tx}: reading {k} {r}, true {want}");
+        // (the truth to 7 figures: within half a unit of the last place written)
+        assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit + 1e-6 * want.abs(), "{fx} at {tx}: reading {k} {r}, true {want}");
     }
 }
