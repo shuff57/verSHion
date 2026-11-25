@@ -295,10 +295,7 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
                     }
                 }
             }
-            // (a label is read as belonging to the break whose x it is nearest: tries nearer another break's x are dropped)
-            let others: Vec<f64> = discs.iter().filter(|o| o.kind != UNSURE && (o.x - d.x).abs() > 1e-12 * (1.0 + d.x.abs())).map(|o| sx(o.x)).collect();
-            let near_own: Vec<Pt> = tries.iter().copied().filter(|t| others.iter().all(|ox| (t.0 - x).abs() + 4.0 < (t.0 - ox).abs())).collect();
-            if !near_own.is_empty() { tries = near_own; }
+            // (which break a label is read as belonging to is judged on its box against every break's marks, below)
             let gap = if d.kind == "removable" { cr + 2.0 } else { 1.5 };
             reqs.push(('k', Req { text: d.kind.to_string(), own, tries, anchor: anchors[0], rivals: vec![], gap }));
         }
@@ -341,12 +338,29 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
         let own = mark_d(&disc_marks[i].1, b);
         disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, b) >= own + 6.0)
     };
-    for (kind, r) in &reqs {
+    for (kind, r0) in &reqs {
+        // (the spots beside the break that the nearest-mark rule would refuse are never offered: the placer then returns
+        // an acceptable one if there is any, and only leaders can still be refused and retried)
+        let tries: Vec<Pt> = r0.tries.iter().copied().filter(|c| acceptable(*kind, r0, &Spot::Beside(*c))).collect();
+        let r = &Req { text: r0.text.clone(), own: r0.own.clone(), tries, anchor: r0.anchor, rivals: r0.rivals.clone(), gap: r0.gap };
+        // (first, the nearest offered spot beside the break that is clear of everything drawn and within 40 px of the break's
+        // marks: the shared placer also wants a label nearer its own mark than any curve, which beside a hole, where the
+        // curve runs through the mark, refuses the open side; then the placer, for a leader)
+        let clear = if *kind != 'k' { None } else { r.tries.iter().copied().find(|c| {
+            let bx = label_box_for(*c, &r.text, size);
+            let own = owner(r).map_or(0.0, |i| mark_d(&disc_marks[i].1, bx));
+            own <= 40.0 && board.free(grow(bx, if size >= 20.0 { 0.15 * size } else { 1.5 }))
+        }) };
+        if let Some(c) = clear {
+            board.boxes.push(grow(label_box_for(c, &r.text, size), 1.0));
+            labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true));
+            continue;
+        }
         let mut blocked: Vec<Bx> = vec![];
         let spot = loop {
             let (nb, ns) = (board.boxes.len(), board.segs.len());
             let sp = place(&mut board, r, size);
-            if acceptable(*kind, r, &sp) || blocked.len() >= 40 { break if acceptable(*kind, r, &sp) { sp } else { board.boxes.truncate(nb); board.segs.truncate(ns); Spot::Off }; }
+            if acceptable(*kind, r, &sp) || blocked.len() >= 200 { break if acceptable(*kind, r, &sp) { sp } else { board.boxes.truncate(nb); board.segs.truncate(ns); Spot::Off }; }
             board.boxes.truncate(nb);
             board.segs.truncate(ns);
             let c = match &sp { Spot::Beside(c) | Spot::Leader(c, _, _) => *c, Spot::Off => unreachable!() };

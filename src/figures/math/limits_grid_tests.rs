@@ -368,6 +368,8 @@ fn kinds_with_room_are_on_the_graph() {
         ("y = (x^2 - 1)/(x - 1), x < 1.5; y = 5, x >= 1.5", -3.0, 4.0, -1.0, 6.0, "Medium"),
         ("y = (x - 1)/((x - 1)(x - 2))", -4.0, 6.0, -5.0, 5.0, "Medium"),
         ("y = (x^2 - 1)/(x^2 - 3x + 2)", -4.0, 6.0, -6.0, 8.0, "Medium"),
+        // (check 5: a hole at (1, 2) beside a jump at 2 (3 to 5), at Large)
+        ("y = (x^2 - 1)/(x - 1), x < 2; y = 5, x >= 2", -5.0, 5.0, -2.0, 7.0, "Large"),
     ];
     for (eq, a, b, c, d, size) in cases {
         let s = svg(&with(json!({"equations": eq, "xmin": a, "xmax": b, "ymin": c, "ymax": d, "lim_kinds": true, "label_size": size})));
