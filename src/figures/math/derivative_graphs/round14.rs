@@ -170,3 +170,28 @@ fn no_false_absence_and_no_needless_refusal() {
         }
     }
 }
+
+/// Check 20: a small value is written only where it is known to the places written, never a rounding residue: x − sin x
+/// has f′ = 1 − cos x = 5.0000 × 10⁻¹³ at 10⁻⁶; 1 − cos x is 5.0000 × 10⁻¹³ there; (eˣ − e⁻ˣ)/(2x) + √x⁷ has f′ = x/3 +
+/// (7/2)x^(5/2) = 3.3333 × 10⁻⁶ at 10⁻⁵; ln(1 + x) − x is −5.0000 × 10⁻¹³ at 10⁻⁶; √(1 + x) − 1 − x/2 is −1.25 × 10⁻¹⁷ at
+/// 10⁻⁸ (never with the wrong sign). Each reading is right to its places or undecided.
+#[test]
+fn small_values_are_known_or_undecided() {
+    let cases: Vec<(&str, &str, usize, f64)> = vec![
+        ("x - sin(x)", "0.000001", 1, 5.0e-13), ("x - sin(x)", "0.000001", 0, 1.0e-18 / 6.0), ("1 - cos(x)", "0.000001", 0, 5.0e-13),
+        ("(e^x - e^(-x))/(2x) + sqrt(x)^7", "0.00001", 1, 0.00001 / 3.0 + 3.5 * 1e-5f64.powf(2.5)), ("(e^x - e^(-x))/(2x) + sqrt(x)^7", "0.000001", 1, 0.000001 / 3.0),
+        ("ln(1 + x) - x", "0.000001", 0, -5.0e-13), ("sqrt(1 + x) - 1 - x/2", "0.00000001", 0, -1.25e-17), ("e^x - 1 - x", "0.0000001", 0, 5.0e-15),
+    ];
+    for (fx, tx, k, want) in cases {
+        let p = with(&[("f", s(fx)), ("xmin", f(-0.5)), ("xmax", f(1.0)), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let r = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).nth(k).unwrap();
+        if r.contains("cannot be decided") { continue; }
+        let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-").replace(" \u{d7} 10", "e").replace('\u{207b}', "-");
+        let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
+        let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+        let mant = v.trim().split('e').next().unwrap();
+        let places = mant.split('.').nth(1).map_or(0, |d| d.len());
+        let unit = v.split('e').nth(1).map_or(1.0, |e| 10f64.powi(e.trim().parse().unwrap_or(0)));
+        assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit * 1.0001, "{fx} at {tx}: reading {k} {r}, true {want}");
+    }
+}

@@ -2079,7 +2079,12 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                 _ => None,
             }
         };
-        let agrees = |w: f64| est.is_some_and(|(e, err)| (w - e).abs() <= 1e-6 * w.abs().max(e.abs()) + 10.0 * err + 1e-11);
+        // (the difference confirms a value only where it resolves it, its own error below a millionth of the value's size, and
+        // the two agree to 10⁻⁵ of it; it contradicts one only where they differ by more than that and its error; in between,
+        // as for a value of 5·10⁻¹³ whose differences are good to 10⁻¹⁶, it says nothing and the rounding bound decides)
+        let size = |w: f64| est.map_or(0.0, |(e, _)| w.abs().max(e.abs()));
+        let agrees = |w: f64| est.is_some_and(|(e, err)| err <= 1e-6 * size(w) && (w - e).abs() <= 1e-5 * size(w));
+        let contradicts = |w: f64| est.is_some_and(|(e, err)| (w - e).abs() > 1e-5 * size(w) + 10.0 * err);
         let mut set_undecided = || { let mut u = undecided.get(); u[fi] = true; undecided.set(u); };
         let (v, ve) = match v {
             // (inside a removable hole's local series, f and its derivatives are the series' own, as on the curves: beside
@@ -2095,7 +2100,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
             // the value's own rounding bound decides, to four figures, and a 0 the rounding was read as only below 10⁻⁹)
             Some(w) => {
                 if agrees(w) { (Some(w), ve) }
-                else if est.is_some() {
+                else if contradicts(w) {
                     match m.d(fi, t.v).filter(|dv| agrees(*dv)) { Some(dv) => (Some(dv), None), None => { set_undecided(); (None, None) } }
                 } else {
                     let bound = m.piece_at(t.v).and_then(|pi| {
