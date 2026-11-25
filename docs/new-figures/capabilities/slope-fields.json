@@ -7,224 +7,224 @@
    "id": "cap-01",
    "text": "Type the differential equation dy/dx = f(x, y)",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"dydx\": \"x + y\"}",
    "note": ""
   },
   {
    "id": "cap-02",
    "text": "Draw the field's segments on a grid over a chosen range",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"xmin\": -2.0, \"xmax\": 6.0, \"ymin\": -3.0, \"ymax\": 5.0}",
    "note": ""
   },
   {
    "id": "cap-03",
    "text": "Draw a solution curve through a typed point (x_0, y_0)",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"points\": \"(1, -2)\"}",
    "note": ""
   },
   {
    "id": "cap-04",
    "text": "Draw several solution curves, each through its own point",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"points\": \"(0, 1); (0, -2); (0, 3)\"}",
    "note": ""
   },
   {
    "id": "cap-05",
    "text": "Draw Euler's method from (x_0, y_0) with step h and n steps, as joined segments",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"euler\": true, \"euler_table\": false, \"compare\": false}",
    "note": ""
   },
   {
    "id": "cap-06",
    "text": "List the Euler steps' x and y values in a table",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"euler\": true, \"euler_table\": true, \"compare\": false}",
    "note": ""
   },
   {
    "id": "cap-07",
    "text": "Set how far apart the segments are",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"spacing\": \"Every gridline\"}",
    "note": ""
   },
   {
    "id": "cap-08",
    "text": "Set how long the segments are",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"seg_len\": \"Long\"}",
    "note": ""
   },
   {
    "id": "cap-09",
    "text": "Draw the segments as plain segments or as arrows",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"draw_as\": \"Arrows\"}",
    "note": ""
   },
   {
    "id": "cap-10",
    "text": "Mark the equilibrium solutions (where dy/dx = 0 for every x) as lines",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"dydx\": \"y(2 - y)\", \"equilibria\": true}",
    "note": ""
   },
   {
    "id": "cap-11",
    "text": "Mark and label each starting point",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"points\": \"(0, 1); (2, -1)\", \"pt_labels\": \"Dot and coordinates\"}",
    "note": ""
   },
   {
    "id": "cap-12",
    "text": "Draw the solution curve beside Euler's steps to compare them",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"euler\": true, \"compare\": true, \"euler_table\": false, \"solution\": \"x - 1 + 2e^(-x)\"}",
    "note": ""
   },
   {
    "id": "cap-13",
    "text": "Draw a solution curve forward from its point only, or both ways",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"direction\": \"Forward only\"}",
    "note": ""
   },
   {
    "id": "cap-14",
    "text": "Draw each solution curve solid, dashed or dotted",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"curve_style\": \"Dashed\"}",
    "note": ""
   },
   {
    "id": "cap-15",
    "text": "Rename the variables, such as dP/dt against t",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"dydx\": \"0.5P(1 - P/10)\", \"var\": \"t\", \"dep\": \"P\", \"points\": \"(0, 1); (0, 14) dashed\", \"xmin\": 0.0, \"xmax\": 12.0, \"ymin\": 0.0, \"ymax\": 16.0, \"ystep\": 2.0, \"spacing\": \"Every gridline\"}",
    "note": ""
   },
   {
    "id": "cap-16",
    "text": "Load a classic example (dy/dx = x, growth, x - y, circles, logistic, Euler with h = 0.5)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"dydx\": \"-x/y\", \"points\": \"(0, 2); (0, 3) dashed\", \"solution\": \"sqrt(4 - x^2)\", \"square\": true}",
    "note": ""
   },
   {
    "id": "cap-17",
    "text": "Set each axis's From, To and Count by",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"xmin\": -6.0, \"xmax\": 6.0, \"xstep\": 2.0, \"ymin\": -6.0, \"ymax\": 6.0, \"ystep\": 2.0}",
    "note": ""
   },
   {
    "id": "cap-18",
    "text": "Make the gridlines light, standard, bold or none",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"grid\": \"Bold\"}",
    "note": ""
   },
   {
    "id": "cap-19",
    "text": "Add minor gridlines between the numbered lines",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"minor\": 2}",
    "note": ""
   },
   {
    "id": "cap-20",
    "text": "Number the axes, or leave the numbers off",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"numbers\": false}",
    "note": ""
   },
   {
    "id": "cap-21",
    "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"xlabel\": \"time\", \"ylabel\": \"amount\"}",
    "note": ""
   },
   {
    "id": "cap-22",
    "text": "Write a title",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"title\": \"dy/dx = x - y\"}",
    "note": ""
   },
   {
    "id": "cap-23",
    "text": "Put a blank line in place of the title for students",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
    "note": ""
   },
   {
    "id": "cap-24",
    "text": "Make the labels small, medium or large",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"label_size\": \"Large\"}",
    "note": ""
   },
   {
    "id": "cap-25",
    "text": "Draw it in black and white for photocopying (Print)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"style\": \"Print\"}",
    "note": ""
   },
   {
    "id": "cap-26",
    "text": "A student copy with the field and the starting point only, for students to sketch the solution",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false}",
    "note": ""
   },
   {
    "id": "cap-27",
    "text": "A student copy with dots at the grid points and no segments, for students to draw the field (AP 'sketch at the nine points')",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Dots at the grid points, to draw the field\"}",
    "note": ""
   },
   {
    "id": "cap-28",
    "text": "A student copy with a blank line for the equation",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Blank line for the equation\"}",
    "note": ""
   },
   {
    "id": "cap-29",
    "text": "Four candidate equations labelled A to D under the field, the matching one marked in the key",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"student_copy\": \"Match the field to one of four equations, A to D\"}",
    "note": "AP multiple choice"
   },
   {
    "id": "cap-30",
    "text": "An answer key line giving the Euler values and the solution",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"key_line\": true, \"euler\": true, \"solution\": \"x - 1 + 2e^(-x)\"}",
    "note": ""
   },
   {
    "id": "cap-31",
    "text": "Drag the starting point on the figure to move its solution curve",
    "class": "interaction",
-   "evidence": "",
+   "evidence": "handle:drag:Drag the starting point",
    "note": "opening state: (0, 1) is a handle"
   },
   {
    "id": "cap-32",
    "text": "Click on the field on the figure to start a solution curve there",
    "class": "interaction",
-   "evidence": "",
+   "evidence": "handle:click:Click the field to start a solution curve there",
    "note": "opening state: the field is a click target"
   }
  ]
