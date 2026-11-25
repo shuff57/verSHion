@@ -238,7 +238,8 @@ def parsed_source_map(case,page,questions,previous=None):
     # saved items without a number, parts split from one item counted once, take the reference's
     # numbers in order, only when the counts agree.
     if case.get('ordinal_items'):
-        free=[k for k,n in enumerate(numbers) if n is None]
+        # No number is printed, so any number on a saved item is the importer's own: map every item.
+        free=list(range(len(numbers)))
         groups_in_order=[]
         for k in free:
             g=str(items[k].get('id') or k).split('.')[0]

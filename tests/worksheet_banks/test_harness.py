@@ -53,6 +53,9 @@ class SourceMapTests(unittest.TestCase):
         # A count that does not agree maps nothing; without the flag nothing is guessed.
         self.assertEqual(h.parsed_source_map(dict(case,question_numbers=[1,2,3]),page,qs)['numbers'],[None]*4)
         self.assertEqual(h.parsed_source_map(dict(case,ordinal_items=False),page,qs)['numbers'],[None]*4)
+        # Holdout v19: the importer numbered the split parts itself (1); the page prints none, so all items map in order.
+        numbered=dict(page,items=[dict(i,number=1) if i['id'].startswith('q1.') else i for i in page['items']])
+        self.assertEqual(h.parsed_source_map(case,numbered,qs)['numbers'],[1,1,1,2])
     def test_a_declared_label_map_keys_letter_prefixed_numbers(self):
         # Holdout v17, Maths4Everyone: questions A1-A3, B1-B3 ...
         labels=['A1','A2','(B1)','b2.'];qs=[{'stem':l} for l in labels]

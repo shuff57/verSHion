@@ -1420,8 +1420,16 @@ const FIGURE_PARALLEL: usize = 3;
 async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(RedrawOutcome, f64)> {
     // A panic inside one redraw (holdout v14: the renderer overflowed on far-off coordinates) fails
     // that picture only; the page's other redraws and its questions are kept.
+    // After this point of a page no new redraw starts: the rest keep their source crops, so a page
+    // with many pictures saves instead of running out its time (holdout v19, Montana State: a
+    // page of eight graphs timed out and saved nothing).
+    #[cfg(not(target_arch = "wasm32"))]
+    let page_started = PAGE_STARTED.with(|s| s.get());
     #[cfg(not(target_arch = "wasm32"))]
     let timed = |job: &RedrawJob| {
+        if page_started.is_some_and(|t| t.elapsed().as_secs_f64() > REDRAW_START_DEADLINE_SECS) {
+            return ((None, out_of_time_redraw(job)), 0.0);
+        }
         let t = std::time::Instant::now();
         let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             block_on(redraw_crop_async(&job.crop, &job.context, job.printed_label.as_deref(), job.question, job.choice, cfg))
@@ -1457,6 +1465,17 @@ async fn run_redraws(jobs: &[RedrawJob], cfg: &AiCfg) -> Vec<(RedrawOutcome, f64
         out.push((result, secs));
     }
     out
+}
+
+/// Seconds into a page after which no further redraw is started (the harness gives a page 1200 s;
+/// a redraw started here still has time to finish).
+#[cfg(not(target_arch = "wasm32"))]
+const REDRAW_START_DEADLINE_SECS: f64 = 800.0;
+
+/// The trace of a redraw not started because the page reached its redraw deadline: the crop stays.
+fn out_of_time_redraw(job: &RedrawJob) -> FigureImportTrace {
+    let detail = "Not redrawn: the page reached its time limit for figure redraws, so the source crop was kept.";
+    FigureImportTrace { executions: Vec::new(), question_index: job.question, choice: job.choice, sees: None, steps: Vec::new(), spec: None, review: None, accepted: false, note: String::new(), error: Some(detail.into()), failure: Some(figure_failure::FigureFailure::new("page_time_limit", detail, None)) }
 }
 
 /// The trace of a redraw that panicked: no figure, the source crop stays.
@@ -2095,6 +2114,24 @@ pub(crate) mod tests {
     fn short() -> crate::model::Kind { crate::model::Kind::Short { sample: String::new() } }
     fn figure_run(question_index: usize) -> FigureImportTrace {
         FigureImportTrace { executions: Vec::new(), question_index, choice: None, sees: None, steps: Vec::new(), spec: None, review: None, accepted: true, note: String::new(), error: None, failure: None }
+    }
+
+    #[test]
+    fn no_redraw_starts_after_the_page_deadline_and_the_crops_are_kept() {
+        let job = |question: usize| RedrawJob { question, choice: None, crop: Vec::new(), context: String::new(), printed_label: Some("1".into()), label: "1".into() };
+        let past = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(900)).unwrap();
+        PAGE_STARTED.with(|s| s.set(Some(past)));
+        // An unreachable model: had any redraw started, it would have waited on the network or failed differently.
+        let cfg = AiCfg { provider: "custom".into(), base: "http://127.0.0.1:9".into(), model: "none".into(), ..AiCfg::default() };
+        let started = std::time::Instant::now();
+        let out = block_on(run_redraws(&[job(0), job(1)], &cfg));
+        PAGE_STARTED.with(|s| s.set(None));
+        assert!(started.elapsed().as_secs_f64() < 1.0);
+        assert_eq!(out.len(), 2);
+        for ((redraw, trace), secs) in &out {
+            assert!(redraw.is_none() && *secs == 0.0);
+            assert_eq!(trace.failure.as_ref().map(|f| f.kind), Some("page_time_limit"));
+        }
     }
 
     #[test]
