@@ -521,19 +521,41 @@ fn poly_div(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
 fn is_zero_poly(c: &[Q]) -> bool { c.iter().all(|q| q.0 == 0) }
 /// The distinct real roots of a square-free c in (lo, hi], each isolated by Sturm counts and then found by halving: (its
 /// float, its exact value where it is a rational the halving lands on or a short fraction). None on overflow.
-fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>)>> {
+/// A polynomial with rational coefficients at a float, in double-double arithmetic (about 32 digits): beside two roots
+/// 10⁻⁹ apart its value, about 10⁻¹⁹, is far below a float's rounding of its terms, but not of these.
+fn dd_eval(c: &[Q], y: f64) -> f64 {
+    let two_sum = |a: f64, b: f64| { let s = a + b; let bb = s - a; (s, (a - (s - bb)) + (b - bb)) };
+    let two_prod = |a: f64, b: f64| { let p = a * b; (p, a.mul_add(b, -p)) };
+    // (each coefficient p/q as hi + lo: hi the float quotient, lo the exact residual p − hi·q over q)
+    let coef = |q: &Q| { let (n, d) = (q.0 as f64, q.1 as f64); let hi = n / d; let r = (-hi).mul_add(d, n); (hi, r / d) };
+    let mut acc = (0.0f64, 0.0f64);
+    for q in c.iter().rev() {
+        // acc = acc·y + q
+        let (p, pe) = two_prod(acc.0, y);
+        let pe = pe + acc.1 * y;
+        let (ch, cl) = coef(q);
+        let (s, se) = two_sum(p, ch);
+        let lo = se + pe + cl;
+        let (h, l) = two_sum(s, lo);
+        acc = (h, l);
+    }
+    acc.0 + acc.1
+}
+
+fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64))>> {
     let count = |a: Q, b: Q| -> Option<usize> { let n = sturm_count(c, a, b)?; Some(n - (poly_eval(c, a)?.0 == 0) as usize) };
-    let ev = |y: f64| c.iter().rev().fold(0.0, |acc, q| acc * y + q.0 as f64 / q.1 as f64);
+    let ev = |y: f64| dd_eval(c, y);
     let mut out = vec![];
     let mut stack = vec![(lo, hi, 0u32)];
     while let Some((a, b, depth)) = stack.pop() {
         let n = count(a, b)?;
         if n == 0 { continue; }
-        if poly_eval(c, b)?.0 == 0 { out.push((b.0 as f64 / b.1 as f64, Some(b))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
+        if poly_eval(c, b)?.0 == 0 { let bf = b.0 as f64 / b.1 as f64; out.push((bf, Some(b), (bf, bf))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
         if n == 1 || depth > 90 {
             let (mut u, mut v) = (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64);
-            let su = ev(u) > 0.0;
-            for _ in 0..200 { let mm = 0.5 * (u + v); let vm = ev(mm); if vm == 0.0 { u = mm; v = mm; break; } if (vm > 0.0) == su { u = mm; } else { v = mm; } if v - u <= 1e-15 * (1.0 + u.abs()) { break; } }
+            // (oriented by the exact sign at the right end, which is no root here; a, the left end, may be one)
+            let sv = poly_eval(c, b)?.0 > 0;
+            for _ in 0..200 { let mm = 0.5 * (u + v); if mm <= u || mm >= v { break; } let vm = ev(mm); if vm == 0.0 { u = mm; v = mm; break; } if (vm > 0.0) == sv { v = mm; } else { u = mm; } }
             let r = 0.5 * (u + v);
             // (a rational root, recovered from its float by continued fractions and checked exactly)
             let mut rq = None;
@@ -555,7 +577,7 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>)>> {
                 if fr.abs() < 1e-18 { break; }
                 xv = 1.0 / fr;
             }
-            out.push((rq.map_or(r, |q| q.0 as f64 / q.1 as f64), rq));
+            out.push((rq.map_or(r, |q| q.0 as f64 / q.1 as f64), rq, (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64)));
             continue;
         }
         let m = a.add(b)?.mul(Q(1, 2))?;
@@ -726,8 +748,8 @@ fn candidates(y: f64) -> Vec<Node> {
             }
         }
     }
-    // (short decimals, as typed: 0.15, 0.0625, 0.0001)
-    for k in 1..=6u32 {
+    // (decimals as typed, to 12 places: 0.15, 0.0625, 0.0001, 1.000000001)
+    for k in 1..=12u32 {
         let q = 10i128.pow(k);
         let p = (y * q as f64).round() as i128;
         if ((p as f64 / q as f64) - y).abs() < 1e-9 * (1.0 + y.abs()) { if let Some(n) = rat_node(p, q) { out.push(n); } }
@@ -891,9 +913,10 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             let proven_all_x = dx.is_some() && distinct;
             let mut lines = vec![];
             let mut unsure = vec![];
-            for (r, rq) in roots.into_iter().filter(|(r, _)| *r >= y0 - 1e-12 * (1.0 + y0.abs()) && *r <= y1 + 1e-12 * (1.0 + y1.abs())) {
-                // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x)
-                let cand = candidates(r).into_iter().find(|c| proves(&f.tree, c));
+            for (r, rq, (ia, ib)) in roots.into_iter().filter(|(r, _, _)| *r >= y0 - 1e-12 * (1.0 + y0.abs()) && *r <= y1 + 1e-12 * (1.0 + y1.abs())) {
+                // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x, and
+                // only one inside this root's own isolating interval: a neighbouring root's value is another line's)
+                let cand = candidates(r).into_iter().filter(|c| { let v = ev(c, 0.0, 0.0); v > ia && v <= ib + 1e-15 * (1.0 + ib.abs()) }).find(|c| proves(&f.tree, c));
                 let exact = match rq { Some(q) => Some(Ex::rat(R(q.0, q.1))), None => cand.as_ref().and_then(|c| ex::exact(c, None)) };
                 let shown = proven_all_x || cand.is_some();
                 let yv = exact.as_ref().map(|e| e.value()).or_else(|| cand.as_ref().map(|c| ev(c, 0.0, 0.0))).unwrap_or(r);
@@ -909,7 +932,9 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                 lines.push(Equil { y: yv, exact, runs });
             }
             let _ = sf;
-            return Equils { complete: unsure.is_empty(), lines, everywhere: false, unsure };
+            // (two lines written with one value would be one line shown twice: never called complete)
+            let twice = lines.windows(2).any(|p| (p[0].y - p[1].y).abs() <= 1e-15 * (1.0 + p[0].y.abs()));
+            return Equils { complete: unsure.is_empty() && !twice, lines, everywhere: false, unsure };
         }
     }
     // f(x, y) = 0 for every y at the x tried (y′ = x − 0.37·…): try the other x; when 0 at both, nothing is claimed
@@ -967,7 +992,10 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         // (f is 0 on the line at every one of at least 25 x's where it is defined: a sign change across a pole is no root)
         if defined < 25 || !vals.iter().flatten().all(|ok| *ok) { continue; }
         // an exact value, shown exactly: f(x, c) is 0 for every x by exact arithmetic
-        let proof = candidates(r).into_iter().find(|c| proves(&f.tree, c));
+        // (a candidate nearer this root than half the way to any other root found: a neighbouring root's exact value, 1/2 beside
+        // 0.5000001, is another line's)
+        let gap = found.iter().filter(|o| o.0 != r).map(|o| (o.0 - r).abs()).fold(f64::INFINITY, f64::min);
+        let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap).find(|c| proves(&f.tree, c));
         let exact = proof.as_ref().and_then(|c| ex::exact(c, None));
         // (a value shown but not held exactly, ln 2: its float, to the last place)
         let yv = exact.as_ref().map(|e| e.value()).or_else(|| proof.as_ref().map(|c| ev(c, 0.0, 0.0))).unwrap_or(r);
@@ -989,7 +1017,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     // complete: f(xr, y) is a polynomial in y whose distinct real roots in the window are exactly the roots found there
     let complete = Q::of_f64(xr).and_then(|q| poly_in_y(&f.tree, q)).zip(Q::of_f64(y0).zip(Q::of_f64(y1)))
         .and_then(|(c, (lo, hi))| sturm_count(&c, lo, hi)).is_some_and(|n| n == found.len());
-    Equils { complete: complete && unsure.is_empty(), lines, everywhere: false, unsure }
+    let twice = lines.windows(2).any(|p| (p[0].y - p[1].y).abs() <= 1e-15 * (1.0 + p[0].y.abs()));
+    Equils { complete: complete && unsure.is_empty() && !twice, lines, everywhere: false, unsure }
 }
 /// f is the number 0 (no variables at all, or a product with an exact 0).
 fn has_no_vars_zero(n: &Node) -> bool { !has_x(n) && !has_y(n) && ex::exact(n, None).is_some_and(|v| v.is_zero()) || matches!(n, Node::Mul(a, c) if has_no_vars_zero(a) || has_no_vars_zero(c)) }

@@ -1515,12 +1515,17 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
                                         ("y^3 - y", -4.0, 4.0, -0.3, 0.7, vec![0.0]), ("y^3 - y", -4.0, 4.0, -3.7, 4.1, vec![-1.0, 0.0, 1.0]),
                                         ("y - e", -4.0, 4.0, -4.0, 4.0, vec![std::f64::consts::E]),
                                         ("sin(x)(y^2 - 3y + 1)", -4.0, 4.0, -4.0, 4.0, vec![(3.0 - 5f64.sqrt()) / 2.0, (3.0 + 5f64.sqrt()) / 2.0]),
+                                        // (check 16: close typed roots keep their own values)
+                                        ("(y - 0.5)(y - 0.5000001)", -4.0, 4.0, 0.0, 1.0, vec![0.5, 0.5000001]), ("(y - 1)(y - 1.000000001)", -4.0, 4.0, 0.999999995, 1.000000005, vec![1.0, 1.000000001]),
+                                        ("(y - 0.3333333)(3y - 1)", -4.0, 4.0, 0.0, 1.0, vec![0.3333333, 1.0 / 3.0]), ("y(y^2 - 0.0000000000001)", -4.0, 4.0, -1.0, 1.0, vec![-1e-13f64.sqrt(), 0.0, 1e-13f64.sqrt()]),
                                         // (and true roots of small functions are still found)
                                         ("0.0000000001 y", -4.0, 4.0, -4.0, 4.0, vec![0.0]), ("0.000001(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0]), ("(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0])] {
         let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("xmin", f(xa)), ("xmax", f(xb)), ("ymin", f(y0)), ("ymax", f(y1))]));
         let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
         assert_eq!(got.len(), want.len(), "{eqt} on x [{xa}, {xb}], y [{y0}, {y1}]: {got:?}");
-        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-9, "{eqt}: {got:?}"); }
+        // (each line within 5·10⁻¹⁰ of the truth, written ≈ where its exact value is not recovered, and no two lines one value)
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 5e-10 * (1.0 + w.abs()), "{eqt}: {got:?}"); }
+        assert!(got.windows(2).all(|p| p[1] - p[0] > 1e-12 * (1.0 + p[0].abs())), "{eqt}: two lines one value: {got:?}");
     }
     for (eqt, y0, y1, want) in cases {
         let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
@@ -1530,3 +1535,4 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
         for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-9, "{eqt} on [{y0}, {y1}]: {got:?}"); }
     }
 }
+
