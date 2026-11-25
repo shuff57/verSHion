@@ -336,7 +336,14 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
         let Some(i) = owner(r) else { return true };
         let b = label_box_for(c, &r.text, size);
         let own = mark_d(&disc_marks[i].1, b);
-        disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, b) >= own + 6.0)
+        // (beside its break, it is also centred nearer that break's x than any other's: a label is read by its column; one
+        // on a leader is read by its leader)
+        let own_x = disc_marks[i].1.first().map_or(c.0, |m| m.0 .0);
+        let centred = matches!(spot, Spot::Leader(..)) || !disc_marks.iter().enumerate().filter(|(j, _)| *j != i).any(|(_, (_, ms))| ms.first().is_some_and(|m| (c.0 - m.0 .0).abs() < (c.0 - own_x).abs() + 4.0));
+        // (or, wider than the gap between two breaks, it hugs its own mark: within 12 px of it, every other break's marks at
+        // least three times as far)
+        let hugs = own <= 12.0 && disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, b) >= 3.0 * own.max(4.0));
+        (centred || hugs) && disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, b) >= own + 6.0)
     };
     for (kind, r0) in &reqs {
         // (the spots beside the break that the nearest-mark rule would refuse are never offered: the placer then returns
@@ -350,11 +357,16 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
         // (an infinite break's column is the plot's whole height), it is nearer its own marks than any other point or
         // circle on the plot by 6 px, and it keeps 4 px from tick numbers and curves)
         let own_i = owner(r);
-        let clear = if *kind != 'k' { None } else { r.tries.iter().copied().find(|c| {
+        let clear_with = |pad: f64| -> Option<Pt> { if *kind != 'k' { return None; } r.tries.iter().copied().find(|c| {
             let bx = label_box_for(*c, &r.text, size);
             let Some(i) = own_i else { return false };
             let own = mark_d(&disc_marks[i].1, bx);
-            if own > 40.0 || !board.free(grow(bx, 4.0f64.max(if size >= 20.0 { 0.15 * size } else { 1.5 }))) { return false; }
+            if own > 40.0 || !board.free(grow(bx, pad.max(if size >= 20.0 { 0.15 * size } else { 1.5 }))) { return false; }
+            // (centred nearer its own break's x than any other break's, by 4 px: a label is read by the column it is in)
+            let own_x = disc_marks[i].1.first().map_or(c.0, |m| m.0 .0);
+            let off_centre = disc_marks.iter().enumerate().filter(|(j, _)| *j != i).any(|(_, (_, ms))| ms.first().is_some_and(|m| (c.0 - m.0 .0).abs() < (c.0 - own_x).abs() + 4.0));
+            let hugs = own <= 12.0 && disc_marks.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, (_, ms))| mark_d(ms, bx) >= 3.0 * own.max(4.0));
+            if off_centre && !hugs { return false; }
             let crosses = disc_marks.iter().enumerate().filter(|(j, _)| *j != i).any(|(_, (_, ms))| {
                 let Some(cx) = ms.first().map(|m| m.0 .0) else { return false };
                 if cx < bx[0] - 4.0 || cx > bx[2] + 4.0 { return false; }
@@ -365,6 +377,8 @@ pub fn render(p0: &Params, notes: &mut Vec<String>) -> String {
             let own_pts: Vec<Pt> = disc_marks[i].1.iter().flat_map(|(a, c)| [*a, *c]).collect();
             board.dots.iter().filter(|(q, _)| !own_pts.iter().any(|o| (o.0 - q.0).abs() < 1.0 && (o.1 - q.1).abs() < 1.0)).all(|(q, _)| box_pt(bx, *q) >= own + 6.0)
         }) };
+        // (4 px clear of tick numbers and curves where it can be; else as close as the placer itself allows)
+        let clear = clear_with(4.0).or_else(|| clear_with(0.0));
         if let Some(c) = clear {
             board.boxes.push(grow(label_box_for(c, &r.text, size), 1.0));
             labels_svg.push_str(&text_el(c.0 - tw(&r.text, size) / 2.0 + 0.5, c.1 + 0.32 * size, size, &r.text, ink.text, true));

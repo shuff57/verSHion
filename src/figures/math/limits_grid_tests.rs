@@ -416,3 +416,42 @@ fn kind_labels_keep_to_their_own_column_and_mark() {
         assert!(d(sx(1.0), sy(2.0)) + 6.0 <= d(sx(1.8), sy(2.0)), "removable is nearer the point (1.8, 2) than its hole");
     }
 }
+
+/// Check 7: a label taken directly is centred nearer its own break's x than any other's: steps at Medium on −10..10 and at
+/// Large, and the roomy example at Medium and Small, where x = 3's "jump" is by x = 3.
+#[test]
+fn kind_labels_are_centred_by_their_own_break() {
+    let cases: Vec<(&str, f64, f64, f64, f64, &str, Vec<f64>)> = vec![
+        ("y = -1, x < -1; y = 0, -1 <= x < 0; y = 1, 0 <= x < 1; y = 2, x >= 1", -10.0, 10.0, -5.0, 5.0, "Medium", vec![-1.0, 0.0, 1.0]),
+        ("y = -1, x < -1; y = 0, -1 <= x < 0; y = 1, 0 <= x < 1; y = 2, x >= 1", -3.0, 3.0, -3.0, 4.0, "Large", vec![-1.0, 0.0, 1.0]),
+        (ROOMY, -5.0, 9.0, -6.0, 6.0, "Medium", vec![-2.0, 1.0, 3.0, 5.0]), (ROOMY, -5.0, 9.0, -6.0, 6.0, "Small", vec![-2.0, 1.0, 3.0, 5.0]),
+    ];
+    for (eq, a, z, c, d, size, breaks) in cases {
+        let kv = json!({"equations": eq, "xmin": a, "xmax": z, "ymin": c, "ymax": d, "lim_kinds": true, "label_size": size});
+        let s = svg(&with(kv.clone()));
+        let g = super::grid_layout(&with(kv));
+        let sx = |x: f64| g.ml + (x - g.x0) * g.ux;
+        let fs = 15.0 * match size { "Large" => 1.4, "Small" => 0.8, _ => 1.0 };
+        let body = &s[s.find(r#"<g data-lim="labels">"#).unwrap()..];
+        let body = &body[..body.find("</g>").unwrap()];
+        let leaders: Vec<f64> = body.split("<line").skip(1).filter(|p| p.contains(r#"data-lim="leader""#)).map(|p| p.split(" x2=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap()).collect();
+        let mut jumps: Vec<f64> = vec![];
+        for part in body.split("<text").skip(1).filter(|p| !p.contains(r##"fill="#fff""##)) {
+            let num = |k: &str| -> f64 { part.split(&format!(" {k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse().unwrap() };
+            let word: String = { let mut w = String::new(); let mut inside = true; for ch in part.chars() { match ch { '<' => inside = true, '>' => inside = false, _ if !inside => w.push(ch), _ => {} } } w.trim().to_string() };
+            let (x0, x1) = (num("x"), num("x") + super::limits::tw(&word, fs));
+            // (a label on a leader is judged by its leader)
+            if leaders.iter().any(|e| *e >= x0 - 6.0 && *e <= x1 + 6.0) { continue; }
+            let cx = 0.5 * (x0 + x1);
+            let nearest = breaks.iter().min_by(|p, q| (cx - sx(**p)).abs().partial_cmp(&(cx - sx(**q)).abs()).unwrap()).unwrap();
+            let own = match (eq == ROOMY, word.as_str()) { (true, "removable") => vec![-2.0], (true, "infinite") => vec![5.0], (true, _) => vec![1.0, 3.0], _ => breaks.clone() };
+            assert!(own.contains(nearest), "{eq} at {size}: {word} centred at {cx} is nearest x = {nearest}");
+            if word == "jump" { jumps.push(*nearest); }
+        }
+        // (two "jump"s never by one break)
+        let n = jumps.len();
+        jumps.sort_by(|p, q| p.partial_cmp(q).unwrap());
+        jumps.dedup();
+        assert_eq!(jumps.len(), n, "{eq} at {size}: two jump labels by one break");
+    }
+}
