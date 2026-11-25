@@ -419,20 +419,6 @@ impl Q {
         for k in 0..20 { let s = v * (1u64 << k) as f64; if s.fract() == 0.0 && s.abs() < 1e15 { return Q::new(s as i128, 1i128 << k); } }
         None
     }
-    /// A window edge as the teacher typed it: the shortest decimal that gives back its float (None where it would not
-    /// fit). 0.7 is 7/10, though its float is 0.69999999999999995559…; 0.3333333333333333 is 3333333333333333/10¹⁶,
-    /// which is less than 1/3.
-    pub(crate) fn of_f64_decimal(v: f64) -> Option<Q> {
-        if !v.is_finite() { return None; }
-        let t = format!("{v}");
-        let (neg, t) = match t.strip_prefix('-') { Some(r) => (true, r), None => (false, t.as_str()) };
-        let (ip, fp) = t.split_once('.').unwrap_or((t, ""));
-        if ip.len() + fp.len() > 36 || fp.len() > 36 || !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) { return None; }
-        let n: i128 = format!("{ip}{fp}").parse().ok()?;
-        let d = 10i128.checked_pow(fp.len() as u32)?;
-        Q::new(if neg { -n } else { n }, d)
-    }
-    fn le(self, o: Q) -> Option<bool> { Some(o.sub(self)?.0 >= 0) }
 }
 
 /// The polynomial degree of a tree in x (None: not a polynomial in x).
@@ -555,6 +541,30 @@ fn dd_eval(c: &[Q], y: f64) -> f64 {
     }
     acc.0 + acc.1
 }
+
+/// A rational exactly, without overflow.
+fn big(q: Q) -> num_rational::BigRational { num_rational::BigRational::new(q.0.into(), q.1.into()) }
+/// A window edge as typed: the shortest decimal that gives back its float, exactly (0.7 is 7/10, 1.7320508075688772 is
+/// 17320508075688772/10¹⁶, which is less than √3).
+fn edge_big(v: f64) -> Option<num_rational::BigRational> {
+    if !v.is_finite() { return None; }
+    let t = format!("{v}");
+    let (neg, t) = match t.strip_prefix('-') { Some(r) => (true, r), None => (false, t.as_str()) };
+    let (ip, fp) = t.split_once('.').unwrap_or((t, ""));
+    if !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) { return None; }
+    let n: num_bigint::BigInt = format!("{ip}{fp}").parse().ok()?;
+    let d = num_traits::pow(num_bigint::BigInt::from(10), fp.len());
+    Some(num_rational::BigRational::new(if neg { -n } else { n }, d))
+}
+/// The sign of a polynomial with rational coefficients at a rational, exactly.
+fn sign_big(c: &[Q], x: &num_rational::BigRational) -> i32 {
+    use num_traits::{Signed, Zero};
+    let mut acc = num_rational::BigRational::zero();
+    for k in c.iter().rev() { acc = acc * x + big(*k); }
+    if acc.is_zero() { 0 } else if acc.is_positive() { 1 } else { -1 }
+}
+/// Within a few float steps of an edge: too near for the floats to say which side a value is on.
+fn near_edge(v: f64, e: f64) -> bool { (v - e).abs() <= 4.0 * f64::EPSILON * v.abs().max(e.abs()) + 4.0 * f64::MIN_POSITIVE }
 
 /// Each distinct real root in [lo, hi]: its float, its exact value where rational, its interval as floats and exactly (the
 /// root is the only one in (a, b], or b itself).
@@ -932,23 +942,37 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             let mut unsure = vec![];
             // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1; and a root whose float is the
             // edge's, against the edge as typed: 7/10 is in y 0..0.7, 1/3 is not in y 0..0.3333333333333333)
-            let (e0, e1) = (Q::of_f64_decimal(y0), Q::of_f64_decimal(y1));
-            let count_in = |a: Q, b: Q| -> Option<usize> { Some(sturm_count(&sf, a, b)? - (poly_eval(&sf, a)?.0 == 0) as usize) };
-            let in_window = |r: f64, rq: Option<Q>, (a, b): (Q, Q)| -> bool {
-                if r < y0 || r > y1 { return false; }
-                if r != y0 && r != y1 { return true; }
-                let exact = || -> Option<bool> {
-                    let (e0, e1) = (e0?, e1?);
-                    if let Some(q) = rq { return Some(e0.le(q)? && q.le(e1)?); }
-                    // (an irrational root, the only one in (a, b]: at or below the top when (a, top] holds it; at or above the
-                    // bottom when (a, bottom) does not)
-                    let below_top = if b.le(e1)? { true } else if e1.le(a)? { false } else { count_in(a, e1)? >= 1 };
-                    let above_bottom = if e0.le(a)? { true } else if b.sub(e0)?.0 < 0 { false } else { count_in(a, e0)? - (poly_eval(&sf, e0)?.0 == 0) as usize == 0 };
-                    Some(below_top && above_bottom)
+            // (a root within a few float steps of an edge is decided exactly, in big rationals, against the edge as typed: by
+            // its own value where rational, else by the sign of the square-free polynomial at the edge, the root being the
+            // only one in its interval (a, b]; one that cannot be decided is named as possible, never kept)
+            let in_window = |r: f64, rq: Option<Q>, (a, b): (Q, Q)| -> Option<bool> {
+                let (lo_near, hi_near) = (near_edge(r, y0), near_edge(r, y1));
+                if !lo_near && !hi_near { return Some(r >= y0 && r <= y1); }
+                let (a, b) = (big(a), big(b));
+                let sb = sign_big(&sf, &b);
+                let below_top = |e1: &num_rational::BigRational| -> bool {
+                    if let Some(q) = rq { return big(q) <= *e1; }
+                    if sb == 0 || b <= *e1 { return b <= *e1; }
+                    if *e1 <= a { return false; }
+                    let s = sign_big(&sf, e1);
+                    s == 0 || s == sb
                 };
-                exact().unwrap_or(true)
+                let above_bottom = |e0: &num_rational::BigRational| -> bool {
+                    if let Some(q) = rq { return big(q) >= *e0; }
+                    if sb == 0 { return b >= *e0; }
+                    if *e0 <= a { return true; }
+                    if b < *e0 { return false; }
+                    sign_big(&sf, e0) != sb
+                };
+                let top = if hi_near { below_top(&edge_big(y1)?) } else { r <= y1 };
+                let bottom = if lo_near { above_bottom(&edge_big(y0)?) } else { r >= y0 };
+                Some(top && bottom)
             };
-            for (r, rq, (ia, ib), _) in roots.into_iter().filter(|(r, rq, _, iq)| in_window(*r, *rq, *iq)) {
+            let mut kept = vec![];
+            for (r, rq, iv, iq) in roots {
+                match in_window(r, rq, iq) { Some(true) => kept.push((r, rq, iv, iq)), Some(false) => {} None => unsure.push(r) }
+            }
+            for (r, rq, (ia, ib), _) in kept {
                 // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x, and
                 // only one inside this root's own isolating interval: a neighbouring root's value is another line's)
                 let cand = candidates(r).into_iter().filter(|c| { let v = ev(c, 0.0, 0.0); v > ia && v <= ib + 1e-15 * (1.0 + ib.abs()) }).find(|c| proves(&f.tree, c));
@@ -1035,11 +1059,11 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         let gap = found.iter().filter(|o| o.0 != r).map(|o| (o.0 - r).abs()).fold(f64::INFINITY, f64::min);
         let inside = |c: &Node| -> bool {
             let v = ev(c, 0.0, 0.0);
-            if !(v >= y0 && v <= y1) { return false; }
-            if v != y0 && v != y1 { return true; }
-            let q = ex::exact(c, None).and_then(|e| e.rational()).and_then(|(p, q)| Q::new(p, q));
-            let edge = Q::of_f64_decimal(v);
-            matches!((q, edge), (Some(a), Some(b)) if a == b)
+            let (lo_near, hi_near) = (near_edge(v, y0), near_edge(v, y1));
+            if !lo_near && !hi_near { return v >= y0 && v <= y1; }
+            // (beside an edge: exactly, a rational value against the edge as typed; any other value is not decided so)
+            let Some(q) = ex::exact(c, None).and_then(|e| e.rational()).and_then(|(p, q)| Q::new(p, q)).map(big) else { return false };
+            (!hi_near || edge_big(y1).is_some_and(|e| q <= e)) && (!lo_near || edge_big(y0).is_some_and(|e| q >= e)) && (lo_near || v >= y0) && (hi_near || v <= y1)
         };
         let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap && inside(c)).find(|c| proves(&f.tree, c));
         let exact = proof.as_ref().and_then(|c| ex::exact(c, None));

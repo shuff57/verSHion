@@ -1606,3 +1606,25 @@ fn round19_a_root_on_a_typed_decimal_edge_is_in_the_window() {
         }
     }
 }
+
+/// Check 20: a root within a float step of an edge is decided exactly whatever the degree, never kept because the test
+/// overflowed: √3 is above y 0..1.7320508075688772 (as typed and as its float), so (y² − 3)(y − 9) there has no line and
+/// no "every one"; ∛3 is above y 0..1.4422495703074083; √5 is below y 2.23606797749979..10. And a root typed to nine or
+/// more places on an edge is in the window: y − 2.343846715 on y 2.343846715..3.343846715 has y = 2.343846715.
+#[test]
+fn round20_edge_roots_decided_exactly_at_any_degree() {
+    for (eqt, y0, y1) in [("(y^2 - 3)(y - 9)", 0.0, 1.7320508075688772), ("y^3 - 3", 0.0, 1.4422495703074083), ("(y^2 - 5)(y - 9)", 2.23606797749979, 8.0),
+                          ("(y^2 - 2)(y - 7)(y + 9)", 0.0, 1.414213562373095), ("300000000000y - 1", 0.0, 3.333333333333333e-12)] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert!(got.is_empty(), "{eqt} on [{y0}, {y1}]: a root outside the window drawn: {got:?} (complete {})", q.complete);
+    }
+    for (eqt, y0, y1, want) in [("y - 2.343846715", 2.343846715, 3.343846715, 2.343846715), ("y - 1.123456789012", 0.0, 1.123456789012, 1.123456789012),
+                                ("(y - 0.123456789)(y - 5)(y + 7)", 0.123456789, 1.0, 0.123456789), ("(y^2 - 3)(y - 9)", 0.0, 1.7320508075688774, 3f64.sqrt())] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert!(got.iter().any(|g| (g - want).abs() < 1e-12) || (!q.complete && q.unsure.iter().any(|u| (u - want).abs() < 1e-9)), "{eqt} on [{y0}, {y1}]: {got:?}, unsure {:?}, complete {}", q.unsure, q.complete);
+    }
+}
