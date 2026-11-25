@@ -689,6 +689,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         }
     }
     split_part_figures_in(&mut v);
+    let _boxes = PageBoxes::set(&v, page_no);
     let bank = v.get("bank").ok_or("The file has no \"bank\".")?;
     let name = bank.get("name").and_then(Value::as_str).filter(|n| !n.trim().is_empty()).unwrap_or(fallback_name).to_string();
     let raw = bank.get("questions").and_then(Value::as_array).ok_or("The bank has no \"questions\" list.")?;
@@ -1505,6 +1506,7 @@ pub fn figure_box_issues(reply: &str, page_png: Option<&[u8]>, page_no: usize) -
 
 fn figure_box_issues_in(v: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Vec<FigureBoxIssue> {
     let Some(raw) = v.pointer("/bank/questions").and_then(Value::as_array) else { return Vec::new() };
+    let _boxes = PageBoxes::set(v, page_no);
     let mut issues = Vec::new();
     let mut boxes = Vec::new();
     for (i, item) in raw.iter().enumerate() {
@@ -1545,6 +1547,7 @@ fn figure_box_issues_in(v: &Value, page: Option<&image::DynamicImage>, page_no: 
 pub fn source_figure_previews(reply: &str, page_png: &[u8], page_no: usize) -> Vec<(usize, String, Vec<u8>)> {
     let Some(v) = json_object(reply) else { return Vec::new() };
     let Ok(page) = image::load_from_memory(page_png) else { return Vec::new() };
+    let _boxes = PageBoxes::set(&v, page_no);
     v.pointer("/bank/questions").and_then(Value::as_array).into_iter().flatten().enumerate().filter_map(|(i,item)| {
         let selected = source_figure(item).ok()??;
         let png = crop(selected.figure, Some(&page), page_no).ok()?;
@@ -1617,6 +1620,59 @@ fn figure_bounds(fig: &Value, page_no: usize) -> Result<[f64; 4], String> {
     Ok(box_fractions(&b).map(|n| n.clamp(0.0, 1.0)))
 }
 
+thread_local! {
+    /// Every figure box on the page being cropped (normalized x0, y0, x1, y1), so one crop's
+    /// padding stops at a neighbouring figure's box.
+    static PAGE_BOXES: std::cell::RefCell<Vec<[f64; 4]>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Holds this page's figure boxes for the crops made while it lives; on drop the boxes set before
+/// it come back (the box-issue check runs inside an import).
+struct PageBoxes(Vec<[f64; 4]>);
+impl PageBoxes {
+    fn set(v: &Value, page_no: usize) -> PageBoxes {
+        let mut boxes: Vec<[f64; 4]> = Vec::new();
+        let mut add = |f: &Value| if let Ok(b) = figure_bounds(f, page_no) && !boxes.iter().any(|o| same_box(o, &b)) { boxes.push(b); };
+        for q in v.pointer("/bank/questions").and_then(Value::as_array).into_iter().flatten() {
+            let figure = |x: &Value| x.get("figure").filter(|f| f.get("box").is_some()).cloned();
+            if let Some(f) = figure(q) { add(&f); }
+            for list in ["parts", "choices"] {
+                for p in q.get(list).and_then(Value::as_array).into_iter().flatten() {
+                    if let Some(f) = figure(p) { add(&f); }
+                    for c in p.get("choices").and_then(Value::as_array).into_iter().flatten() { if let Some(f) = figure(c) { add(&f); } }
+                }
+            }
+        }
+        PageBoxes(PAGE_BOXES.with(|b| std::mem::replace(&mut *b.borrow_mut(), boxes)))
+    }
+}
+impl Drop for PageBoxes {
+    fn drop(&mut self) { PAGE_BOXES.with(|b| *b.borrow_mut() = std::mem::take(&mut self.0)); }
+}
+
+fn same_box(a: &[f64; 4], b: &[f64; 4]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.002)
+}
+
+/// Cut a grown crop back at any distinct figure box beside its own box, never below its own box
+/// (holdout v18, Washoe: three graphs boxed edge to edge; each padded crop took a strip of the next,
+/// and the scope review then held all of them as crops).
+fn stop_at_neighbours(grown: [u32; 4], own: [f64; 4], w: f64, h: f64) -> [u32; 4] {
+    let [mut x0, mut y0, mut x1, mut y1] = grown.map(|v| v as f64);
+    let (l, t, r, b) = (own[0] * w, own[1] * h, own[2] * w, own[3] * h);
+    PAGE_BOXES.with(|boxes| for o in boxes.borrow().iter().filter(|o| !same_box(o, &own)) {
+        let (ol, ot, or, ob) = (o[0] * w, o[1] * h, o[2] * w, o[3] * h);
+        let across = ol < r && or > l;
+        let beside = ot < b && ob > t;
+        let tol = 2.0;
+        if across && ot >= b - tol { y1 = y1.min(b.max(ot)); }
+        if across && ob <= t + tol { y0 = y0.max(t.min(ob)); }
+        if beside && ol >= r - tol { x1 = x1.min(r.max(ol)); }
+        if beside && or <= l + tol { x0 = x0.max(l.min(or)); }
+    });
+    [x0 as u32, y0 as u32, x1 as u32, y1 as u32]
+}
+
 fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Result<Vec<u8>, String> {
     let piece = crop_piece(fig, page, page_no)?;
     let mut out = Vec::new();
@@ -1639,9 +1695,10 @@ fn crop_piece(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -
         (0, 0, 0, 0)
     } else {
         let gray = page.to_luma8();
-        let [x0, y0, x1, y1] = connected_crop_bounds(&gray,
+        let grown = connected_crop_bounds(&gray,
             [l as u32, t as u32, r as u32, bt as u32],
             [(pad * w) as u32, (pad * h) as u32]);
+        let [x0, y0, x1, y1] = stop_at_neighbours(grown, [bx0.clamp(0.0, 1.0), by0.clamp(0.0, 1.0), bx1.clamp(0.0, 1.0), by1.clamp(0.0, 1.0)], w, h);
         (x0, y0, x1 - x0, y1 - y0)
     };
     if pw < 24 || ph < 24 {
@@ -1856,6 +1913,26 @@ mod tests {
         assert_eq!(got.items[0].status, "saved_continued");
         assert!(matches!(&got.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
         assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+    }
+
+    #[test]
+    fn a_crop_stops_at_the_neighbouring_figure_box_below_it() {
+        // Holdout v18, Washoe: two graphs boxed edge to edge, the lower graph's ink touching the shared edge.
+        let mut img = image::RgbImage::from_pixel(400, 400, image::Rgb([255, 255, 255]));
+        for y in 40..360 { img.put_pixel(200, y, image::Rgb([0, 0, 0])); }
+        let page = image::DynamicImage::ImageRgb8(img);
+        let upper = serde_json::json!({"box":[100, 100, 500, 900]});
+        let lower = serde_json::json!({"box":[500, 100, 900, 900]});
+        let reply = serde_json::json!({"bank":{"questions":[{"figure":upper},{"figure":lower}]}});
+        let alone = crop_piece(&upper, Some(&page), 1).unwrap();
+        assert!(alone.height() > 170, "without neighbours the crop follows the stroke down ({})", alone.height());
+        let _boxes = PageBoxes::set(&reply, 1);
+        let fenced = crop_piece(&upper, Some(&page), 1).unwrap();
+        assert!(fenced.height() <= 165, "the crop stops at the lower box ({})", fenced.height());
+        {
+            let _inner = PageBoxes::set(&serde_json::json!({}), 1);
+        }
+        assert_eq!(crop_piece(&upper, Some(&page), 1).unwrap().height(), fenced.height(), "an inner check restores the boxes");
     }
 
     #[test]
