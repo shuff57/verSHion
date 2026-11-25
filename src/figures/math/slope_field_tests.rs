@@ -1539,3 +1539,39 @@ fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
     }
 }
 
+
+/// Check 18: a line is never given the value of a root outside the window. When the search finds one root alone, a
+/// neighbouring root just past the window edge, 2 beside 2.0000003 on y 2.0000001..2.0000005, is not its exact value: the
+/// line drawn is the root inside, or none is drawn and the height is named as possible. And a root whose float is the
+/// window edge's is inside only when it is exactly so: 1/3 is not in y 0..0.3333333333333333, √2 not in y 0..1.414213562373095.
+#[test]
+fn round18_no_line_takes_a_value_outside_the_window() {
+    let cases: Vec<(&str, f64, f64, f64)> = vec![
+        ("(y - 2)(y - 2.0000003) sin(x)", 2.0000001, 2.0000005, 2.0000003), ("(y - 1)(y - 1.0000009) sin(x)", 1.0000005, 1.000002, 1.0000009),
+        ("(y - 1)(y - 1.0000001) e^(-x)", 1.00000005, 1.00000015, 1.0000001), ("(y - 100)(y - 100.0000000001)", 100.00000000005, 100.00000000015, 100.0000000001),
+        ("(y - 3)(y - 3.0000000001)", 3.00000000005, 3.00000000015, 3.0000000001), ("(y - 1/3)(y - 0.3333334) sin(x)", 0.33333337, 0.4, 0.3333334),
+        ("(y + 1)(y + 1.0000001) sin(x)", -1.0000002, -1.00000005, -1.0000001), ("(y + 1)(y + 1.0000001) e^(-x)", -1.0000002, -1.00000005, -1.0000001),
+        ("(y - 1)(y - 1.0000005) sin(x)", 1.0000002, 1.000001, 1.0000005), ("y(y - 0.000001) cos(x)", 5e-7, 2e-6, 1e-6),
+        ("(y - 0.5)(y - 0.5000001) sin(x)", 0.50000005, 0.6, 0.5000001),
+    ];
+    for (eqt, y0, y1, inside) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        for l in &q.lines {
+            assert!(l.y >= y0 && l.y <= y1, "{eqt} on [{y0}, {y1}]: a line outside the window: {:?}", q.lines.iter().map(|l| l.y).collect::<Vec<_>>());
+            assert!((l.y - inside).abs() < 1e-12 * (1.0 + inside.abs()), "{eqt} on [{y0}, {y1}]: {:?}", l.y);
+        }
+    }
+    for (eqt, y0, y1) in [("3y - 1", 0.0, 0.3333333333333333), ("(3y - 1)(y + 5)", 0.0, 0.3333333333333333), ("y^2 - 2", 0.0, 1.414213562373095),
+                          ("y^2 - 3", 0.0, 1.7320508075688772), ("y^2 - 5", 2.23606797749979, 3.0), ("y^2 - y - 1", 1.618033988749895, 2.0), ("7y - 1", 0.0, 0.14285714285714285)] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert!(got.is_empty(), "{eqt} on [{y0}, {y1}]: a root outside the window by less than an ulp listed: {got:?}");
+    }
+    // (an edge that holds the root exactly keeps it: 0.5 on y 0..0.5, 0 on y 0..1, 1/4 on y 0.25..1)
+    for (eqt, y0, y1, want) in [("2y - 1", 0.0, 0.5, vec![0.5]), ("y(1 - y)", 0.0, 1.0, vec![0.0, 1.0]), ("4y - 1", 0.25, 1.0, vec![0.25])] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got, want, "{eqt} on [{y0}, {y1}]");
+    }
+}

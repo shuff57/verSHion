@@ -419,6 +419,20 @@ impl Q {
         for k in 0..20 { let s = v * (1u64 << k) as f64; if s.fract() == 0.0 && s.abs() < 1e15 { return Q::new(s as i128, 1i128 << k); } }
         None
     }
+    /// Any finite float, exactly (None where its numerator or denominator would not fit): 0.3333333333333333 is
+    /// 6004799503160661/2⁵⁴, which is less than 1/3.
+    pub(crate) fn of_f64_exact(v: f64) -> Option<Q> {
+        if !v.is_finite() { return None; }
+        if v == 0.0 { return Some(Q(0, 1)); }
+        let bits = v.to_bits();
+        let ex = ((bits >> 52) & 0x7ff) as i32;
+        let fr = (bits & ((1u64 << 52) - 1)) as i128;
+        let (mut m, mut e) = if ex == 0 { (fr, -1074) } else { (fr | (1i128 << 52), ex - 1075) };
+        while m & 1 == 0 && e < 0 { m >>= 1; e += 1; }
+        let m = if v < 0.0 { -m } else { m };
+        if e >= 0 { if e > 70 { return None; } Q::new(m.checked_mul(1i128 << e)?, 1) } else { if -e > 125 { return None; } Q::new(m, 1i128 << (-e)) }
+    }
+    fn le(self, o: Q) -> Option<bool> { Some(o.sub(self)?.0 >= 0) }
 }
 
 /// The polynomial degree of a tree in x (None: not a polynomial in x).
@@ -542,7 +556,9 @@ fn dd_eval(c: &[Q], y: f64) -> f64 {
     acc.0 + acc.1
 }
 
-fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64))>> {
+/// Each distinct real root in [lo, hi]: its float, its exact value where rational, its interval as floats and exactly (the
+/// root is the only one in (a, b], or b itself).
+fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64), (Q, Q))>> {
     let count = |a: Q, b: Q| -> Option<usize> { let n = sturm_count(c, a, b)?; Some(n - (poly_eval(c, a)?.0 == 0) as usize) };
     let ev = |y: f64| dd_eval(c, y);
     let mut out = vec![];
@@ -550,7 +566,7 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64
     while let Some((a, b, depth)) = stack.pop() {
         let n = count(a, b)?;
         if n == 0 { continue; }
-        if poly_eval(c, b)?.0 == 0 { let bf = b.0 as f64 / b.1 as f64; out.push((bf, Some(b), (bf, bf))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
+        if poly_eval(c, b)?.0 == 0 { let bf = b.0 as f64 / b.1 as f64; out.push((bf, Some(b), (bf, bf), (b, b))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
         if n == 1 || depth > 90 {
             let (mut u, mut v) = (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64);
             // (oriented by the exact sign at the right end, which is no root here; a, the left end, may be one)
@@ -577,7 +593,7 @@ fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64
                 if fr.abs() < 1e-18 { break; }
                 xv = 1.0 / fr;
             }
-            out.push((rq.map_or(r, |q| q.0 as f64 / q.1 as f64), rq, (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64)));
+            out.push((rq.map_or(r, |q| q.0 as f64 / q.1 as f64), rq, (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64), (a, b)));
             continue;
         }
         let m = a.add(b)?.mul(Q(1, 2))?;
@@ -914,8 +930,25 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
             let proven_all_x = dx.is_some() && distinct;
             let mut lines = vec![];
             let mut unsure = vec![];
-            // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1)
-            for (r, rq, (ia, ib)) in roots.into_iter().filter(|(r, _, _)| *r >= y0 && *r <= y1) {
+            // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1; and a root whose float is the
+            // edge's, exactly: 1/3 is not in y 0..0.3333333333333333, whose top is 6004799503160661/2⁵⁴ < 1/3)
+            let (e0, e1) = (Q::of_f64_exact(y0), Q::of_f64_exact(y1));
+            let count_in = |a: Q, b: Q| -> Option<usize> { Some(sturm_count(&sf, a, b)? - (poly_eval(&sf, a)?.0 == 0) as usize) };
+            let in_window = |r: f64, rq: Option<Q>, (a, b): (Q, Q)| -> bool {
+                if r < y0 || r > y1 { return false; }
+                if r != y0 && r != y1 { return true; }
+                let exact = || -> Option<bool> {
+                    let (e0, e1) = (e0?, e1?);
+                    if let Some(q) = rq { return Some(e0.le(q)? && q.le(e1)?); }
+                    // (an irrational root, the only one in (a, b]: at or below the top when (a, top] holds it; at or above the
+                    // bottom when (a, bottom) does not)
+                    let below_top = if b.le(e1)? { true } else if e1.le(a)? { false } else { count_in(a, e1)? >= 1 };
+                    let above_bottom = if e0.le(a)? { true } else if b.sub(e0)?.0 < 0 { false } else { count_in(a, e0)? - (poly_eval(&sf, e0)?.0 == 0) as usize == 0 };
+                    Some(below_top && above_bottom)
+                };
+                exact().unwrap_or(true)
+            };
+            for (r, rq, (ia, ib), _) in roots.into_iter().filter(|(r, rq, _, iq)| in_window(*r, *rq, *iq)) {
                 // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x, and
                 // only one inside this root's own isolating interval: a neighbouring root's value is another line's)
                 let cand = candidates(r).into_iter().filter(|c| { let v = ev(c, 0.0, 0.0); v > ia && v <= ib + 1e-15 * (1.0 + ib.abs()) }).find(|c| proves(&f.tree, c));
@@ -996,8 +1029,19 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
         // an exact value, shown exactly: f(x, c) is 0 for every x by exact arithmetic
         // (a candidate nearer this root than half the way to any other root found: a neighbouring root's exact value, 1/2 beside
         // 0.5000001, is another line's)
+        // (and inside the window: a root found alone has no neighbour found, and the root just outside the window, 2 beside
+        // 2.0000003 on y 2.0000001..2.0000005, is not this line. A value whose float is the window edge's is inside only when
+        // it is exactly a rational the edge holds: 1/3 is outside y 0..0.3333333333333333)
         let gap = found.iter().filter(|o| o.0 != r).map(|o| (o.0 - r).abs()).fold(f64::INFINITY, f64::min);
-        let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap).find(|c| proves(&f.tree, c));
+        let inside = |c: &Node| -> bool {
+            let v = ev(c, 0.0, 0.0);
+            if !(v >= y0 && v <= y1) { return false; }
+            if v != y0 && v != y1 { return true; }
+            let q = ex::exact(c, None).and_then(|e| e.rational()).and_then(|(p, q)| Q::new(p, q));
+            let edge = Q::of_f64_exact(v);
+            matches!((q, edge), (Some(a), Some(b)) if a == b)
+        };
+        let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap && inside(c)).find(|c| proves(&f.tree, c));
         let exact = proof.as_ref().and_then(|c| ex::exact(c, None));
         // (a value shown but not held exactly, ln 2: its float, to the last place)
         let yv = exact.as_ref().map(|e| e.value()).or_else(|| proof.as_ref().map(|c| ev(c, 0.0, 0.0))).unwrap_or(r);
