@@ -2086,22 +2086,22 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let agrees = |w: f64| est.is_some_and(|(e, err)| err <= 1e-6 * size(w) && (w - e).abs() <= 1e-5 * size(w));
         let contradicts = |w: f64| est.is_some_and(|(e, err)| (w - e).abs() > 1e-5 * size(w) + 10.0 * err);
         let mut set_undecided = || { let mut u = undecided.get(); u[fi] = true; undecided.set(u); };
-        let (v, ve) = match v {
+        let (v, ve, unc) = match v {
             // (inside a removable hole's local series, f and its derivatives are the series' own, as on the curves: beside
             // the hole the typed formula, and an exact form of it (−2·10¹⁵ + 1999980000100000·e^(1/100000) for (eˣ − 1)/x″ at
             // 0.00001), lose their digits to cancellation; the series, checked against the formula where both are sound,
             // does not. So (1 − cos x)/x² reads f(0.0000001) ≈ 0.5, (eˣ − e⁻ˣ)/(2x) reads f′(0.00001) ≈ 3.3333 × 10⁻⁶, and a
             // hole at 100 reads as one at 0.)
-            Some(w) if !rational && !m.is_isolated(t.v) && m.local_covers(t.v) => match m.d(fi, t.v) { Some(dv) => (Some(dv), None), None => (Some(w), ve) },
+            Some(w) if !rational && !m.is_isolated(t.v) && m.local_covers(t.v) => match m.d(fi, t.v) { Some(dv) => (Some(dv), None, 1e-13 * dv.abs()), None => (Some(w), ve, 0.0) },
             // (an exact rational, a value settled by its two sides or a proven zero is written as it is)
-            Some(w) if rational || settled.get() || proven_zero || m.is_isolated(t.v) => (Some(w), ve),
+            Some(w) if rational || settled.get() || proven_zero || m.is_isolated(t.v) => (Some(w), ve, 0.0),
             // (otherwise: a value the sound difference confirms is written; one it contradicts is replaced by the model's own
             // value if that agrees, and else not written; where no difference is sound (a kink or a cusp within a thousandth),
             // the value's own rounding bound decides, to four figures, and a 0 the rounding was read as only below 10⁻⁹)
             Some(w) => {
-                if agrees(w) { (Some(w), ve) }
+                if agrees(w) { let (e, err) = est.unwrap(); (Some(w), ve, err.max((w - e).abs())) }
                 else if contradicts(w) {
-                    match m.d(fi, t.v).filter(|dv| agrees(*dv)) { Some(dv) => (Some(dv), None), None => { set_undecided(); (None, None) } }
+                    match m.d(fi, t.v).filter(|dv| agrees(*dv)) { Some(dv) => { let (e, err) = est.unwrap(); (Some(dv), None, err.max((dv - e).abs())) } None => { set_undecided(); (None, None, 0.0) } }
                 } else {
                     let bound = m.piece_at(t.v).and_then(|pi| {
                         let a = m.fexpr(pi, fi).map(|e| sym::ev_err(e, t.v).1);
@@ -2109,13 +2109,31 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                         match (a, b) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) }
                     });
                     let lost = bound.is_some_and(|b| if w == 0.0 { !(b <= 1e-9) } else { !(b <= 1e-4 * w.abs()) });
-                    if lost { set_undecided(); (None, None) } else { (Some(w), ve) }
+                    if lost { set_undecided(); (None, None, 0.0) } else { (Some(w), ve, bound.unwrap_or(0.0)) }
                 }
             }
             // (no value: a derivative does not exist only at a break the analysis found exactly there (a corner, a cusp, a
             // pole, a jump, the end of the domain), or where f has no value; at any other typed x it exists, and a value the
             // floats could not give is undecided, never absent)
-            None => (None, ve),
+            None => (None, ve, 0.0),
+        };
+        // (a value not held exactly is written to the figures it is known to, and no more: its error is the largest of the
+        // check's, the rounding bound's, and the gap between the typed decimal and the double it is read at, half a unit in
+        // the last place of x, times the next derivative (beside a zero of sin, 3.1415926535897 is 10⁻¹⁶ from its double,
+        // which moves sin there in its third figure). Fewer than one known figure: undecided.)
+        let v = match (v, &ve) {
+            (Some(w), None) if w != 0.0 => {
+                let gap = x.abs() * f64::EPSILON;
+                let next = if fi < 2 { m.d(fi + 1, x) } else { let h = 1e-6 * (1.0 + x.abs()); match (m.d(2, x + h), m.d(2, x - h)) { (Some(a), Some(c)) => Some((a - c) / (2.0 * h)), _ => None } };
+                let u = unc.max(next.map_or(0.0, |d| d.abs() * gap));
+                if u > 0.0 {
+                    let figs = (w.abs() / (2.0 * u)).log10().floor();
+                    if figs < 1.0 { set_undecided(); None }
+                    else if figs < 5.0 { let k = 10f64.powi((figs as i32) - 1 - w.abs().log10().floor() as i32); Some((w * k).round() / k) }
+                    else { Some(w) }
+                } else { Some(w) }
+            }
+            (w, _) => w,
         };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };

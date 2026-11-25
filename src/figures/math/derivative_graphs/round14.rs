@@ -195,3 +195,31 @@ fn small_values_are_known_or_undecided() {
         assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit * 1.0001, "{fx} at {tx}: reading {k} {r}, true {want}");
     }
 }
+
+/// Check 21: a small value is written only to the figures it is known to: the typed decimal is read at its nearest double,
+/// and beside a zero of sin or cos that gap moves the value. sin(3.1415926535897) = 9.3238 × 10⁻¹⁴, cos(1.5707963267948) =
+/// 9.6619 × 10⁻¹⁴, x − sin x at 0.000005 = 2.0833 × 10⁻¹⁷, tan x − x at 0.000003 = 9.0000 × 10⁻¹⁸, ln(1 + x) − x at 0.000004
+/// = −8.0000 × 10⁻¹², and (eˣ − e⁻ˣ)/(2x) + √x⁷ has f′ = 6.6669 × 10⁻⁵ at 0.0002 (by series and mpmath). Each reading is
+/// right in every figure it shows, or undecided.
+#[test]
+fn small_values_show_only_known_figures() {
+    let cases: Vec<(&str, &str, usize, f64)> = vec![
+        ("sin(x)", "3.1415926535897", 0, 9.3238e-14), ("sin(x)", "3.1415926535897", 2, -9.3238e-14), ("cos(x)", "1.5707963267948", 0, 9.6619e-14),
+        ("x - sin(x)", "0.000005", 0, 2.0833e-17), ("tan(x) - x", "0.000003", 0, 9.0e-18), ("ln(1 + x) - x", "0.000004", 0, -8.0e-12),
+        ("(e^x - e^(-x))/(2x) + sqrt(x)^7", "0.0002", 1, 6.6669e-5),
+    ];
+    for (fx, tx, k, want) in cases {
+        let x = typed(tx).unwrap().v;
+        let p = with(&[("f", s(fx)), ("xmin", f((x - 1.0).floor())), ("xmax", f((x + 1.0).ceil())), ("show_fpp", b(true)), ("tracer_x", s(tx))]);
+        let r = build(&p).labels.iter().filter(|l| l.2 == "reading").map(|l| l.0.clone()).nth(k).unwrap();
+        if r.contains("cannot be decided") { continue; }
+        let v = r.split(" \u{2248} ").nth(1).or_else(|| r.split(" = ").nth(1)).unwrap_or("").replace('\u{2212}', "-").replace(" \u{d7} 10", "e").replace('\u{207b}', "-");
+        let v: String = v.chars().map(|c| match c { '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}'..='\u{2079}' => char::from_digit(c as u32 - 0x2070, 10).unwrap(), c => c }).collect();
+        let got: f64 = v.trim().parse().unwrap_or_else(|_| panic!("{fx} at {tx}: {r}"));
+        let mant = v.trim().split('e').next().unwrap();
+        let places = mant.split('.').nth(1).map_or(0, |d| d.len());
+        let unit = v.split('e').nth(1).map_or(1.0, |e| 10f64.powi(e.trim().parse().unwrap_or(0)));
+        // (the truth is known to 5 figures: within half a unit of the last place written, plus that)
+        assert!((got - want).abs() <= 0.5 * 10f64.powi(-(places as i32)) * unit + 0.5e-4 * want.abs(), "{fx} at {tx}: reading {k} {r}, true {want}");
+    }
+}
