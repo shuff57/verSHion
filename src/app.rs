@@ -386,8 +386,8 @@ impl App {
     /// every 10 frames after a 60 frame warm-up. Coordinates are egui points.
     pub fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         if let Some((path, _)) = &self.qa_shot {
-            for ev in &raw.events {
-                if let egui::Event::Screenshot { image, .. } = ev {
+            if let Some(image) = ctx.data_mut(|d| d.remove_temp::<std::sync::Arc<egui::ColorImage>>(egui::Id::new("vershion_qa_shot"))) {
+                {
                     let bytes: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
                     if let Some(img) = image::RgbaImage::from_raw(image.width() as u32, image.height() as u32, bytes) {
                         let _ = img.save(path);
@@ -511,7 +511,7 @@ impl App {
                 let v: Vec<f32> = arg.split(',').filter_map(|t| t.trim().parse().ok()).collect();
                 if let [x, y, dy] = v[..] {
                     raw.events.push(egui::Event::PointerMoved(egui::pos2(x, y)));
-                    raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, dy), phase: egui::TouchPhase::Move, modifiers: mods });
+                    raw.events.push(egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, source: egui::MouseWheelSource::Wheel, delta: egui::vec2(0.0, dy), phase: egui::TouchPhase::Move, modifiers: mods });
                 }
             }
             _ => {}
@@ -558,7 +558,12 @@ impl App {
             // VERSHION_SHOT_FRAME=<n> delays the capture (lets a VERSHION_SCRIPT finish first).
             let at = crate::env_var("VERSHION_SHOT_FRAME").ok().and_then(|v| v.parse().ok()).unwrap_or(60u32);
             if *frames == at {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                // egui 0.37 hands the screenshot to a callback; `raw_input_hook` saves it.
+                let c = ctx.clone();
+                ctx.request_screenshot(move |img| {
+                    c.data_mut(|d| d.insert_temp(egui::Id::new("vershion_qa_shot"), img));
+                    c.request_repaint();
+                });
             }
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }

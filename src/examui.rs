@@ -1395,7 +1395,7 @@ fn narrow_switch(ui: &mut egui::Ui, rect: Rect, bank_tab: &mut bool, on_page: us
         let seg = Rect::from_min_size(rect.min + Vec2::new(i as f32 * half, 0.0), Vec2::new(half, rect.height())).shrink(3.0);
         let resp = ui.interact(seg, ids[i], Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
         let on = *bank_tab == is_bank;
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, format!("{title}, {note}")));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, format!("{title}, {note}")));
         // A tab, not a toggle button: screen readers announce "tab, selected" / "tab".
         ui.ctx().accesskit_node_builder(ids[i], |n| {
             n.set_role(egui::accesskit::Role::Tab);
@@ -1818,7 +1818,9 @@ fn draw_crumb_and_name_w(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, 
             .text_color(theme::ink())
             .frame(egui::Frame::NONE)
             .desired_width(name_w),
-    );
+    )
+    // named for screen readers (the hint goes once a name is typed)
+    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Exam name"));
     if name != before {
         if let Some(e) = app.store.exam_mut(exam_id) {
             e.name = name;
@@ -3036,7 +3038,8 @@ fn draw_page_article(
             .text_color(Color32::from_rgb(0x33, 0x33, 0x33))
             .frame(egui::Frame::NONE)
             .desired_width(cw),
-    );
+    )
+    .widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Page header"));
     if header != before {
         if let Some(e) = app.store.exam_mut(exam_id) {
             e.header = header;
@@ -5827,7 +5830,7 @@ fn draw_shelf_inner(
         });
     ui.spacing_mut().scroll = saved_scroll;
     let view = out.inner_rect;
-    let below = cards_below(&out.inner, out.state.offset.y + view.height());
+    let below = cards_below(&out.inner, out.state.offset().y + view.height());
     st.shelf_seen.view = Some(view);
     st.shelf_seen.below = if overflow { below } else { 0 };
     st.shelf_seen.foot = list_top + list_h - if overflow { SHELF_CUE_H } else { 0.0 };
@@ -9577,7 +9580,8 @@ mod system_pass_tests {
             let d = model::Exam::default();
             let one = "Page 1 of 1 · 9 questions · 99 pts";
             let one_fit = strip_fit(ui, &d, INNER_1280, Some(zoom), one, one.split_once(" · ").unwrap().1);
-            let one_laid = lay_row(ui, &d, &one_fit);
+            // A second strip in the same frame: its own id scope, or egui 0.37 flags an id clash.
+            let one_laid = ui.push_id("one_page", |ui| lay_row(ui, &d, &one_fit)).inner;
             (Some(fit), need, laid, Some(one_fit), one_laid)
         });
         let (worst_fit, one_fit) = (worst_fit.unwrap(), one_fit.unwrap());

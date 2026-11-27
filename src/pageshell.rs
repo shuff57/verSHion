@@ -594,7 +594,7 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize, quie
         // Left-aligned font glyphs sit with their left edge at x = 18; a centred icon goes half its width in.
         crate::handicons::paint_glyph(ui.painter(), mid + Vec2::new(18.0 + 9.0, 0.0), it.icon, 18.0, col);
         ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(if quiet { 14.0 } else { 15.2 }, if quiet && !on { egui::FontFamily::Proportional } else { theme::bold_family() }), col);
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, it.label));
         if resp.clicked() {
             *selected = i;
         }
@@ -659,7 +659,7 @@ fn nav_strip(ui: &mut Ui, items: &[NavItem], selected: &mut usize) {
         }
         let (col, f) = if on { (theme::accent_col(), font_on.clone()) } else { (theme::ink(), font.clone()) };
         ui.painter().text(r.center() - Vec2::new(0.0, if on { 1.0 } else { 0.0 }), Align2::CENTER_CENTER, it.label, f, col);
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, it.label));
         if resp.clicked() {
             *selected = i;
         }

@@ -171,6 +171,14 @@ Preserve a printed instructional section heading even when there are no separate
 map its questions to a section with that literal `title` and `instructions: ""`. This includes
 unnumbered worksheet exercises under a printed subject heading; do not shorten the heading or
 replace it with an inferred subject name. Such a heading supplies context, never a guessed task.
+A printed condition for the whole page or section, such as "No Calculator Allowed" or
+"Calculators may be used", is a direction for every question under it: put it in that section's
+`instructions` (after any other printed directions), exactly as printed. Never drop it.
+A printed lead-in paragraph above numbered questions that sets up a scenario, defines terms or
+notation, or gives data those questions use ("Consider the graph G of friendships ...",
+"A coloring of a graph is ... The chromatic number χ(G) is ...") is part of their task: put it,
+word for word, in the `instructions` of a section holding every question it introduces. Do not
+summarize it, and do not drop it because it is not phrased as a command.
 
 # Report
 `report.unconverted`: every question you left out and why. `report.notes`: anything uncertain
