@@ -15,7 +15,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | composite-3d-shape | **missing** | | | 0 | | |
 | composite-shape | `composite-shape` | 9 | 10 | 3 | — | 100 |
 | cone | `cone` | 30 | 4 | 6 | — | 100 |
-| coordinate-grid | `coordinate-grid` | 83 | 2 | 7 | — | 100 |
+| coordinate-grid | `coordinate-grid` | 94 | 2 | 7 | — | 100 |
 | cumulative-frequency | `ogive` | 45 | 0 | 7 | — | 100 |
 | cylinder | `cylinder` | 31 | 4 | 6 | — | 100 |
 | dot-plot | `dot-plot` | 13 | 0 | 5 | — | 42 |
@@ -114,7 +114,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 | osmosis | `osmosis` | 46 | 0 | 7 | — | 100 |
 | pedigree | `pedigree` | 17 | 1 | 8 | reference has a student version; ours has no show_answers | 100 |
 | photosynthesis-rate | `photosynthesis` | 51 | 0 | 8 | — | 100 |
-| population-growth | `population-growth` | 55 | 7 | 7 | reference has a student version; ours has no show_answers | 98 |
+| population-growth | `population-growth` | 55 | 7 | 7 | reference has a student version; ours has no show_answers | 100 |
 | predator-prey | `predator-prey` | 56 | 3 | 7 | reference has a student version; ours has no show_answers | 100 |
 | punnett-square | `punnett-square` | 24 | 7 | 8 | — | 100 |
 
@@ -124,7 +124,7 @@ The click/drag column is a keyword hint. The ledger and the round's task run are
 
 Our figures with no reference page: 122
 
-Generated: 2026-11-27T22:06:19+00:00 · probe: 2026-11-27T14:06:19
+Generated: 2026-11-27T22:22:23+00:00 · probe: 2026-11-27T14:22:23
 
 **Pooled 92.7** · mean 91.9 over 91 figures · built 92 of 94 reference figures (missing: math/composite-3d-shape, physics/electric-and-magnetic-fields)
 
@@ -219,8 +219,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [control 3] Letter the swing's three positions A, B and C, each letter editable — no evidence
 - `torque`: 97 (90/93)
   - cap-06d [control 3] Draw the forces holding the beam up — no evidence
-- `population-growth`: 98 (128/131)
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
@@ -269,6 +267,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `population-growth`: 100 (131/131)
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)

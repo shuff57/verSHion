@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-27T22:06:19+00:00",
- "probe_checked_at": "2026-11-27T14:06:19",
+ "generated_at": "2026-11-27T22:22:23+00:00",
+ "probe_checked_at": "2026-11-27T14:22:23",
  "comparable": true,
  "drift": [],
  "pooled": 92.7,
@@ -1116,19 +1116,11 @@
    "gaps": []
   },
   "population-growth": {
-   "score": 97.7,
-   "got": 128.0,
+   "score": 100.0,
+   "got": 131.0,
    "total": 131.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-05e",
-     "class": "version",
-     "weight": 3.0,
-     "text": "The inflection point and phase labels as blank lines, or unlabeled",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "predator-prey": {
    "score": 100.0,

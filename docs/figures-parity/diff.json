@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-27T22:06:19+00:00",
+ "generated_at": "2026-11-27T22:22:23+00:00",
  "spec_generated_at": "2026-11-27T21:30:07+00:00",
  "figures": [
   {
@@ -735,9 +735,20 @@
     "x_left_extension",
     "x_right_extension",
     "y_bottom_extension",
-    "y_top_extension"
+    "y_top_extension",
+    "lim_ask_at",
+    "lim_inf",
+    "lim_disc",
+    "lim_hasym",
+    "lim_kinds",
+    "lim_rows",
+    "lim_points",
+    "lim_inf_answer",
+    "lim_dne",
+    "lim_stu_kinds",
+    "lim_stu_asym"
    ],
-   "param_count": 83,
+   "param_count": 94,
    "handles": 2,
    "label_drag": false,
    "show_answers": true,

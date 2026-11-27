@@ -37,6 +37,9 @@ pub struct AxOpts {
     /// Titles: "Text", "Blank line" (a line to write on) or "None".
     pub xt_mode: String,
     pub yt_mode: String,
+    /// How much the label size scales the text after drawing (`svg::with_label_size`); above 1 the y-axis title moves
+    /// out by the same factor, clear of the numbers grown with it (1 draws exactly as before).
+    pub label_scale: f64,
 }
 
 impl Default for AxOpts {
@@ -44,7 +47,7 @@ impl Default for AxOpts {
         AxOpts {
             xnum: None, ynum: None, xend: String::new(), yend: String::new(),
             x_lo: "None".into(), x_hi: "None".into(), y_lo: "None".into(), y_hi: "None".into(),
-            xt_mode: "Text".into(), yt_mode: "Text".into(),
+            xt_mode: "Text".into(), yt_mode: "Text".into(), label_scale: 1.0,
         }
     }
 }
@@ -202,7 +205,7 @@ pub fn draw_axes_ex(d: &mut Doc, a: &Axes, minor: i64, xt: &str, yt: &str, o: &A
         "Blank line" => { d.line(a.x + a.w / 2.0 - 90.0, a.y + a.h + 48.0, a.x + a.w / 2.0 + 90.0, a.y + a.h + 48.0, INK, 1.3); }
         _ => if !xt.is_empty() { bold(d, a.x + a.w / 2.0, a.y + a.h + 44.8, 16.8, "middle", xt); },
     }
-    let cx = a.x - 24.2 - maxlab as f64 * TICK_CH;
+    let cx = if o.label_scale > 1.0 { a.x - (24.2 + maxlab as f64 * TICK_CH) * o.label_scale } else { a.x - 24.2 - maxlab as f64 * TICK_CH };
     let cy = a.y + a.h / 2.0;
     match o.yt_mode.as_str() {
         "None" => {}

@@ -1,0 +1,50 @@
+{
+ "round": 410,
+ "figure": "population-growth",
+ "capability": "cap-05e",
+ "hypothesis": "population-growth cap-05e: the Inflection point label and Growth phase labels choices (Text, Blank line, None; built in d4a2459..1aaa109 on 2026-11-11/12, never closed) let a teacher leave the inflection point and phase labels as blank lines for students or unlabeled; evidence changes:{\"mark_infl\":true,\"infl_label_style\":\"Blank line\"} + changes:{\"mark_infl\":true,\"infl_label_style\":\"None\"} + changes:{\"mark_phases\":true,\"phase_label_style\":\"Blank line\"} + changes:{\"mark_phases\":true,\"phase_label_style\":\"None\"}, each checked by hand over its mark alone; no new Kind or handle; additive only; scored against the 2026-11-20 freeze with the 2026-11-19 spec (the 2026-11-24 scrape shows 15 new pages and 7 changed math pages, left for a re-freeze); expected population-growth 97.7 -> 100",
+ "started_at": "2026-11-24T08:44:53",
+ "git": "a4bc452",
+ "before": {
+  "figure": 97.7,
+  "pooled": 97.0
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-24T09:12:15",
+ "after": {
+  "figure": 100.0,
+  "pooled": 97.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "version",
+  "renders": [
+   {
+    "token": "changes:{\"mark_infl\":true,\"infl_label_style\":\"Blank line\"}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/3485f9733ef846b6.png"
+   },
+   {
+    "token": "changes:{\"mark_infl\":true,\"infl_label_style\":\"None\"}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/ae2e4650ebf2c57f.png"
+   },
+   {
+    "token": "changes:{\"mark_phases\":true,\"phase_label_style\":\"Blank line\"}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/0a9df3cecf7b1e8f.png"
+   },
+   {
+    "token": "changes:{\"mark_phases\":true,\"phase_label_style\":\"None\"}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/parity-population-growt-eec1f351a028a573/.figures-parity/renders/population-growth/d3cf3e24f4eb5383.png"
+   }
+  ]
+ },
+ "checker": "pass: the inflection point's and the growth phases' labels can each be set to Text, Blank line or None; the placement is right and the student copy behaves as this figure's other blank-line settings do.",
+ "result": "hit",
+ "evidence": "no source change (cap-05e built in d4a2459..1aaa109, 2026-11-11/12, closed now); figures suite at a4bc452 (cargo test --profile figtest --lib figures): 3708 passed, 0 failed, incl. census_baseline, versions_b9_frozen_population_growth, growth_r3/r5 sweeps; census unchanged (no ids); probe 1722 pass, 0 fail; scored against the 2026-11-20 freeze with the 2026-11-19 spec (2026-11-24 scrape: population-growth page unchanged; 15 new reference pages and 7 changed math pages left for a re-freeze); checker by hand: inflection t = 7.78, N = 500, phase bounds 3.94 and 11.78; no task run (no playwright-cli or xvfb-run on this machine)",
+ "next": "population-growth complete; pre-existing: with fixed axes below K and phases on, the K label is clipped at the page top (Text mode too); re-freeze for the 2026-11-24 scrape after the threads merge"
+}

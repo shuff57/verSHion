@@ -1,6 +1,6 @@
 # Figures parity score
 
-Generated: 2026-11-27T22:06:19+00:00 · probe: 2026-11-27T14:06:19
+Generated: 2026-11-27T22:22:23+00:00 · probe: 2026-11-27T14:22:23
 
 **Pooled 92.7** · mean 91.9 over 91 figures · built 92 of 94 reference figures (missing: math/composite-3d-shape, physics/electric-and-magnetic-fields)
 
@@ -95,8 +95,6 @@ Comparable with the frozen baseline: **yes**
   - cap-04 [control 3] Letter the swing's three positions A, B and C, each letter editable — no evidence
 - `torque`: 97 (90/93)
   - cap-06d [control 3] Draw the forces holding the beam up — no evidence
-- `population-growth`: 98 (128/131)
-  - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
   - cap-02j [interaction 2] Place a transformation's line or center on the grid with a preview — no evidence
 - `circle`: 99 (161/163)
@@ -145,6 +143,7 @@ Comparable with the frozen baseline: **yes**
 - `photoelectron-spectrum`: 100 (50/50)
 - `photosynthesis`: 100 (125/125)
 - `pie-chart`: 100 (93/93)
+- `population-growth`: 100 (131/131)
 - `predator-prey`: 100 (96/96)
 - `prism`: 100 (94/94)
 - `projectile-motion`: 100 (74/74)

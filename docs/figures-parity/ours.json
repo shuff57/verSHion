@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-27T21:34:46+00:00",
-  "src_mtime": 1795814321.3328426,
-  "git": "cc1bdd61",
+  "built_at": "2026-11-27T22:17:23+00:00",
+  "src_mtime": 1795817726.4119065,
+  "git": "6490ce99+dirty",
   "figures": 213
  },
  "figures": {
@@ -21274,6 +21274,94 @@
      "kind": "float",
      "options": [],
      "default": "-1.0"
+    },
+    {
+     "key": "lim_ask_at",
+     "label": "Ask the limits at x =",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lim_inf",
+     "label": "Ask the limits at infinity",
+     "kind": "choice",
+     "options": [
+      "None",
+      "x → ∞",
+      "x → −∞",
+      "Both"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "lim_disc",
+     "label": "Ask where f is not continuous",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_hasym",
+     "label": "Draw f's horizontal asymptotes (dashed, with their equations)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_kinds",
+     "label": "Label each discontinuity's kind (removable, jump, infinite)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_rows",
+     "label": "f is the rows",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lim_points",
+     "label": "The points give f's values (a point at a hole is f(a))",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "lim_inf_answer",
+     "label": "An infinite limit is written",
+     "kind": "choice",
+     "options": [
+      "∞ or −∞",
+      "does not exist"
+     ],
+     "default": "∞ or −∞"
+    },
+    {
+     "key": "lim_dne",
+     "label": "Does not exist is written",
+     "kind": "choice",
+     "options": [
+      "does not exist",
+      "DNE"
+     ],
+     "default": "does not exist"
+    },
+    {
+     "key": "lim_stu_kinds",
+     "label": "Student copy: leave off the kind labels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "lim_stu_asym",
+     "label": "Student copy: leave off the asymptotes' equations",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     }
    ],
    "handle_list": [
@@ -31125,6 +31213,13 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "tick_marks",
+     "label": "Draw tick marks with axis numbers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     },
     {
      "key": "xlabel",

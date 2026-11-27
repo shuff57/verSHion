@@ -359,11 +359,14 @@ pub fn growth_render(p: &Params) -> String {
     // widest y number (0.6 em of 14 px per character)
     let ny0 = (((ranges[0].1 - ranges[0].0) / ranges[0].2).round().max(1.0)) as f64;
     let ah = if single { (ny0 * 32.0).clamp(160.0, 480.0) } else { 205.0 };
-    let rows_per = (((ah - 28.0f64) / 17.0).floor() as usize).max(4);
+    // (Large labels grow the census table with its text: wider columns, taller rows)
+    let tab_s = if growth_b9::label_scale(p) > 1.0 { growth_b9::label_scale(p) } else { 1.0 };
+    let rows_per = (((ah - 28.0f64 * tab_s) / (17.0 * tab_s)).floor() as usize).max(4);
     let ntab = if table.is_empty() { 0 } else { table.len().div_ceil(rows_per) };
-    let tab_w = 150.0;
+    let tab_w = 150.0 * tab_s;
     let ychars = ranges.iter().zip(&panels).map(|(r, _)| y_label_chars(r.0, r.1, r.2, numbers_every(p.s("y_numbers")))).max().unwrap_or(1);
-    let (x0, aw) = (ref_left(ychars), 640.0f64);
+    // (Large labels widen the margin with them, so the y-axis title, moved out clear of the grown numbers, stays on the page)
+    let (x0, aw) = (if growth_b9::label_scale(p) > 1.0 { ref_left(ychars) * growth_b9::label_scale(p) } else { ref_left(ychars) }, 640.0f64);
     let x_end_extra = if p.s("x_end") == "Text" || p.s("x_hi_end") != "None" && !p.s("x_hi_end").is_empty() { 20.0 } else { 0.0 };
     let w = x0 + aw + 22.4 + x_end_extra + if ntab > 0 { 10.0 + ntab as f64 * (tab_w + 12.0) } else { 0.0 };
     let top = 14.0 + if has_title { 34.0 } else { 0.0 } + if phases { 26.0 } else { 0.0 } + if has_ends { 16.0 } else { 0.0 };
@@ -371,7 +374,7 @@ pub fn growth_render(p: &Params) -> String {
     let legend_h = if series.len() > 1 { 26.6 } else { 0.0 };
     let h = top + stride * panels.len() as f64 - 20.0 + legend_h;
     let mut d = Doc::new(w, h);
-    if !title.is_empty() { bold(&mut d, (x0 + aw / 2.0).max(w / 2.0 - if ntab > 0 { ntab as f64 * 81.0 } else { 0.0 }), 32.0, 19.0, "middle", &title); }
+    if !title.is_empty() { bold(&mut d, (x0 + aw / 2.0).max(w / 2.0 - if ntab > 0 { ntab as f64 * (tab_w + 12.0) / 2.0 } else { 0.0 }), 32.0, 19.0, "middle", &title); }
     else if title_blank { d.line(x0 + aw / 2.0 - 140.0, 36.0, x0 + aw / 2.0 + 140.0, 36.0, INK, 1.3); }
 
     let tx = if p.s("x_title").trim().is_empty() { format!("Time ({unit})") } else { p.s("x_title").trim().to_string() };
@@ -384,6 +387,7 @@ pub fn growth_render(p: &Params) -> String {
         x_lo: p.s("x_lo_end").to_string(), x_hi: p.s("x_hi_end").to_string(),
         y_lo: p.s("y_lo_end").to_string(), y_hi: p.s("y_hi_end").to_string(),
         xt_mode: p.s("xtitle_style").to_string(), yt_mode: p.s("ytitle_style").to_string(),
+        label_scale: growth_b9::label_scale(p),
     };
 
     for (pi, pk) in panels.iter().enumerate() {
@@ -475,11 +479,19 @@ pub fn growth_render(p: &Params) -> String {
             (br, by)
         };
         let k_text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
+        // the K line's words are left off where the page's top edge would cut them in half: a fixed axis far below K
+        // puts them above the plot, and the phase brackets' room up there showed their lower half (words that fit above
+        // the plot, among the brackets, or lie wholly off the page, and the blank line, draw exactly as before)
+        let k_cut = kstyle != "Blank line" && kstyle != "None" && {
+            let (y, size) = (a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
+            y - size * 0.95 < 0.0 && y + size * 0.3 > 0.0
+        };
+        let k_labelled = has_k && p.b("mark_k") && !k_cut;
         // what the phases' blank lines keep clear of: the K line's label (or its blank line) as drawn on this graph, `dx`
         // along from where it starts (a fixed axis can put it up among the brackets), and the chart's title
         let phase_avoid = |dx: f64| -> Vec<(f64, f64, f64, f64)> {
             let mut avoid = vec![];
-            if has_k && p.b("mark_k") {
+            if k_labelled {
                 match kstyle {
                     "None" => {}
                     "Blank line" => avoid.push((a.x + 8.0 + dx, a.py(k) + 18.0, a.x + 170.0 + dx, a.py(k) + 22.0)),
@@ -494,7 +506,7 @@ pub fn growth_render(p: &Params) -> String {
             if !avoid.is_empty() {
                 if !title.is_empty() {
                     let size = 19.0 * growth_b9::label_scale(p);
-                    let (cx, tw) = ((x0 + aw / 2.0).max(w / 2.0 - if ntab > 0 { ntab as f64 * 81.0 } else { 0.0 }), bold_width(&title, size) * 1.25);
+                    let (cx, tw) = ((x0 + aw / 2.0).max(w / 2.0 - if ntab > 0 { ntab as f64 * (tab_w + 12.0) / 2.0 } else { 0.0 }), bold_width(&title, size) * 1.25);
                     avoid.push((cx - tw / 2.0 - 2.0, 32.0 - size * 0.95, cx + tw / 2.0 + 2.0, 32.0 + size * 0.3));
                 } else if title_blank { avoid.push((x0 + aw / 2.0 - 140.0, 34.0, x0 + aw / 2.0 + 140.0, 38.0)); }
             }
@@ -503,13 +515,13 @@ pub fn growth_render(p: &Params) -> String {
         // Blank line phases only: where the K label up among the brackets covers a bracket so that no leader can leave it
         // clear of the words, the label slides right along its row to the first place where every phase's line is clear
         // (Text and None phases keep it where it always was)
-        let k_dx = if phases && matches!(pk, Panel::TimeN) && p.s("phase_label_style") == "Blank line" && has_k && p.b("mark_k") && kstyle != "None" {
+        let k_dx = if phases && matches!(pk, Panel::TimeN) && p.s("phase_label_style") == "Blank line" && k_labelled && kstyle != "None" {
             let (br, by) = phase_brackets();
             let kw = if kstyle == "Blank line" { 162.0 } else { bold_width(k_text, 14.7 * growth_b9::label_scale(p)) * 1.25 };
             let ok = |dx: f64| growth_b9::phase_blanks(&mut Doc::new(w, h), &br, by, (a.x, a.x + a.w), w, &phase_avoid(dx));
             if ok(0.0) { 0.0 } else { (1..).map(|j| j as f64 * 8.0).take_while(|dx| a.x + 8.0 + dx + kw <= a.x + a.w - 8.0).find(|dx| ok(*dx)).unwrap_or(0.0) }
         } else { 0.0 };
-        if has_k && matches!(pk, Panel::TimeN) && p.b("mark_k") {
+        if k_labelled && matches!(pk, Panel::TimeN) {
             match kstyle {
                 "None" => {}
                 "Blank line" => { d.line(a.x + 8.0 + k_dx, a.py(k) + 20.0, a.x + 170.0 + k_dx, a.py(k) + 20.0, INK, 1.3); }
@@ -536,7 +548,7 @@ pub fn growth_render(p: &Params) -> String {
                     [(ti + (n0 - k / 2.0) / slope).max(0.0), ti + (k / 2.0) / slope].into_iter().filter(|t| *t > a.x0 && *t < a.x1).map(|t| a.px(t)).collect()
                 } else { vec![] };
                 let kd = has_k && p.b("mark_k");
-                let k_label = (kd && kstyle != "None").then(|| {
+                let k_label = (k_labelled && kstyle != "None").then(|| {
                     let text = if p.s("k_label").trim().is_empty() { "Carrying capacity (K)" } else { p.s("k_label").trim() };
                     let (x, y, size) = (a.x + 8.0 + k_dx, a.py(k) + 21.7, 14.7 * growth_b9::label_scale(p));
                     (x - 2.0, y - size * 0.95 - 2.0, x + (bold_width(text, size) * 1.25).max(162.0) + 2.0, y + size * 0.3 + 2.0)
@@ -572,19 +584,19 @@ pub fn growth_render(p: &Params) -> String {
         for ti in 0..ntab {
             let x = tx0 + ti as f64 * (tab_w + 12.0);
             let chunk: Vec<&&(f64, f64)> = rows.iter().skip(ti * rows_per).take(rows_per).collect();
-            let th = 30.0 + chunk.len() as f64 * 17.0 + 6.0;
-            d.rect(x, ty0, tab_w, 30.0, "#e5e7eb", "none", 0.0);
+            let th = 30.0 * tab_s + chunk.len() as f64 * 17.0 * tab_s + 6.0;
+            d.rect(x, ty0, tab_w, 30.0 * tab_s, "#e5e7eb", "none", 0.0);
             d.rect(x, ty0, tab_w, th, "none", INK, 1.2);
             d.line(x + tab_w / 2.0, ty0, x + tab_w / 2.0, ty0 + th, INK, 1.0);
-            d.line(x, ty0 + 30.0, x + tab_w, ty0 + 30.0, INK, 1.0);
+            d.line(x, ty0 + 30.0 * tab_s, x + tab_w, ty0 + 30.0 * tab_s, INK, 1.0);
             let ucap = { let mut c = unit.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() };
             let _ = ucap;
-            bold(&mut d, x + tab_w / 4.0, ty0 + 13.0, 10.5, "middle", "Time");
-            bold(&mut d, x + tab_w / 4.0, ty0 + 25.0, 10.5, "middle", &format!("({unit})"));
-            bold(&mut d, x + tab_w * 0.75, ty0 + 13.0, 10.5, "middle", "Population");
-            bold(&mut d, x + tab_w * 0.75, ty0 + 25.0, 10.5, "middle", "size (N)");
+            bold(&mut d, x + tab_w / 4.0, ty0 + 13.0 * tab_s, 10.5, "middle", "Time");
+            bold(&mut d, x + tab_w / 4.0, ty0 + 25.0 * tab_s, 10.5, "middle", &format!("({unit})"));
+            bold(&mut d, x + tab_w * 0.75, ty0 + 13.0 * tab_s, 10.5, "middle", "Population");
+            bold(&mut d, x + tab_w * 0.75, ty0 + 25.0 * tab_s, 10.5, "middle", "size (N)");
             for (ri, (t, n)) in chunk.iter().map(|v| **v).enumerate() {
-                let y = ty0 + 30.0 + 15.0 + ri as f64 * 17.0;
+                let y = ty0 + 30.0 * tab_s + 15.0 * tab_s + ri as f64 * 17.0 * tab_s;
                 txt(&mut d, x + tab_w / 2.0 - 8.0, y, 11.5, "end", SANS, "", &fnum((t * 1000.0).round() / 1000.0));
                 txt(&mut d, x + tab_w - 8.0, y, 11.5, "end", SANS, "", &fnum(n.round()));
             }
@@ -1164,6 +1176,7 @@ pub fn pp_render(p: &Params) -> String {
         x_lo: p.s("x_lo_end").to_string(), x_hi: p.s("x_hi_end").to_string(),
         y_lo: p.s("y_lo_end").to_string(), y_hi: p.s("y_hi_end").to_string(),
         xt_mode: p.s("xtitle_style").to_string(), yt_mode: p.s("ytitle_style").to_string(),
+        label_scale: 1.0,
     };
     // y range helper: (from, to, step)
     let yrange = |vmax: f64| -> (f64, f64, f64) {
