@@ -1,0 +1,154 @@
+{
+ "figure": "roller-coaster",
+ "site": "physics",
+ "slug": "roller-coaster",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Build the track from two to eight points, evenly spaced",
+   "class": "core",
+   "evidence": "",
+   "note": "ours takes 2 to 6 points"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give each point a height from 0 to 100",
+   "class": "core",
+   "evidence": "changes:p1_height=60 + changes:p3_height=0",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Label each point with text such as A or KE = 0, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:p1_label=PE_g + changes:p1_label=- + changes:p1_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Mark each point's height with text such as 40 m or h, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:p1_height_label=h + changes:p1_height_label=- + changes:p1_height_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Put a loop at one point",
+   "class": "core",
+   "evidence": "changes:loop_at=2",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Set the loop's radius in the height units",
+   "class": "control",
+   "evidence": "changes:{\"loop_at\":2,\"loop_radius\":5.0}",
+   "note": "passes on loop_at alone; checked by hand that the radius changes the loop render"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Label the loop's radius",
+   "class": "control",
+   "evidence": "changes:{\"loop_at\":2,\"radius_label\":\"r\"}",
+   "note": "passes on loop_at alone; checked by hand that the label changes the loop render"
+  },
+  {
+   "id": "cap-04d",
+   "text": "Label the top of the loop",
+   "class": "control",
+   "evidence": "changes:{\"loop_at\":2,\"loop_top_label\":\"Top\"}",
+   "note": "passes on loop_at alone; checked by hand that the label changes the loop render"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Ride a cart, a ball or a block",
+   "class": "control",
+   "evidence": "changes:object=Ball + changes:object=Block",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label the object with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:object_label=M + changes:object_label=- + changes:object_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Set the object's size",
+   "class": "control",
+   "evidence": "changes:object_size=100",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Put the object at any point",
+   "class": "control",
+   "evidence": "changes:object_at=3",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Put the object at the top of the loop",
+   "class": "control",
+   "evidence": "changes:{\"loop_at\":2,\"object_on_loop\":true}",
+   "note": "passes on loop_at alone; checked by hand that the object moves to the loop top"
+  },
+  {
+   "id": "cap-06",
+   "text": "Draw the velocity forward or back along the track, dashed",
+   "class": "control",
+   "evidence": "changes:velocity=Forward + changes:velocity=Back",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Make the stretch from any point to the next rough, hatched",
+   "class": "control",
+   "evidence": "changes:p1_rough=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write a friction label on a rough stretch",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Mark a rough stretch's length with text such as d or 12 m",
+   "class": "control",
+   "evidence": "changes:{\"p1_rough\":true,\"p1_rough_label\":\"d\"}",
+   "note": "passes on p1_rough alone; checked by hand that the label changes the rough render"
+  },
+  {
+   "id": "cap-08a",
+   "text": "Turn the ground line on or off",
+   "class": "control",
+   "evidence": "changes:show_ground=false",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Mirror the track to run right to left",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Draw in color for slides, or black and white",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Leave the object off the track",
+   "class": "control",
+   "evidence": "changes:object=None",
+   "note": ""
+  }
+ ]
+}

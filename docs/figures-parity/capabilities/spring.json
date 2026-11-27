@@ -1,0 +1,147 @@
+{
+ "figure": "spring",
+ "site": "physics",
+ "slug": "spring",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Hang the spring from a ceiling, or lay it horizontal from a wall with the object on a floor",
+   "class": "core",
+   "evidence": "changes:orientation=Horizontal",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Show one spring, before and after, or three positions for simple harmonic motion",
+   "class": "core",
+   "evidence": "changes:picture=One spring + changes:picture=Three positions",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Use one spring, or two or three in series or in parallel",
+   "class": "core",
+   "evidence": "changes:arrangement=2 in series + changes:arrangement=3 in parallel",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Label every spring k, or number them k₁, k₂, k₃",
+   "class": "control",
+   "evidence": "",
+   "note": "one spring label is written on every spring; no numbering"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Stretch the spring, up to its natural length again",
+   "class": "core",
+   "evidence": "changes:extension=100",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Squash the spring by up to half its length, on a floor",
+   "class": "core",
+   "evidence": "changes:{\"orientation\":\"Horizontal\",\"extension\":-50.0}",
+   "note": "passes on orientation alone; checked by hand that -50% squashes the horizontal spring (a hanging spring is not drawn squashed)"
+  },
+  {
+   "id": "cap-04c",
+   "text": "In three positions, set the amplitude A",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"amplitude\":20.0}",
+   "note": "passes on picture alone; checked by hand that the amplitude changes the three-position render"
+  },
+  {
+   "id": "cap-05",
+   "text": "Draw the coils as a zigzag or as loops",
+   "class": "control",
+   "evidence": "changes:coil=Loops",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Hang a block, a ball or slotted masses",
+   "class": "control",
+   "evidence": "changes:shape=Ball + changes:shape=Slotted masses",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Label the object with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:object_label=2 kg + changes:object_label=- + changes:object_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Mark the extension as a dimension line",
+   "class": "control",
+   "evidence": "changes:show_extension=false",
+   "note": "on at the opening"
+  },
+  {
+   "id": "cap-07b",
+   "text": "Mark the natural length as a dimension line",
+   "class": "control",
+   "evidence": "changes:show_natural=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Draw a dashed equilibrium line",
+   "class": "control",
+   "evidence": "",
+   "note": "show_equilibrium works only in three positions; in the static pictures the dashed line marks the natural length and follows the extension mark"
+  },
+  {
+   "id": "cap-07d",
+   "text": "Draw an applied force pulling or pushing",
+   "class": "control",
+   "evidence": "changes:show_applied=true + changes:{\"orientation\":\"Horizontal\",\"extension\":-30.0,\"show_applied\":true}",
+   "note": "pulls on the stretched spring, pushes on the squashed one; checked by hand that the push renders differently from the horizontal pull"
+  },
+  {
+   "id": "cap-08a",
+   "text": "In three positions, draw the velocity at equilibrium and the acceleration at each end",
+   "class": "control",
+   "evidence": "changes:picture=Three positions + changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Velocity\"}",
+   "note": "both arrows are on at the opening setting; checked by hand that Velocity alone changes the three-position render"
+  },
+  {
+   "id": "cap-08b",
+   "text": "In three positions, choose which way the object is moving",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_direction\":\"Toward support\"}",
+   "note": "passes on picture alone; checked by hand that the direction changes the three-position render"
+  },
+  {
+   "id": "cap-09a",
+   "text": "Label the spring with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:spring_label=k₁ + changes:spring_label=- + changes:spring_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-09b",
+   "text": "Label the extension with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:extension_label=Δx + changes:extension_label=- + changes:extension_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-09c",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Hooke's law",
+   "note": ""
+  },
+  {
+   "id": "cap-09d",
+   "text": "Draw in color for slides, or black and white",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  }
+ ]
+}

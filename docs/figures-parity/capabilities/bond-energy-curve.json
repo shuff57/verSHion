@@ -1,0 +1,161 @@
+{
+ "figure": "bond-energy-curve",
+ "site": "chemistry",
+ "slug": "bond-energy-curve",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Plot up to three bonds on the same axes",
+   "class": "core",
+   "evidence": "changes:count=3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Give each bond a name of your own",
+   "class": "control",
+   "evidence": "changes:name1=H–Cl",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type each bond's length and bond energy",
+   "class": "core",
+   "evidence": "changes:length1=200 + changes:energy1=450",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Measure the lengths in pm, Å or nm",
+   "class": "control",
+   "evidence": "changes:length_unit=Å + changes:length_unit=nm",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Write the energies as kJ/mol or as kJ mol⁻¹",
+   "class": "control",
+   "evidence": "changes:energy_unit=kJ mol⁻¹",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw dashed guides from each minimum across to both axes",
+   "class": "control",
+   "evidence": "changes:guides=true",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Label the guides with their values, with the words Bond length and Bond energy, with blank lines, or not at all",
+   "class": "version",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Bond length and energy\"} + changes:{\"guides\":true,\"guide_labels\":\"Blank lines\"} + changes:{\"guides\":true,\"guide_labels\":\"None\"}",
+   "note": "Values is the default label. Each token passes on guides alone; checked by hand that each label choice renders differently from guides=true with values."
+  },
+  {
+   "id": "cap-03c",
+   "text": "Put a dot on the minimum of each curve",
+   "class": "control",
+   "evidence": "changes:dots=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Write Repulsion and Attraction on either side of one curve's minimum, as words or as blank lines",
+   "class": "version",
+   "evidence": "changes:regions=Words + changes:regions=Blank lines",
+   "note": "None is the opening."
+  },
+  {
+   "id": "cap-05",
+   "text": "Name the bonds in a key, or hide the names as Bond A, B and C",
+   "class": "version",
+   "evidence": "changes:hide_names=true",
+   "note": "The opening shows the names in a key."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Number the axes and fit them to the curves in one step",
+   "class": "control",
+   "evidence": "changes:length1=300",
+   "note": "Fit is on at the opening; the token moves the minimum and the axes refit (checked by hand that the same change with fit=false keeps the old axes)."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Draw shape-only axes, with only the zero marked on the energy axis",
+   "class": "control",
+   "evidence": "changes:axes=Shape only",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Draw the curves in color or in black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Give the chart a title as your own text, a blank line, or none",
+   "class": "control",
+   "evidence": "changes:title=Hydrogen halides + changes:{\"title\":\"Hydrogen halides\",\"title_style\":\"Blank line\"}",
+   "note": "The opening has no title (Text with an empty title), so None is the opening; checked by hand that Blank line renders differently from the typed title."
+  },
+  {
+   "id": "cap-07c",
+   "text": "Give each axis title as your own text, a blank line, or none",
+   "class": "control",
+   "evidence": "changes:xtitle=Distance between nuclei (pm) + changes:xtitle_mode=Blank line + changes:ytitle_mode=None",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Type each axis's range and count-by",
+   "class": "control",
+   "evidence": "changes:{\"fit\":false,\"x_to\":600.0,\"y_by\":25.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Number every line, every 2nd, 5th or 10th line, or no lines on each axis",
+   "class": "control",
+   "evidence": "changes:x_num=Every 2nd line + changes:y_num=No numbers",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Draw the gridlines light, standard or bold, or leave them off",
+   "class": "control",
+   "evidence": "",
+   "note": "ours turns gridlines on or off only (grid); no weights"
+  },
+  {
+   "id": "cap-07g",
+   "text": "Add minor gridlines, 2, 4 or 5 per block",
+   "class": "control",
+   "evidence": "",
+   "note": "no minor gridlines"
+  },
+  {
+   "id": "cap-07h",
+   "text": "Choose the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Write a label at the far end of each axis, as your own text or none",
+   "class": "control",
+   "evidence": "",
+   "note": "no axis end labels (the axis titles are cap-07c)"
+  },
+  {
+   "id": "cap-09",
+   "text": "Finish each end of each axis plainly or with an arrowhead",
+   "class": "control",
+   "evidence": "",
+   "note": "no end-cap control: shape-only axes always get arrowheads, numbered axes always plain ends"
+  }
+ ]
+}

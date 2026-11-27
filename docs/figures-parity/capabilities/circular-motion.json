@@ -1,0 +1,203 @@
+{
+ "figure": "circular-motion",
+ "site": "physics",
+ "slug": "circular-motion",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Draw the object going round, seen from above",
+   "class": "core",
+   "evidence": "changes:angle=120",
+   "note": "top view is the opening; the token redraws it with the object elsewhere on the circle"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw a vertical circle",
+   "class": "core",
+   "evidence": "changes:setup=Vertical circle",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Draw a conical pendulum",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "From above: put a string, a turntable or a road around the object",
+   "class": "control",
+   "evidence": "",
+   "note": "nothing around it only"
+  },
+  {
+   "id": "cap-02b",
+   "text": "From above: show the object at 1 to 8 positions",
+   "class": "control",
+   "evidence": "",
+   "note": "one position only"
+  },
+  {
+   "id": "cap-02c",
+   "text": "From above: choose where the first position is",
+   "class": "control",
+   "evidence": "changes:angle=120",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "From above: going clockwise or counterclockwise",
+   "class": "control",
+   "evidence": "",
+   "note": "direction turns only the vertical circle; the top view renders the same either way"
+  },
+  {
+   "id": "cap-03",
+   "text": "Add a second object halfway out on a turntable, with a velocity arrow half as long",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Vertical circle: a string, a loop, a hill or a dip",
+   "class": "control",
+   "evidence": "",
+   "note": "on a string only"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Vertical circle: the object at the top, the bottom, the side, or several of these",
+   "class": "control",
+   "evidence": "",
+   "note": "ours: top, bottom, or top and bottom; no side"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Conical pendulum: the string's angle from the vertical, 15° to 60°",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Conical pendulum: label the angle and the string's length",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Conical pendulum: the velocity into or out of the page",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Velocity arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": "always drawn, labelled v"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Centripetal acceleration arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": "always drawn, labelled a or a_c"
+  },
+  {
+   "id": "cap-06c",
+   "text": "Inward force arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Gravity arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": "always drawn on the vertical circle, labelled F_g"
+  },
+  {
+   "id": "cap-06e",
+   "text": "Tension arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": "always drawn on the vertical circle, labelled T"
+  },
+  {
+   "id": "cap-06f",
+   "text": "Normal force arrow on or off, with its own label",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Conical pendulum: show the tension's horizontal and vertical components",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Mark the radius or the diameter",
+   "class": "control",
+   "evidence": "",
+   "note": "the top view draws an unlabelled dashed radius to the object; no choice"
+  },
+  {
+   "id": "cap-08b",
+   "text": "Mark the angular speed ω",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "Mark the angle of the first position",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "Letter the positions A, B, C…",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09a",
+   "text": "Draw a block instead of a ball",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09b",
+   "text": "Label the object with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09c",
+   "text": "Write vectors with an arrow over each label, or in bold",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-09d",
+   "text": "Draw in color for slides, or black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  }
+ ]
+}

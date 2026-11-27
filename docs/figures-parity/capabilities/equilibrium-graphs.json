@@ -1,0 +1,154 @@
+{
+ "figure": "equilibrium-graphs",
+ "site": "chemistry",
+ "slug": "equilibrium-graph",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Pick one of six real reversible reactions",
+   "class": "core",
+   "evidence": "",
+   "note": "ours has no list of reactions: the teacher types the species, coefficients and phases (all six render correctly that way, ions included), and no reaction carries its own ΔH"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Use a made-up reaction A + B ⇌ C",
+   "class": "control",
+   "evidence": "changes:{\"name_a\":\"A\",\"name_b\":\"B\",\"name_c\":\"C\",\"coef_c\":1}",
+   "note": "typed into ours' general aA + bB ⇌ cC + dD"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Make the forward reaction exothermic or endothermic",
+   "class": "control",
+   "evidence": "",
+   "note": "ours types ΔH on each temperature stress, not on the reaction"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Type each species' starting concentration in mol/L, starting from reactants, products or a mixture",
+   "class": "core",
+   "evidence": "changes:init_c=0.5",
+   "note": "also drag handles on each starting concentration"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Type K",
+   "class": "core",
+   "evidence": "changes:k=5",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Set the time at which equilibrium is first reached",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Add or remove a species as a stress, at a time you type",
+   "class": "core",
+   "evidence": "changes:dist=Add a species + changes:dist=Remove a species + changes:{\"dist\":\"Add a species\",\"dist_time\":4.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Change the volume as a stress",
+   "class": "core",
+   "evidence": "changes:dist=Change the volume",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Raise or lower the temperature as a stress",
+   "class": "core",
+   "evidence": "changes:dist=Change the temperature + changes:{\"dist\":\"Change the temperature\",\"dist_t2\":250.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Apply up to three stresses on one graph",
+   "class": "control",
+   "evidence": "",
+   "note": "two stresses at most (dist, dist2)"
+  },
+  {
+   "id": "cap-04",
+   "text": "Write the page's own words over each stress line, your own words, or nothing",
+   "class": "control",
+   "evidence": "",
+   "note": "ours always writes its own words over the stress line"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write each line's formula beside it, or hide the formulas",
+   "class": "control",
+   "evidence": "",
+   "note": "ours always writes the formula and its value beside each line"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Draw the lines in color, or in black told apart as solid, dashed and dotted",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Give the chart a title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Give each axis title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Type each axis's range and count-by, with a button to fit them to the graph",
+   "class": "control",
+   "evidence": "",
+   "note": "axes are always fitted; no typed range"
+  },
+  {
+   "id": "cap-06d",
+   "text": "Number every line, every 2nd, 5th or 10th line, or no lines on each axis",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06e",
+   "text": "Add minor gridlines, 2, 4 or 5 per block",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06f",
+   "text": "Choose the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Write a label at the far end of each axis, as your own text or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Finish each end of each axis plainly or with an arrowhead",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

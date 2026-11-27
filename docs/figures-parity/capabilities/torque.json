@@ -1,0 +1,182 @@
+{
+ "figure": "torque",
+ "site": "physics",
+ "slug": "torque",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Hold the beam on a pivot anywhere along it",
+   "class": "core",
+   "evidence": "changes:pivot=0.3",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Hold the beam on two supports, A and B",
+   "class": "core",
+   "evidence": "changes:support=Two supports",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Hold the beam from a wall with a cable at 15° to 75° (a hanging sign)",
+   "class": "core",
+   "evidence": "changes:support=Wall + changes:{\"support\":\"Wall\",\"cable_angle\":60.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Hold the beam from a wall with no cable (a cantilever)",
+   "class": "core",
+   "evidence": "changes:{\"support\":\"Wall\",\"cable\":false}",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Set the beam's length, drawn to scale",
+   "class": "core",
+   "evidence": "changes:length=2.0",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Measure the beam in m or cm",
+   "class": "control",
+   "evidence": "changes:length_units=cm",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Give the beam its own weight or mass at its middle, or make it light",
+   "class": "core",
+   "evidence": "changes:beam_weight=5.0",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Put up to six loads on the beam",
+   "class": "core",
+   "evidence": "changes:n=6",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Draw each load as a block or a ball",
+   "class": "control",
+   "evidence": "changes:f1_shape=Ball",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Hang each load from the beam or rest it on top",
+   "class": "control",
+   "evidence": "changes:f1_kind=On beam",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Make a load a force arrow pointing down or up",
+   "class": "control",
+   "evidence": "changes:f1_kind=Force down + changes:f1_kind=Force up",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Place each load where you want along the beam",
+   "class": "core",
+   "evidence": "changes:f1_pos=0.1",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Give the loads in N, or as masses in kg or g",
+   "class": "control",
+   "evidence": "changes:load_units=kg + changes:load_units=g",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Use g = 9.8, 9.81 or 10 N/kg for masses",
+   "class": "control",
+   "evidence": "changes:{\"load_units\":\"kg\",\"gravity\":\"10\",\"show_answers\":true}",
+   "note": "passes on load_units alone; checked by hand that g = 10 changes the worked render"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Label each load with its value, your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:f1_label=m_1 + changes:f1_label=- + changes:f1_label=none",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label each distance with its value, your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:f1_arm=x + changes:f1_arm=- + changes:f1_arm=none",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Mark the distances from the pivot, support A or the wall",
+   "class": "control",
+   "evidence": "changes:show_arms=false",
+   "note": "on at the opening"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the beam's whole length",
+   "class": "control",
+   "evidence": "changes:show_length=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Draw a weight arrow down from every object",
+   "class": "control",
+   "evidence": "changes:show_weights=true",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Draw the forces holding the beam up",
+   "class": "control",
+   "evidence": "",
+   "note": "ours draws the support forces on the answer key only (show_reactions needs Show answers)"
+  },
+  {
+   "id": "cap-07a",
+   "text": "Work out the torques, support forces or cable tension step by step",
+   "class": "core",
+   "evidence": "changes:show_answers=true",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Balance the beam by solving for any one load",
+   "class": "control",
+   "evidence": "changes:balance=2",
+   "note": ""
+  },
+  {
+   "id": "cap-08a",
+   "text": "Mirror the figure so the wall is on the right",
+   "class": "control",
+   "evidence": "changes:mirror=true",
+   "note": ""
+  },
+  {
+   "id": "cap-08b",
+   "text": "Draw in color for slides, or black and white",
+   "class": "control",
+   "evidence": "changes:style=Colour",
+   "note": ""
+  },
+  {
+   "id": "cap-09",
+   "text": "Set each load's drawn size",
+   "class": "control",
+   "evidence": "changes:f1_size=1.5",
+   "note": "the page's 'Balanced with this value' button is already cap-07b"
+  }
+ ]
+}

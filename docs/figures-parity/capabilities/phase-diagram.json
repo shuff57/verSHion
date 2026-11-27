@@ -1,0 +1,161 @@
+{
+ "figure": "phase-diagram",
+ "site": "chemistry",
+ "slug": "phase-diagram",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Pick a real substance: water, carbon dioxide, nitrogen, oxygen, argon, methane or ammonia",
+   "class": "core",
+   "evidence": "",
+   "note": "ours has water and carbon dioxide (and a typical substance) only"
+  },
+  {
+   "id": "cap-01b",
+   "text": "Draw your own substance from its triple point, critical point and normal melting and boiling points",
+   "class": "core",
+   "evidence": "",
+   "note": "ours' custom substance takes the triple and critical points and the melting-curve slope; no normal melting or boiling point"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw it not to scale, with the key values written at the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "ours always draws numbered axes (log or linear); the triple and critical values are written under the figure"
+  },
+  {
+   "id": "cap-02b",
+   "text": "For your own substance, draw it to scale on numbered axes with gridlines",
+   "class": "control",
+   "evidence": "changes:{\"substance\":\"Custom\",\"tc\":500.0}",
+   "note": "ours draws every substance on numbered axes with gridlines"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Write temperatures in °C or K",
+   "class": "control",
+   "evidence": "changes:unit=Celsius (°C)",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Write pressures in atm or kPa",
+   "class": "control",
+   "evidence": "",
+   "note": "atm only"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Name the regions, letter them, leave blank lines, or leave them bare",
+   "class": "version",
+   "evidence": "",
+   "note": "ours: names, blank lines or none (lab_regions); no letters"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Name the triple and critical points, letter them, leave blank lines, or leave them bare",
+   "class": "version",
+   "evidence": "",
+   "note": "ours: names, blank lines or none (lab_special); no letters"
+  },
+  {
+   "id": "cap-04c",
+   "text": "Name the phase boundaries, letter them, leave blank lines, or leave them bare",
+   "class": "version",
+   "evidence": "",
+   "note": "ours: names, blank lines or none (lab_curves); no letters"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw dashed lines from the triple and critical points to the axes",
+   "class": "control",
+   "evidence": "",
+   "note": "ours always draws dotted lines from the critical point as the edges of the supercritical region; no switch, and none from the triple point to the pressure axis"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write the values, blank lines or nothing where those lines meet the axes",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Draw the 1 atm line",
+   "class": "control",
+   "evidence": "changes:isobar=false",
+   "note": "the opening draws the isobar at 1 atm; the token shows the switch is live"
+  },
+  {
+   "id": "cap-06b",
+   "text": "Mark the normal melting and boiling points (or the sublimation point) on it by temperature, name, letter or blank line",
+   "class": "version",
+   "evidence": "",
+   "note": "ours marks them with the words melts/boils and their temperatures at the axis, with no choice"
+  },
+  {
+   "id": "cap-07a",
+   "text": "Shade the supercritical fluid region",
+   "class": "control",
+   "evidence": "",
+   "note": "always drawn; no switch"
+  },
+  {
+   "id": "cap-07b",
+   "text": "Shuffle the letters",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Choose the curve's color",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Give the chart a title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Give each axis title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Type the axis ranges on the to-scale grid",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07g",
+   "text": "Choose which lines on each axis are numbered",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07h",
+   "text": "Choose the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Finish the top of the pressure axis and the end of the temperature axis plainly or with an arrowhead",
+   "class": "control",
+   "evidence": "",
+   "note": "ours draws plain axis ends; no control"
+  }
+ ]
+}

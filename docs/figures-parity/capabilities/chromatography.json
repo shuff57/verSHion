@@ -1,0 +1,84 @@
+{
+ "figure": "chromatography",
+ "site": "chemistry",
+ "slug": "chromatography",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Run up to six inks side by side",
+   "class": "core",
+   "evidence": "changes:n=6",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Name each ink",
+   "class": "control",
+   "evidence": "changes:ink1_name=Pen 1",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Give each ink up to five colored spots, picked from nine colors",
+   "class": "core",
+   "evidence": "changes:ink1_spots=black 7, blue 5.6, red 4, green 3, pink 1.5",
+   "note": "five spots per ink (take(5)); the nine dyes match the page's list"
+  },
+  {
+   "id": "cap-01d",
+   "text": "Set how far each spot traveled from the origin line",
+   "class": "core",
+   "evidence": "changes:ink2_spots=red 6.5",
+   "note": ""
+  },
+  {
+   "id": "cap-02",
+   "text": "Set how far the solvent front is above the origin line",
+   "class": "core",
+   "evidence": "changes:front=10",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Show the paper after the run only, or before and after side by side",
+   "class": "control",
+   "evidence": "changes:before=true",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Show the beaker of solvent with its glass rod, or the paper alone",
+   "class": "control",
+   "evidence": "changes:beaker=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05",
+   "text": "Mark the distance in cm from the origin line to each spot and to the solvent front",
+   "class": "control",
+   "evidence": "changes:measurements=true",
+   "note": "the front gets an arrow with its distance; each spot gets its distance in cm on a leader line rather than its own arrow"
+  },
+  {
+   "id": "cap-06",
+   "text": "Label the glass rod, paper, solvent front, pencil line, solvent and beaker",
+   "class": "control",
+   "evidence": "",
+   "note": "ours labels Rod, Solvent, Solvent front and Origin line only; no Paper or Beaker label"
+  },
+  {
+   "id": "cap-07a",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "changes:title=Black inks compared",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Print an answer key with each spot's Rf value",
+   "class": "version",
+   "evidence": "changes:show_answers=true",
+   "note": ""
+  }
+ ]
+}

@@ -1,0 +1,119 @@
+{
+ "figure": "vsepr-shapes",
+ "site": "chemistry",
+ "slug": "vsepr-shapes",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Type any formula with one central atom (main-group elements to period 5), molecule or polyatomic ion",
+   "class": "core",
+   "evidence": "",
+   "note": "ours picks from nine molecules; no ions"
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw the molecule wedge-and-dash instead of ball-and-stick",
+   "class": "control",
+   "evidence": "",
+   "note": "ball-and-stick only"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw the balls in color or in grayscale",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": "Print draws the balls black and white with patterns"
+  },
+  {
+   "id": "cap-02c",
+   "text": "Show or hide the atom symbols on the balls",
+   "class": "control",
+   "evidence": "changes:labels=false",
+   "note": ""
+  },
+  {
+   "id": "cap-03a",
+   "text": "Show the textbook view, or turn the model to any angle",
+   "class": "control",
+   "evidence": "changes:turn=40 + changes:tilt=20",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Turn the model by dragging it",
+   "class": "interaction",
+   "evidence": "",
+   "note": "no handles; turned by typed angles only"
+  },
+  {
+   "id": "cap-04a",
+   "text": "Draw the central atom's lone pairs as lobes, as dots, or hide them",
+   "class": "control",
+   "evidence": "",
+   "note": "ours shows them as dots or hides them (lone); no lobes"
+  },
+  {
+   "id": "cap-04b",
+   "text": "Show the lone pairs on the outer atoms",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write the shape's name",
+   "class": "control",
+   "evidence": "",
+   "note": "written in the answer panel with everything else; no switch for it alone"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Write the electron geometry",
+   "class": "control",
+   "evidence": "",
+   "note": "written in the answer panel as Domain geometry; no switch for it alone"
+  },
+  {
+   "id": "cap-05c",
+   "text": "Write the AXE notation",
+   "class": "control",
+   "evidence": "",
+   "note": "always written beside the molecule (AX4); no switch"
+  },
+  {
+   "id": "cap-05d",
+   "text": "Mark the bond angles",
+   "class": "control",
+   "evidence": "changes:angles=false",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Write your own text on the angle labels",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Ask students to name the shape, with the labels left blank",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Print an answer key",
+   "class": "version",
+   "evidence": "changes:show_answers=false",
+   "note": "the opening is the key copy; the token shows the student copy is a separate render"
+  }
+ ]
+}

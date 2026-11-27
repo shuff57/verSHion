@@ -1,11 +1,46 @@
 # Figures parity score
 
-Generated: 2026-11-21T17:30:07+00:00 · probe: 2026-11-21T09:30:07
+Generated: 2026-11-27T22:06:19+00:00 · probe: 2026-11-27T14:06:19
 
-**Pooled 97.0** · mean 97.0 over 77 figures · built 78 of 78 reference figures
+**Pooled 92.7** · mean 91.9 over 91 figures · built 92 of 94 reference figures (missing: math/composite-3d-shape, physics/electric-and-magnetic-fields)
 
 Comparable with the frozen baseline: **yes**
 
+- `cladogram`: 14 (5/37)
+  - cap-02a [core 5] Mark a trait as a tick on the branch leading into each clade — no evidence
+  - cap-02b [control 3] Mark one trait on the root, shared by every taxon — no evidence
+  - cap-03 [control 3] Start from a ready-made tree: vertebrates, land plants, apes, or taxa A to F with numbered traits — no evidence
+  - cap-04 [control 3] Draw the branches diagonally with the taxa along the top, instead of rectangular with the taxa down the right — no evidence
+  - cap-05a [version 3] Write the taxon names, or leave blank lines for them — no evidence
+  - cap-05b [version 3] Leave any one taxon's name blank — no evidence
+- `phase-diagram`: 17 (12/70)
+  - cap-01a [core 5] Pick a real substance: water, carbon dioxide, nitrogen, oxygen, argon, methane or ammonia — no evidence
+  - cap-01b [core 5] Draw your own substance from its triple point, critical point and normal melting and boiling points — no evidence
+  - cap-02a [control 3] Draw it not to scale, with the key values written at the axes — no evidence
+  - cap-03b [control 3] Write pressures in atm or kPa — no evidence
+  - cap-04a [version 3] Name the regions, letter them, leave blank lines, or leave them bare — no evidence
+  - cap-04b [version 3] Name the triple and critical points, letter them, leave blank lines, or leave them bare — no evidence
+- `circular-motion`: 17 (16/92)
+  - cap-01c [core 5] Draw a conical pendulum — no evidence
+  - cap-05a [core 5] Conical pendulum: the string's angle from the vertical, 15° to 60° — no evidence
+  - cap-02a [control 3] From above: put a string, a turntable or a road around the object — no evidence
+  - cap-02b [control 3] From above: show the object at 1 to 8 positions — no evidence
+  - cap-02d [control 3] From above: going clockwise or counterclockwise — no evidence
+  - cap-03 [control 3] Add a second object halfway out on a turntable, with a velocity arrow half as long — no evidence
+- `reaction-rate-graph`: 27 (19/71)
+  - cap-02a [core 5] Draw [A], ln[A] and 1/[A] against time side by side — no evidence
+  - cap-02b [core 5] Draw any one of [A], ln[A] or 1/[A] against time on its own — no evidence
+  - cap-03a [core 5] Draw the curve, 5 to 10 data points, or both — no evidence
+  - cap-01c [control 3] Keep the first half-life the same when the order changes — no evidence
+  - cap-03b [control 3] Scatter the data points by about 1, 2 or 5%, or not at all — no evidence
+  - cap-03c [control 3] Draw a fresh set of scattered data — no evidence
+- `vsepr-shapes`: 37 (18/49)
+  - cap-01 [core 5] Type any formula with one central atom (main-group elements to period 5), molecule or polyatomic ion — no evidence
+  - cap-02a [control 3] Draw the molecule wedge-and-dash instead of ball-and-stick — no evidence
+  - cap-04a [control 3] Draw the central atom's lone pairs as lobes, as dots, or hide them — no evidence
+  - cap-04b [control 3] Show the lone pairs on the outer atoms — no evidence
+  - cap-05a [control 3] Write the shape's name — no evidence
+  - cap-05b [control 3] Write the electron geometry — no evidence
 - `scatterplot`: 37 (28/76)
   - cap-01b [control 3] Type the points into a two-column x / y table — no evidence
   - cap-01d [control 3] Write the points as (3, 72), (5, 80) — no evidence
@@ -27,6 +62,13 @@ Comparable with the frozen baseline: **yes**
   - cap-02c [version 3] Put blank lines under the ticks for students to fill in — no evidence
   - cap-02d [control 3] Leave the ticks unnumbered — no evidence
   - cap-02e [control 3] Add a second row of numbers under the first — no evidence
+- `equilibrium-graphs`: 45 (34/75)
+  - cap-01a [core 5] Pick one of six real reversible reactions — no evidence
+  - cap-01c [control 3] Make the forward reaction exothermic or endothermic — no evidence
+  - cap-02c [control 3] Set the time at which equilibrium is first reached — no evidence
+  - cap-03d [control 3] Apply up to three stresses on one graph — no evidence
+  - cap-04 [control 3] Write the page's own words over each stress line, your own words, or nothing — no evidence
+  - cap-05a [control 3] Write each line's formula beside it, or hide the formulas — no evidence
 - `probability-tree`: 53 (40/75)
   - cap-01c [control 3] Add a fourth stage — no evidence
   - cap-01d [control 3] Give a stage six outcomes (a die roll), up to 36 paths in all — no evidence
@@ -34,6 +76,25 @@ Comparable with the frozen baseline: **yes**
   - cap-02e [version 3] Leave a single probability empty for students to fill in — no evidence
   - cap-03b [control 3] Write path names run together (HT) — no evidence
   - cap-03d [control 3] Multiply fraction branches out to a fraction in lowest terms — no evidence
+- `bond-energy-curve`: 83 (58/70)
+  - cap-07f [control 3] Draw the gridlines light, standard or bold, or leave them off — no evidence
+  - cap-07g [control 3] Add minor gridlines, 2, 4 or 5 per block — no evidence
+  - cap-08 [control 3] Write a label at the far end of each axis, as your own text or none — no evidence
+  - cap-09 [control 3] Finish each end of each axis plainly or with an arrowhead — no evidence
+- `roller-coaster`: 88 (61/69)
+  - cap-01a [core 5] Build the track from two to eight points, evenly spaced — no evidence
+  - cap-07b [control 3] Write a friction label on a rough stretch — no evidence
+- `electrochemical-cells`: 88 (23/26)
+  - cap-06 [control 3] Type your own E°cell instead of the value from the table — no evidence
+- `spring`: 91 (64/70)
+  - cap-03b [control 3] Label every spring k, or number them k₁, k₂, k₃ — no evidence
+  - cap-07c [control 3] Draw a dashed equilibrium line — no evidence
+- `chromatography`: 93 (38/41)
+  - cap-06 [control 3] Label the glass rod, paper, solvent front, pencil line, solvent and beaker — no evidence
+- `pendulum`: 93 (42/45)
+  - cap-04 [control 3] Letter the swing's three positions A, B and C, each letter editable — no evidence
+- `torque`: 97 (90/93)
+  - cap-06d [control 3] Draw the forces holding the beam up — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `transformations`: 98 (120/122)
@@ -61,6 +122,7 @@ Comparable with the frozen baseline: **yes**
 - `inclined-plane`: 100 (91/91)
 - `kite`: 100 (83/83)
 - `length-reading`: 100 (78/78)
+- `lever`: 100 (65/65)
 - `lewis-structures`: 100 (51/51)
 - `line-spectrum`: 100 (54/54)
 - `mapping-diagram`: 100 (36/36)

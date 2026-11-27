@@ -1,0 +1,154 @@
+{
+ "figure": "reaction-rate-graph",
+ "site": "chemistry",
+ "slug": "rate-law-graphs",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Choose a zero-, first- or second-order reaction",
+   "class": "core",
+   "evidence": "changes:order=Zero + changes:order=Second",
+   "note": ""
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type the starting concentration [A]₀ and the rate constant k",
+   "class": "core",
+   "evidence": "changes:a0=2 + changes:k=0.05",
+   "note": "also drag handles on [A]₀ and the first half-life"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Keep the first half-life the same when the order changes",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Draw [A], ln[A] and 1/[A] against time side by side",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02b",
+   "text": "Draw any one of [A], ln[A] or 1/[A] against time on its own",
+   "class": "core",
+   "evidence": "",
+   "note": "ours draws [A], or the one straight-line plot for the chosen order (ln[A] for first, 1/[A] for second), not any of the three"
+  },
+  {
+   "id": "cap-03a",
+   "text": "Draw the curve, 5 to 10 data points, or both",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Scatter the data points by about 1, 2 or 5%, or not at all",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Draw a fresh set of scattered data",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Put a data table under the graphs: time and [A], or with ln[A] and 1/[A] too",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04b",
+   "text": "Copy the data for a spreadsheet",
+   "class": "output",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Draw dashed guides at the first 1, 2 or 3 half-lives on the [A] graph",
+   "class": "control",
+   "evidence": "",
+   "note": "ours turns half-life markers on or off; always three"
+  },
+  {
+   "id": "cap-05b",
+   "text": "Label the half-life guides with their times, as half-lives, with blank lines, or not at all",
+   "class": "version",
+   "evidence": "",
+   "note": "ours always writes both the times and [A]₀/2, [A]₀/4…"
+  },
+  {
+   "id": "cap-06a",
+   "text": "Name the reactant, by name or formula",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06b",
+   "text": "Write concentrations in M, mol/L or mol dm⁻³",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Measure time in seconds, minutes or hours",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Number the axes, or draw sketch graphs without numbers",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Turn the gridlines on or off",
+   "class": "control",
+   "evidence": "changes:grid=false",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Draw in color or in black and white",
+   "class": "control",
+   "evidence": "changes:style=Print",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "Give the chart a title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07e",
+   "text": "Give each axis title as text, a blank line, or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07f",
+   "text": "Choose the label size",
+   "class": "control",
+   "evidence": "changes:label_size=Large",
+   "note": ""
+  }
+ ]
+}

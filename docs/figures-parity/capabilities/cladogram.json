@@ -1,0 +1,84 @@
+{
+ "figure": "cladogram",
+ "site": "biology",
+ "slug": "cladogram",
+ "capabilities": [
+  {
+   "id": "cap-01",
+   "text": "Build a tree of 2 to 16 taxa in clades nested inside clades, in any order",
+   "class": "core",
+   "evidence": "changes:tree=((((Lamprey, Shark), Perch), Frog), Lizard)",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Mark a trait as a tick on the branch leading into each clade",
+   "class": "core",
+   "evidence": "",
+   "note": "ours writes a name at an ancestor node (a name after a bracket), not a tick on the branch"
+  },
+  {
+   "id": "cap-02b",
+   "text": "Mark one trait on the root, shared by every taxon",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03",
+   "text": "Start from a ready-made tree: vertebrates, land plants, apes, or taxa A to F with numbered traits",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04",
+   "text": "Draw the branches diagonally with the taxa along the top, instead of rectangular with the taxa down the right",
+   "class": "control",
+   "evidence": "",
+   "note": "ours' slanted shape keeps the taxa down the right side"
+  },
+  {
+   "id": "cap-05a",
+   "text": "Write the taxon names, or leave blank lines for them",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05b",
+   "text": "Leave any one taxon's name blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06",
+   "text": "Write the traits, leave numbered blank lines, draw ticks alone, or leave them off",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Number the nodes",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07b",
+   "text": "Write a chart title",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Print an answer key line",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}
