@@ -1108,7 +1108,10 @@ impl App {
                     for s in Sort::all() {
                         ui.selectable_value(&mut sort_val, s, s.label());
                     }
-                });
+                })
+                .response
+                // named for screen readers (egui 0.37 requires every widget to have a name)
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Sort questions"));
             if sort_val != st.sort {
                 with_state(ctx, key, |s: &mut BankEditState| s.sort = sort_val);
             }
@@ -1126,7 +1129,9 @@ impl App {
                     for d in [Difficulty::Low, Difficulty::Medium, Difficulty::High] {
                         ui.selectable_value(&mut diff_val, Some(d), diff_label(d));
                     }
-                });
+                })
+                .response
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, "Filter by difficulty"));
             if diff_val != st.diff {
                 with_state(ctx, key, |s: &mut BankEditState| s.diff = diff_val);
             }
