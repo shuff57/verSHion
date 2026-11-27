@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-21T00:41:48+00:00",
-  "src_mtime": 1795220559.448488,
-  "git": "70ccc10+dirty",
-  "figures": 198
+  "built_at": "2026-11-25T07:55:18+00:00",
+  "src_mtime": 1795592445.096514,
+  "git": "4aeda3b",
+  "figures": 213
  },
  "figures": {
   "free-body-diagram": {
@@ -5121,6 +5121,1469 @@
    "label_drag": false,
    "show_answers": true,
    "style": false,
+   "label_size": true
+  },
+  "lever": {
+   "id": "lever",
+   "title": "Lever",
+   "blurb": "Draw an ideal lever with an effort, a load, and a fulcrum. Print a solution for the effort and mechanical advantage.",
+   "params": [
+    {
+     "key": "class",
+     "label": "Lever class",
+     "kind": "choice",
+     "options": [
+      "Class 1",
+      "Class 2",
+      "Class 3"
+     ],
+     "default": "Class 1"
+    },
+    {
+     "key": "effort_arm",
+     "label": "Effort arm",
+     "kind": "float",
+     "options": [],
+     "default": "1.5"
+    },
+    {
+     "key": "load_arm",
+     "label": "Load arm",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "length_units",
+     "label": "Arm units",
+     "kind": "choice",
+     "options": [
+      "m",
+      "cm",
+      "in",
+      "ft"
+     ],
+     "default": "m"
+    },
+    {
+     "key": "load",
+     "label": "Load",
+     "kind": "float",
+     "options": [],
+     "default": "300.0"
+    },
+    {
+     "key": "load_units",
+     "label": "Load units",
+     "kind": "choice",
+     "options": [
+      "N",
+      "lbf",
+      "kg",
+      "g"
+     ],
+     "default": "N"
+    },
+    {
+     "key": "load_shape",
+     "label": "Show load as",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Force arrow"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "show_arms",
+     "label": "Show arm lengths",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "effort_arm_label",
+     "label": "Effort arm label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "load_arm_label",
+     "label": "Load arm label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "load_label",
+     "label": "Load value label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "effort_label",
+     "label": "Effort value label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "load_name",
+     "label": "Load name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "effort_name",
+     "label": "Effort name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "fulcrum_name",
+     "label": "Fulcrum name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "mirror",
+     "label": "Mirror diagram",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Print"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "pendulum": {
+   "id": "pendulum",
+   "title": "Pendulum",
+   "blurb": "Show a bob at release or at three points in its swing, with height, angle, velocity, or release forces.",
+   "params": [
+    {
+     "key": "picture",
+     "label": "Positions",
+     "kind": "choice",
+     "options": [
+      "Swing",
+      "One bob"
+     ],
+     "default": "Swing"
+    },
+    {
+     "key": "angle",
+     "label": "Release angle from vertical (°)",
+     "kind": "float",
+     "options": [],
+     "default": "30.0"
+    },
+    {
+     "key": "side",
+     "label": "Release side",
+     "kind": "choice",
+     "options": [
+      "Left",
+      "Right"
+     ],
+     "default": "Right"
+    },
+    {
+     "key": "show_path",
+     "label": "Dashed swing path",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_angle",
+     "label": "Mark angle",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "angle_label",
+     "label": "Angle label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "length_label",
+     "label": "String length label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_height",
+     "label": "Mark height above lowest point",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_letters",
+     "label": "Name positions A, B, C",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_velocity",
+     "label": "Velocity at the lowest point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "forces",
+     "label": "Release forces (one bob)",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Weight and tension",
+      "Components"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "velocity_label",
+     "label": "Velocity label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "weight_label",
+     "label": "Weight label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "tension_label",
+     "label": "Tension label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "radial_label",
+     "label": "Component along the string",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "tangent_label",
+     "label": "Component along the path",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "bob_label",
+     "label": "Bob label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Print"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": true,
+   "label_size": true
+  },
+  "roller-coaster": {
+   "id": "roller-coaster",
+   "title": "Roller Coaster",
+   "blurb": "Draw an energy problem with high and low points, an optional vertical loop, and rough stretches.",
+   "params": [
+    {
+     "key": "n",
+     "label": "Track points",
+     "kind": "int",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "units",
+     "label": "Height and radius units",
+     "kind": "choice",
+     "options": [
+      "m",
+      "cm",
+      "ft"
+     ],
+     "default": "m"
+    },
+    {
+     "key": "p1_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "40.0"
+    },
+    {
+     "key": "p1_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p1_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p1_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p1_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p2_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "p2_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p2_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p2_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p2_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "25.0"
+    },
+    {
+     "key": "p3_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p3_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "5.0"
+    },
+    {
+     "key": "p4_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p4_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "15.0"
+    },
+    {
+     "key": "p5_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p5_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_height",
+     "label": "Height",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "p6_label",
+     "label": "Point label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_height_label",
+     "label": "Height label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_rough",
+     "label": "Rough track to the next point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "p6_rough_label",
+     "label": "Horizontal distance label for rough track",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "loop_at",
+     "label": "Loop at point (0 for no loop)",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "loop_radius",
+     "label": "Loop radius",
+     "kind": "float",
+     "options": [],
+     "default": "8.0"
+    },
+    {
+     "key": "radius_label",
+     "label": "Loop radius label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "loop_top_label",
+     "label": "Label above the loop",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "object_on_loop",
+     "label": "Object upside down at top of loop",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "object",
+     "label": "Object",
+     "kind": "choice",
+     "options": [
+      "Cart",
+      "Ball",
+      "Block",
+      "None"
+     ],
+     "default": "Cart"
+    },
+    {
+     "key": "object_at",
+     "label": "Object at point",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "object_label",
+     "label": "Object label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "object_size",
+     "label": "Object size (%)",
+     "kind": "float",
+     "options": [],
+     "default": "60.0"
+    },
+    {
+     "key": "velocity",
+     "label": "Velocity direction",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Forward",
+      "Back"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "show_ground",
+     "label": "Ground line",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "mirror",
+     "label": "Mirror diagram",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Print"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": true,
+   "label_size": true
+  },
+  "spring": {
+   "id": "spring",
+   "title": "Spring",
+   "blurb": "Compare natural length, extension, compression, and oscillation for a spring or an arrangement of springs.",
+   "params": [
+    {
+     "key": "orientation",
+     "label": "Orientation",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "Horizontal"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "picture",
+     "label": "Positions",
+     "kind": "choice",
+     "options": [
+      "One spring",
+      "Before and after",
+      "Three positions"
+     ],
+     "default": "Before and after"
+    },
+    {
+     "key": "arrangement",
+     "label": "Springs",
+     "kind": "choice",
+     "options": [
+      "1",
+      "2 in series",
+      "2 in parallel",
+      "3 in series",
+      "3 in parallel"
+     ],
+     "default": "1"
+    },
+    {
+     "key": "extension",
+     "label": "Change in length (%)",
+     "kind": "float",
+     "options": [],
+     "default": "40.0"
+    },
+    {
+     "key": "amplitude",
+     "label": "Amplitude (% of natural length)",
+     "kind": "float",
+     "options": [],
+     "default": "40.0"
+    },
+    {
+     "key": "coil",
+     "label": "Coil",
+     "kind": "choice",
+     "options": [
+      "Zigzag",
+      "Loops"
+     ],
+     "default": "Zigzag"
+    },
+    {
+     "key": "shape",
+     "label": "Object",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Slotted masses",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "masses",
+     "label": "Number of slotted masses",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "object_label",
+     "label": "Object label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "spring_label",
+     "label": "Spring label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_extension",
+     "label": "Mark extension or compression",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "extension_label",
+     "label": "Extension label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_natural",
+     "label": "Mark natural length",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_equilibrium",
+     "label": "Draw equilibrium guide",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_applied",
+     "label": "Draw applied force (static)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "motion_arrows",
+     "label": "Motion arrows",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Velocity",
+      "Acceleration",
+      "Both"
+     ],
+     "default": "Both"
+    },
+    {
+     "key": "motion_direction",
+     "label": "Motion at equilibrium",
+     "kind": "choice",
+     "options": [
+      "Away from support",
+      "Toward support"
+     ],
+     "default": "Away from support"
+    },
+    {
+     "key": "velocity_label",
+     "label": "Velocity label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "acceleration_label",
+     "label": "Acceleration label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Print"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": true,
+   "label_size": true
+  },
+  "torque": {
+   "id": "torque",
+   "title": "Torque",
+   "blurb": "Draw a loaded beam and find its signed moments, support reactions, or cable tension.",
+   "params": [
+    {
+     "key": "support",
+     "label": "Support",
+     "kind": "choice",
+     "options": [
+      "Pivot",
+      "Two supports",
+      "Wall"
+     ],
+     "default": "Pivot"
+    },
+    {
+     "key": "length",
+     "label": "Beam length",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "length_units",
+     "label": "Distance units",
+     "kind": "choice",
+     "options": [
+      "m",
+      "cm"
+     ],
+     "default": "m"
+    },
+    {
+     "key": "pivot",
+     "label": "Pivot from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "support_a",
+     "label": "First support from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.1"
+    },
+    {
+     "key": "support_b",
+     "label": "Second support from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "cable",
+     "label": "Wall support has a cable",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "cable_at",
+     "label": "Cable attachment along the beam",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "cable_angle",
+     "label": "Cable angle above the beam (°)",
+     "kind": "float",
+     "options": [],
+     "default": "30.0"
+    },
+    {
+     "key": "cable_angle_label",
+     "label": "Cable angle label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "beam_weight",
+     "label": "Beam weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "load_units",
+     "label": "Load units",
+     "kind": "choice",
+     "options": [
+      "N",
+      "kg",
+      "g"
+     ],
+     "default": "N"
+    },
+    {
+     "key": "gravity",
+     "label": "Gravity (N/kg)",
+     "kind": "choice",
+     "options": [
+      "9.8",
+      "9.81",
+      "10"
+     ],
+     "default": "9.8"
+    },
+    {
+     "key": "n",
+     "label": "Number of loads",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "balance",
+     "label": "Solve for load (0 uses all given loads)",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "f1_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.3"
+    },
+    {
+     "key": "f1_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "6.0"
+    },
+    {
+     "key": "f1_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f1_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f1_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f1_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f1_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f2_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "f2_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "f2_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f2_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f2_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f2_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f2_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f3_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "f3_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "f3_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f3_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f3_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f3_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f3_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f4_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "f4_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "f4_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f4_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f4_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f4_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f4_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f5_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "f5_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "f5_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f5_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f5_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f5_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f5_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f6_pos",
+     "label": "Position from the left end",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "f6_value",
+     "label": "Weight or mass",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "f6_kind",
+     "label": "Draw as",
+     "kind": "choice",
+     "options": [
+      "Hanging",
+      "On beam",
+      "Force down",
+      "Force up"
+     ],
+     "default": "Hanging"
+    },
+    {
+     "key": "f6_shape",
+     "label": "Object shape",
+     "kind": "choice",
+     "options": [
+      "Block",
+      "Ball"
+     ],
+     "default": "Block"
+    },
+    {
+     "key": "f6_size",
+     "label": "Object size",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "f6_label",
+     "label": "Load label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f6_arm",
+     "label": "Distance label",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_arms",
+     "label": "Show distances from support",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "show_length",
+     "label": "Show whole beam length",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_weights",
+     "label": "Draw weight arrows",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_reactions",
+     "label": "Draw support forces on key",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "mirror",
+     "label": "Mirror diagram",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Print"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
    "label_size": true
   },
   "rc-curve": {
@@ -16428,6 +17891,328 @@
    "style": true,
    "label_size": true
   },
+  "bond-energy-curve": {
+   "id": "bond-energy-curve",
+   "title": "Bond Energy Curve",
+   "blurb": "Plot potential energy against internuclear distance for up to three bonds. Mark the minima to teach bond length and dissociation energy.",
+   "params": [
+    {
+     "key": "count",
+     "label": "Bonds shown",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "length_unit",
+     "label": "Lengths in",
+     "kind": "choice",
+     "options": [
+      "pm",
+      "Å",
+      "nm"
+     ],
+     "default": "pm"
+    },
+    {
+     "key": "energy_unit",
+     "label": "Energies in",
+     "kind": "choice",
+     "options": [
+      "kJ/mol",
+      "kJ mol⁻¹"
+     ],
+     "default": "kJ/mol"
+    },
+    {
+     "key": "name1",
+     "label": "Bond 1 name",
+     "kind": "text",
+     "options": [],
+     "default": "Bond X"
+    },
+    {
+     "key": "length1",
+     "label": "Bond length (pm)",
+     "kind": "float",
+     "options": [],
+     "default": "150.0"
+    },
+    {
+     "key": "energy1",
+     "label": "Bond energy (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "300.0"
+    },
+    {
+     "key": "name2",
+     "label": "Bond 2 name",
+     "kind": "text",
+     "options": [],
+     "default": "Bond Y"
+    },
+    {
+     "key": "length2",
+     "label": "Bond length (pm)",
+     "kind": "float",
+     "options": [],
+     "default": "180.0"
+    },
+    {
+     "key": "energy2",
+     "label": "Bond energy (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "200.0"
+    },
+    {
+     "key": "name3",
+     "label": "Bond 3 name",
+     "kind": "text",
+     "options": [],
+     "default": "Bond Z"
+    },
+    {
+     "key": "length3",
+     "label": "Bond length (pm)",
+     "kind": "float",
+     "options": [],
+     "default": "120.0"
+    },
+    {
+     "key": "energy3",
+     "label": "Bond energy (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "400.0"
+    },
+    {
+     "key": "fit",
+     "label": "Fit the axes to the curves",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "axes",
+     "label": "Axes",
+     "kind": "choice",
+     "options": [
+      "Numbered",
+      "Shape only"
+     ],
+     "default": "Numbered"
+    },
+    {
+     "key": "x_from",
+     "label": "x-axis start",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "x_to",
+     "label": "x-axis end",
+     "kind": "float",
+     "options": [],
+     "default": "450.0"
+    },
+    {
+     "key": "x_by",
+     "label": "x-axis step",
+     "kind": "float",
+     "options": [],
+     "default": "50.0"
+    },
+    {
+     "key": "x_num",
+     "label": "Number the x-axis",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
+     "key": "y_from",
+     "label": "y-axis start (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "-350.0"
+    },
+    {
+     "key": "y_to",
+     "label": "y-axis end (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "100.0"
+    },
+    {
+     "key": "y_by",
+     "label": "y-axis step (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "50.0"
+    },
+    {
+     "key": "y_num",
+     "label": "Number the y-axis",
+     "kind": "choice",
+     "options": [
+      "Every line",
+      "Every 2nd line",
+      "Every 5th line",
+      "Every 10th line",
+      "No numbers"
+     ],
+     "default": "Every line"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "guides",
+     "label": "Guide lines from minima to axes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "guide_labels",
+     "label": "Guide labels",
+     "kind": "choice",
+     "options": [
+      "Values",
+      "Bond length and energy",
+      "Blank lines",
+      "None"
+     ],
+     "default": "Values"
+    },
+    {
+     "key": "dots",
+     "label": "Dots at the minima",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "hide_names",
+     "label": "Hide bond names",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "regions",
+     "label": "Repulsion and attraction",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Words",
+      "Blank lines"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title_style",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Chart title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xtitle_mode",
+     "label": "x-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "xtitle",
+     "label": "x-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "ytitle_mode",
+     "label": "y-axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "ytitle",
+     "label": "y-axis title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "answer",
+     "label": "Answer key",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": true,
+   "label_size": true
+  },
   "reaction-rate-graph": {
    "id": "reaction-rate-graph",
    "title": "Reaction Rate Graph",
@@ -17606,7 +19391,7 @@
     },
     {
      "key": "dist",
-     "label": "Disturbance",
+     "label": "First disturbance",
      "kind": "choice",
      "options": [
       "None",
@@ -17616,6 +19401,13 @@
       "Change the temperature"
      ],
      "default": "None"
+    },
+    {
+     "key": "dist_time",
+     "label": "Time (arbitrary units)",
+     "kind": "float",
+     "options": [],
+     "default": "8.0"
     },
     {
      "key": "dist_species",
@@ -17665,11 +19457,71 @@
      "default": "350.0"
     },
     {
-     "key": "dist_time",
-     "label": "Disturbance at t",
+     "key": "dist2",
+     "label": "Second disturbance",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Add a species",
+      "Remove a species",
+      "Change the volume",
+      "Change the temperature"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "dist2_time",
+     "label": "Time (arbitrary units)",
      "kind": "float",
      "options": [],
-     "default": "8.0"
+     "default": "16.0"
+    },
+    {
+     "key": "dist2_species",
+     "label": "Species added or removed",
+     "kind": "choice",
+     "options": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ],
+     "default": "A"
+    },
+    {
+     "key": "dist2_amount",
+     "label": "Amount added or removed (M)",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "dist2_factor",
+     "label": "Volume changes by a factor of",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
+     "key": "dist2_dh",
+     "label": "Enthalpy change ΔH (kJ/mol)",
+     "kind": "float",
+     "options": [],
+     "default": "-50.0"
+    },
+    {
+     "key": "dist2_t1",
+     "label": "Temperature before (K)",
+     "kind": "float",
+     "options": [],
+     "default": "298.0"
+    },
+    {
+     "key": "dist2_t2",
+     "label": "Temperature after (K)",
+     "kind": "float",
+     "options": [],
+     "default": "350.0"
     },
     {
      "key": "sig",
@@ -18317,6 +20169,316 @@
    "style": true,
    "label_size": true
   },
+  "chromatography": {
+   "id": "chromatography",
+   "title": "Chromatography",
+   "blurb": "Draw paper chromatograms from ink and solvent travel distances.",
+   "params": [
+    {
+     "key": "n",
+     "label": "Number of inks",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "front",
+     "label": "Solvent front above the origin (cm)",
+     "kind": "float",
+     "options": [],
+     "default": "8.0"
+    },
+    {
+     "key": "ink1_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "A"
+    },
+    {
+     "key": "ink1_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "blue 5.6, yellow 2.4"
+    },
+    {
+     "key": "ink2_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "B"
+    },
+    {
+     "key": "ink2_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "red 4.4"
+    },
+    {
+     "key": "ink3_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "C"
+    },
+    {
+     "key": "ink3_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "blue 5.6, red 4.4, yellow 2.4"
+    },
+    {
+     "key": "ink4_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "D"
+    },
+    {
+     "key": "ink4_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "green 4"
+    },
+    {
+     "key": "ink5_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "E"
+    },
+    {
+     "key": "ink5_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "purple 4"
+    },
+    {
+     "key": "ink6_name",
+     "label": "Ink name",
+     "kind": "text",
+     "options": [],
+     "default": "F"
+    },
+    {
+     "key": "ink6_spots",
+     "label": "Dye and distance (cm)",
+     "kind": "text",
+     "options": [],
+     "default": "orange 4"
+    },
+    {
+     "key": "before",
+     "label": "Include paper before development",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "beaker",
+     "label": "Show beaker and hanging rod",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "measurements",
+     "label": "Show travel distances",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "parts",
+     "label": "Label apparatus and guide lines",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title_style",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": false
+  },
+  "electrochemical-cells": {
+   "id": "electrochemical-cells",
+   "title": "Electrochemical Cells",
+   "blurb": "Build galvanic cells and explore standard cell voltage, electron flow and redox reactions.",
+   "params": [
+    {
+     "key": "left",
+     "label": "Left electrode",
+     "kind": "choice",
+     "options": [
+      "Mg",
+      "Al",
+      "Zn",
+      "Fe",
+      "Ni",
+      "Pb",
+      "Cu",
+      "Ag"
+     ],
+     "default": "Zn"
+    },
+    {
+     "key": "right",
+     "label": "Right electrode",
+     "kind": "choice",
+     "options": [
+      "Mg",
+      "Al",
+      "Zn",
+      "Fe",
+      "Ni",
+      "Pb",
+      "Cu",
+      "Ag"
+     ],
+     "default": "Cu"
+    },
+    {
+     "key": "voltage_source",
+     "label": "Meter voltage",
+     "kind": "choice",
+     "options": [
+      "From the table",
+      "Custom"
+     ],
+     "default": "From the table"
+    },
+    {
+     "key": "voltage",
+     "label": "Custom meter voltage (V)",
+     "kind": "float",
+     "options": [],
+     "default": "1.1"
+    },
+    {
+     "key": "meter",
+     "label": "External path",
+     "kind": "choice",
+     "options": [
+      "Digital voltmeter",
+      "Dial voltmeter",
+      "Coil of wire"
+     ],
+     "default": "Digital voltmeter"
+    },
+    {
+     "key": "give_reading",
+     "label": "Give meter reading",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "names",
+     "label": "Label materials and salt bridge",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "electrodes",
+     "label": "Label anode and cathode",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "flow",
+     "label": "Show electron direction",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title_style",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": false
+  },
   "coordinate-grid": {
    "id": "coordinate-grid",
    "title": "Coordinate Grid",
@@ -18372,11 +20534,164 @@
      "default": "0"
     },
     {
+     "key": "x_minor",
+     "label": "Vertical subdivisions override",
+     "kind": "int",
+     "options": [],
+     "default": "-1"
+    },
+    {
+     "key": "y_minor",
+     "label": "Horizontal subdivisions override",
+     "kind": "int",
+     "options": [],
+     "default": "-1"
+    },
+    {
+     "key": "grid_bounds_mode",
+     "label": "Gridline positions",
+     "kind": "choice",
+     "options": [
+      "Frame",
+      "Explicit"
+     ],
+     "default": "Frame"
+    },
+    {
+     "key": "grid_xmin",
+     "label": "First vertical gridline bound",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "grid_xmax",
+     "label": "Last vertical gridline bound",
+     "kind": "float",
+     "options": [],
+     "default": "15.0"
+    },
+    {
+     "key": "grid_ymin",
+     "label": "First horizontal gridline bound",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "grid_ymax",
+     "label": "Last horizontal gridline bound",
+     "kind": "float",
+     "options": [],
+     "default": "15.0"
+    },
+    {
      "key": "numbers",
      "label": "Number the axes",
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "origin_zero",
+     "label": "Print the origin zero",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "vertical_grid",
+     "label": "Vertical gridline style",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "horizontal_grid",
+     "label": "Horizontal gridline style",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "x_major_every",
+     "label": "Emphasize every nth vertical line",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "x_major_style",
+     "label": "Emphasized vertical line style",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Bold"
+    },
+    {
+     "key": "y_major_every",
+     "label": "Emphasize every nth horizontal line",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "y_major_style",
+     "label": "Emphasized horizontal line style",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold"
+     ],
+     "default": "Bold"
+    },
+    {
+     "key": "axis_width",
+     "label": "Axis thickness override",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "number_font",
+     "label": "Axis number font",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Serif",
+      "Sans"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "number_halo",
+     "label": "White backing around axis numbers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "stacked_fractions",
+     "label": "Stack fraction tick labels",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "arrows",
@@ -18656,6 +20971,20 @@
      "default": "Dot"
     },
     {
+     "key": "point_radius",
+     "label": "Dot radius override",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "pt_outline",
+     "label": "White outline around dots",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
      "key": "pt_label",
      "label": "Point labels",
      "kind": "choice",
@@ -18917,6 +21246,122 @@
      "kind": "bool",
      "options": [],
      "default": "false"
+    },
+    {
+     "key": "x_left_extension",
+     "label": "Left axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "x_right_extension",
+     "label": "Right axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "y_bottom_extension",
+     "label": "Bottom axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "y_top_extension",
+     "label": "Top axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "-1.0"
+    },
+    {
+     "key": "lim_ask_at",
+     "label": "Ask the limits at x =",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lim_inf",
+     "label": "Ask the limits at infinity",
+     "kind": "choice",
+     "options": [
+      "None",
+      "x → ∞",
+      "x → −∞",
+      "Both"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "lim_disc",
+     "label": "Ask where f is not continuous",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_hasym",
+     "label": "Draw f's horizontal asymptotes (dashed, with their equations)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_kinds",
+     "label": "Label each discontinuity's kind (removable, jump, infinite)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lim_rows",
+     "label": "f is the rows",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lim_points",
+     "label": "The points give f's values (a point at a hole is f(a))",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "lim_inf_answer",
+     "label": "An infinite limit is written",
+     "kind": "choice",
+     "options": [
+      "∞ or −∞",
+      "does not exist"
+     ],
+     "default": "∞ or −∞"
+    },
+    {
+     "key": "lim_dne",
+     "label": "Does not exist is written",
+     "kind": "choice",
+     "options": [
+      "does not exist",
+      "DNE"
+     ],
+     "default": "does not exist"
+    },
+    {
+     "key": "lim_stu_kinds",
+     "label": "Student copy: leave off the kind labels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "lim_stu_asym",
+     "label": "Student copy: leave off the asymptotes' equations",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     }
    ],
    "handle_list": [
@@ -23252,6 +25697,64 @@
      "default": "true"
     },
     {
+     "key": "show_arcs",
+     "label": "Draw ordinary angle arcs",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "vertex_dot",
+     "label": "Dot at the vertex",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "measure_labels",
+     "label": "Label otherwise unlabelled sectors with their measures",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "label_radius",
+     "label": "Angle label distance from vertex",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "label_font",
+     "label": "Angle label font",
+     "kind": "choice",
+     "options": [
+      "Math",
+      "Serif",
+      "Sans"
+     ],
+     "default": "Math"
+    },
+    {
+     "key": "right_color",
+     "label": "Right-angle mark colour",
+     "kind": "color",
+     "options": [
+      "#111827",
+      "#000000",
+      "#ff0000",
+      "#0000ff"
+     ],
+     "default": "#111827"
+    },
+    {
+     "key": "right_marks",
+     "label": "Extra right-angle marks between directions",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "letters",
      "label": "Point letters on the rays",
      "kind": "bool",
@@ -27545,6 +30048,1201 @@
    "style": true,
    "label_size": true
   },
+  "slope-fields": {
+   "id": "slope-fields",
+   "title": "Slope Fields",
+   "blurb": "The slope field of a typed dy/dx = f(x, y), with solution curves through chosen points, Euler's method and its table, equilibrium solutions and student copies to sketch on or match.",
+   "params": [
+    {
+     "key": "dydx",
+     "label": "dy/dx =",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "var",
+     "label": "Independent variable",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "dep",
+     "label": "Dependent variable",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "points",
+     "label": "Starting points",
+     "kind": "long",
+     "options": [],
+     "default": "(0, 1)"
+    },
+    {
+     "key": "curves",
+     "label": "Solution curves through the starting points",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "direction",
+     "label": "Solution curves drawn",
+     "kind": "choice",
+     "options": [
+      "Both ways",
+      "Forward only"
+     ],
+     "default": "Both ways"
+    },
+    {
+     "key": "curve_style",
+     "label": "Solution curve line",
+     "kind": "choice",
+     "options": [
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Solid"
+    },
+    {
+     "key": "pt_labels",
+     "label": "Starting points shown",
+     "kind": "choice",
+     "options": [
+      "Dot and coordinates",
+      "Dot only",
+      "None"
+     ],
+     "default": "Dot and coordinates"
+    },
+    {
+     "key": "show_field",
+     "label": "Slope field",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "spacing",
+     "label": "Segments at",
+     "kind": "choice",
+     "options": [
+      "Every 2nd gridline",
+      "Every gridline",
+      "2 per gridline",
+      "3 per gridline",
+      "4 per gridline"
+     ],
+     "default": "2 per gridline"
+    },
+    {
+     "key": "seg_len",
+     "label": "Segment length",
+     "kind": "choice",
+     "options": [
+      "Short",
+      "Medium",
+      "Long"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "draw_as",
+     "label": "Draw the field as",
+     "kind": "choice",
+     "options": [
+      "Segments",
+      "Arrows"
+     ],
+     "default": "Segments"
+    },
+    {
+     "key": "equilibria",
+     "label": "Equilibrium solutions (dy/dx = 0 for every x)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "euler",
+     "label": "Euler's method from the first starting point",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "h",
+     "label": "Step h",
+     "kind": "text",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "n",
+     "label": "Number of steps",
+     "kind": "int",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "euler_table",
+     "label": "Table of Euler's values",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "compare",
+     "label": "Compare with the solution (its curve and its values)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "solution",
+     "label": "Solution through the first point (optional)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "dec",
+     "label": "Decimal places",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "square",
+     "label": "Same scale on both axes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title_mode",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "title",
+     "label": "Title text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "student_copy",
+     "label": "Student copy",
+     "kind": "choice",
+     "options": [
+      "Field and starting points, to sketch the solutions",
+      "Dots at the grid points, to draw the field",
+      "Blank line for the equation",
+      "Match the field to one of four equations, A to D"
+     ],
+     "default": "Field and starting points, to sketch the solutions"
+    },
+    {
+     "key": "others",
+     "label": "Other choices for matching (three, by semicolons)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "key_line",
+     "label": "Answer key line under the graph",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click the field to start a solution curve there"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the starting point (0, 1) to move its solution curve"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "derivative-graphs": {
+   "id": "derivative-graphs",
+   "title": "Derivative Graphs",
+   "blurb": "A function with its first and second derivatives on aligned axes, with critical points, inflection points, intervals and sign charts.",
+   "params": [
+    {
+     "key": "start",
+     "label": "Start from): choice f(x) | f′(x), default \"f(x)\" - f′(x",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "f",
+     "label": "f(x) =",
+     "kind": "long",
+     "options": [],
+     "default": "x^3"
+    },
+    {
+     "key": "fp",
+     "label": "f′(x) =",
+     "kind": "long",
+     "options": [],
+     "default": "-x"
+    },
+    {
+     "key": "pt_x",
+     "label": "f passes through x =",
+     "kind": "text",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "pt_y",
+     "label": "and y =",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "name",
+     "label": "Name of the function",
+     "kind": "text",
+     "options": [],
+     "default": "f"
+    },
+    {
+     "key": "graph_labels",
+     "label": "Label each graph",
+     "kind": "choice",
+     "options": [
+      "y = f(x)",
+      "Name only",
+      "None"
+     ],
+     "default": "y = f(x)"
+    },
+    {
+     "key": "layout",
+     "label": "Graphs",
+     "kind": "choice",
+     "options": [
+      "Aligned graphs",
+      "One grid"
+     ],
+     "default": "Aligned graphs"
+    },
+    {
+     "key": "show_fpp",
+     "label": "Draw f″",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "line_f",
+     "label": "f line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "line_fp",
+     "label": "f′ line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "line_fpp",
+     "label": "f″ line",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Solid",
+      "Dashed",
+      "Dotted"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "crit",
+     "label": "Mark the critical points (dashed guides to the zeros of f′)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "extrema",
+     "label": "Label the local maxima and minima",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "inflect",
+     "label": "Mark the inflection points (with the extrema of f′ and zeros of f″)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "incdec",
+     "label": "Mark where f increases and decreases",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "concavity",
+     "label": "Mark where f is concave up and down",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sign_fp",
+     "label": "Sign chart for f′",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "sign_fpp",
+     "label": "Sign chart for f″",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "absolute",
+     "label": "Mark the absolute maximum and minimum on a closed interval",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "abs_a",
+     "label": "Closed interval from",
+     "kind": "text",
+     "options": [],
+     "default": "-2"
+    },
+    {
+     "key": "abs_b",
+     "label": "to",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "rounding",
+     "label": "Coordinates",
+     "kind": "choice",
+     "options": [
+      "Exact",
+      "1 decimal",
+      "2 decimals",
+      "3 decimals"
+     ],
+     "default": "Exact"
+    },
+    {
+     "key": "tracer",
+     "label": "Tracer (the tangent on f and its slope on f′)",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "tracer_x",
+     "label": "Tracer at x =",
+     "kind": "text",
+     "options": [],
+     "default": "3/2"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-3.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "3.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x-axis count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "xunits",
+     "label": "x-axis units",
+     "kind": "choice",
+     "options": [
+      "Numbers",
+      "Multiples of π"
+     ],
+     "default": "Numbers"
+    },
+    {
+     "key": "ymin",
+     "label": "f: y from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "ymax",
+     "label": "f: y to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "ystep",
+     "label": "f: count by",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin1",
+     "label": "f′: y from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "ymax1",
+     "label": "f′: y to",
+     "kind": "float",
+     "options": [],
+     "default": "8.0"
+    },
+    {
+     "key": "ystep1",
+     "label": "f′: count by",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
+     "key": "ymin2",
+     "label": "f″: y from",
+     "kind": "float",
+     "options": [],
+     "default": "-12.0"
+    },
+    {
+     "key": "ymax2",
+     "label": "f″: y to",
+     "kind": "float",
+     "options": [],
+     "default": "12.0"
+    },
+    {
+     "key": "ystep2",
+     "label": "f″: count by",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "minor",
+     "label": "Minor gridlines per step",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "grid",
+     "label": "Gridlines",
+     "kind": "choice",
+     "options": [
+      "Light",
+      "Standard",
+      "Bold",
+      "None"
+     ],
+     "default": "Light"
+    },
+    {
+     "key": "xlabel",
+     "label": "x-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "y-axis label",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "title_mode",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "student_copy",
+     "label": "Student copy",
+     "kind": "choice",
+     "options": [
+      "Graphs, no marks",
+      "Sketch f′ from f",
+      "Sketch f from f′"
+     ],
+     "default": "Graphs, no marks"
+    },
+    {
+     "key": "key_list",
+     "label": "List the answers under the graphs (key)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the tracer along the graphs to read f, f′ and f″ at one x"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag the tracer along the graphs (here on the derivative)"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "geometry-diagram": {
+   "id": "geometry-diagram",
+   "title": "Geometry and projected solids",
+   "blurb": "Explicit geometry and projected solid diagrams: exact through-node lines, sector-bound literal labels, joined triangles, hidden segments, rays, ellipses, leaders, dimensions and individual congruence marks. Use for source diagrams a specialized solver cannot match; no solving or automatic measurements.",
+   "params": [
+    {
+     "key": "width",
+     "label": "Canvas width",
+     "kind": "float",
+     "options": [],
+     "default": "390.0"
+    },
+    {
+     "key": "height",
+     "label": "Canvas height",
+     "kind": "float",
+     "options": [],
+     "default": "285.0"
+    },
+    {
+     "key": "diagram",
+     "label": "Diagram JSON",
+     "kind": "long",
+     "options": [],
+     "default": "to the edge color. parallel_marks draws middle chevrons pointing from from toward to; it does not add endpoint arrows or infer that any other edge is parallel. Use arrows only for visibly arrowed endpoints. lines: [{id:'axis',through:'O',toward:'T',back:100,forward:100,arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]. through/toward must be literal base nodes. back/forward are explicit pixel lengths in opposite directions; ports axis:back and axis:forward may be used as node names in angles/labels/segments. Lines sharing through:'O' are exactly concurrent. Use this primitive for source straight lines/opposite rays; never approximate a shared vertex with independent crossing endpoints. angles: [{vertex:'B',from:'A',to:'C',arcs:0,right:false,reflex:false,radius:18,color:'#rrggbb',label:'',label_color:'#rrggbb',label_radius:0,label_size:18}]; the minor sector is used unless reflex:true; arcs is independently the exact count 0..3 (0 draws no arc). Put plain angle text in label with arcs:0 and the actual two named boundary legs, rather than unbound absolute text. label_radius is a preferred minimum; the entire label is placed within that sector clear of its rays/canvas, or the tool returns an error. Right squares use the explicit from/to legs; no angle measure is inferred. Count source marks at each named corner individually; no polygon regularity fills omitted marks. labels: [{text:'x + 3',node:'A',offset:[dx,dy]}] or {text:'...',at:[x,y],color:'#rrggbb',size:18,rotate:0,weight:'normal|bold',style:'normal|italic'}. rotate turns the text that many degrees clockwise about its anchor: a printed y-axis title read bottom to top is rotate:-90, one continuous label, never letters stacked one per line. Match printed bold titles with weight:'bold' and italic variable letters with style:'italic'. halo:true draws a white backing behind a label that sits on a line. dimensions: [{from:'A',to:'B',label:'?',offset:25,ends:'arrows|ticks|arrows_and_ticks',color:'#0000ff',label_color:'#000000',label_offset:-12}]. points: [{node:'A',radius:3,color:'#rrggbb'}]. ellipses: [{center:'O',rx:80,ry:20,start:0,end:360,style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; start/end are degrees y-up, full or partial ellipse. Optional id:'rim' exposes rim:center/right/top/left/bottom/start/end as exact node names. Optional ports:{tip:25} exposes rim:tip at that explicitly supplied projected-ellipse parameter angle (not a physical angle or a solved measure). Named ellipses need a literal base center node and ids distinct from line ids. Use these ports in segments only when the source visibly connects center/rim; no radius, dot, mark or attachment is drawn automatically, and existing independent endpoints are never snapped. paths: [{nodes:['A','control','B'],kind:'polyline|quadratic|cubic',arrows:'none|start|end|both',style:'solid|dashed|dotted',color:'#rrggbb',width:1.5}]; quadratic has 3 nodes, cubic 4. Projected solids use explicit visible/hidden edges, ellipses and colored source annotations; do not require a 3D solver. Draw only visible source marks and labels; nodes alone have no dot or name. Omit optional arrays. JSON requires double quotes. Unmarked angle-text example: {\"nodes\":{\"O\":[80,180],\"A\":[80,30],\"B\":[250,180]},\"segments\":[{\"from\":\"O\",\"to\":\"A\"},{\"from\":\"O\",\"to\":\"B\"}],\"angles\":[{\"vertex\":\"O\",\"from\":\"A\",\"to\":\"B\",\"label\":\"b\",\"arcs\":0}]}. This draws b in its named sector and NO arc; the lack of a source arc is not a reason to use free text. Source-first annotation check: enumerate every visible corner/edge mark and its count, each point joined to a guide, each leader target, and visible/hidden edge roles. Do not fill missing marks from a regular-looking shape or treat a nearby point as joined. A black edge with two red ticks is explicit: {\"from\":\"A\",\"to\":\"B\",\"color\":\"#000000\",\"ticks\":2,\"tick_color\":\"#ff0000\"}. A middle red parallel chevron is {\"from\":\"A\",\"to\":\"B\",\"parallel_marks\":1,\"parallel_color\":\"#ff0000\",\"arrows\":\"none\"}. Keep these distinct from endpoint arrows. Exact leader-target example: {\"nodes\":{\"A\":[60,70],\"M\":[140,110],\"B\":[220,150],\"S\":[240,230],\"C\":[120,210]},\"segments\":[{\"from\":\"A\",\"to\":\"M\"},{\"from\":\"M\",\"to\":\"B\"}],\"paths\":[{\"nodes\":[\"S\",\"C\",\"M\"],\"kind\":\"quadratic\",\"arrows\":\"end\"}]}. The explicit guide and leader share M; M alone draws no dot. Use the actual source target, not a nearby independent endpoint; no snapping or missing target is inferred. For a visibly joined T-junction, explicitly split the host at one shared node: nodes K:[20,80], B:[120,80], L:[220,80], C:[120,180], with segments K-to-B, B-to-L and B-to-C. Keep K/B/L collinear and reuse B; an independent B near an unsplit K-to-L segment does not declare a join. Apply this only when the source visibly joins; preserve intentional nonjoins. No node or coordinate is autogenerated."
+    },
+    {
+     "key": "font",
+     "label": "Label font",
+     "kind": "choice",
+     "options": [
+      "Serif",
+      "Sans"
+     ],
+     "default": "Serif"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": false,
+   "label_size": false
+  },
+  "polar-grid": {
+   "id": "polar-grid",
+   "title": "Polar grid",
+   "blurb": "Blank polar graph paper with concentric circles, radial spokes, radian or degree labels, and optional explicitly supplied visible polar curves. Leave curves empty when students must draw the graph.",
+   "params": [
+    {
+     "key": "rmax",
+     "label": "Outer radius",
+     "kind": "float",
+     "options": [],
+     "default": "7.0"
+    },
+    {
+     "key": "rstep",
+     "label": "Circle spacing",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "spoke_step",
+     "label": "Spokes every",
+     "kind": "choice",
+     "options": [
+      "15°",
+      "30°",
+      "45°",
+      "60°",
+      "90°"
+     ],
+     "default": "15°"
+    },
+    {
+     "key": "angle_step",
+     "label": "Angle labels every",
+     "kind": "choice",
+     "options": [
+      "15°",
+      "30°",
+      "45°",
+      "60°",
+      "90°",
+      "None"
+     ],
+     "default": "30°"
+    },
+    {
+     "key": "angle_units",
+     "label": "Angle units",
+     "kind": "choice",
+     "options": [
+      "Radians",
+      "Degrees"
+     ],
+     "default": "Radians"
+    },
+    {
+     "key": "radial_numbers",
+     "label": "Number the circles",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "vertical_axis",
+     "label": "Emphasize the vertical diameter",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "axis_arrow",
+     "label": "Arrow on the positive horizontal axis",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "curves",
+     "label": "Visible source curves r(theta)",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "curve_points",
+     "label": "Sampled visible source paths JSON",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "curve_beziers",
+     "label": "Smooth visible source paths JSON",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "curve_color",
+     "label": "Curve colour",
+     "kind": "color",
+     "options": [
+      "#0000ff",
+      "#000000",
+      "#ff0000"
+     ],
+     "default": "#0000ff"
+    },
+    {
+     "key": "curve_width",
+     "label": "Curve thickness",
+     "kind": "float",
+     "options": [],
+     "default": "1.8"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": false,
+   "label_size": true
+  },
+  "direction-field": {
+   "id": "direction-field",
+   "title": "Direction field",
+   "blurb": "Recreate a supplied slope/direction field using explicit segment endpoints or observed column directions on a lattice. Optional printed-slope-formula sampling; never draws a solution curve or infers the equation of a given field.",
+   "params": [
+    {
+     "key": "mode",
+     "label": "Supplied field representation",
+     "kind": "choice",
+     "options": [
+      "Endpoints",
+      "Column directions",
+      "Printed slope formula"
+     ],
+     "default": "Endpoints"
+    },
+    {
+     "key": "segments",
+     "label": "Segment endpoints x1,y1,x2,y2",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "columns",
+     "label": "Observed directions x,dx,dy",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "slope",
+     "label": "Printed derivative expression in x,y",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "-4.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "4.0"
+    },
+    {
+     "key": "xstep",
+     "label": "x tick spacing",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ystep",
+     "label": "y tick spacing",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "x_number_format",
+     "label": "x tick format",
+     "kind": "choice",
+     "options": [
+      "Numbers",
+      "Fractions",
+      "Multiples of π"
+     ],
+     "default": "Numbers"
+    },
+    {
+     "key": "y_number_format",
+     "label": "y tick format",
+     "kind": "choice",
+     "options": [
+      "Numbers",
+      "Fractions",
+      "Multiples of π"
+     ],
+     "default": "Numbers"
+    },
+    {
+     "key": "x_tick_labels",
+     "label": "Explicit x ticks and labels",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "y_tick_labels",
+     "label": "Explicit y ticks and labels",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "number_font",
+     "label": "Tick label font",
+     "kind": "choice",
+     "options": [
+      "Sans",
+      "Serif"
+     ],
+     "default": "Sans"
+    },
+    {
+     "key": "stacked_fractions",
+     "label": "Stack fractional tick labels",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "number_size",
+     "label": "Tick label size",
+     "kind": "float",
+     "options": [],
+     "default": "12.0"
+    },
+    {
+     "key": "sample_xstep",
+     "label": "Formula sample column spacing",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "sample_ystep",
+     "label": "Sample row spacing",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "segment_length",
+     "label": "Sample segment length (graph units)",
+     "kind": "float",
+     "options": [],
+     "default": "0.3"
+    },
+    {
+     "key": "field_clip_padding",
+     "label": "Field clip padding (SVG px)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "color",
+     "label": "Segment colour",
+     "kind": "color",
+     "options": [
+      "#0000ff",
+      "#000000",
+      "#ff0000"
+     ],
+     "default": "#0000ff"
+    },
+    {
+     "key": "line_width",
+     "label": "Segment thickness",
+     "kind": "float",
+     "options": [],
+     "default": "1.6"
+    },
+    {
+     "key": "grid",
+     "label": "Draw gridlines",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "numbers",
+     "label": "Number the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "origin_zero",
+     "label": "Print origin zero",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "xlabel",
+     "label": "Horizontal axis letter",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "ylabel",
+     "label": "Vertical axis letter",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "arrows",
+     "label": "Arrowheads on axes",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": false,
+   "style": false,
+   "label_size": false
+  },
   "circle": {
    "id": "circle",
    "title": "Circle",
@@ -29903,6 +33601,534 @@
    "style": true,
    "label_size": true
   },
+  "segment-addition": {
+   "id": "segment-addition",
+   "title": "Segment Addition",
+   "blurb": "Points in order on a line, each part labeled with a length, an expression in one letter or a blank line, with congruence ticks, braces for longer spans, arrows for a ray or a line and a crossing line; the labels are solved as a check on the key.",
+   "params": [
+    {
+     "key": "n",
+     "label": "Points",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "p1_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "A"
+    },
+    {
+     "key": "p1_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p1_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p1_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "2x + 1"
+    },
+    {
+     "key": "p1_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p1_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p2_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "B"
+    },
+    {
+     "key": "p2_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p2_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p2_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "3x"
+    },
+    {
+     "key": "p2_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p2_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "C"
+    },
+    {
+     "key": "p3_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p3_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p3_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p3_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p3_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "D"
+    },
+    {
+     "key": "p4_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p4_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p4_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p4_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p4_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "E"
+    },
+    {
+     "key": "p5_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p5_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p5_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p5_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p5_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "F"
+    },
+    {
+     "key": "p6_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "p6_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "p6_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p6_ticks",
+     "label": "Congruence ticks",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1 tick",
+      "2 ticks",
+      "3 ticks"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "p6_len",
+     "label": "Drawn length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "p7_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "G"
+    },
+    {
+     "key": "p7_dot",
+     "label": "Dotted",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "spans",
+     "label": "Spans",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s1_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s1_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "s1_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s1_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "27"
+    },
+    {
+     "key": "s2_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s2_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "s2_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s2_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "s3_from",
+     "label": "Starts at",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "s3_to",
+     "label": "Ends at",
+     "kind": "int",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "s3_lab_mode",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "s3_lab",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "Stops at the point",
+      "Arrow",
+      "Line arrow"
+     ],
+     "default": "Stops at the point"
+    },
+    {
+     "key": "right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "Stops at the point",
+      "Arrow",
+      "Line arrow"
+     ],
+     "default": "Stops at the point"
+    },
+    {
+     "key": "cross_at",
+     "label": "Crosses at",
+     "kind": "int",
+     "options": [],
+     "default": "0"
+    },
+    {
+     "key": "cross_name",
+     "label": "Line name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "cross_ang",
+     "label": "Angle (°)",
+     "kind": "float",
+     "options": [],
+     "default": "90.0"
+    },
+    {
+     "key": "cross_right",
+     "label": "Right-angle mark",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "turn",
+     "label": "Turn",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
   "sequences-series": {
    "id": "sequences-series",
    "title": "Sequences and series",
@@ -30373,45 +34599,445 @@
   "solid-net": {
    "id": "solid-net",
    "title": "Nets",
-   "blurb": "The net of a cube or a cuboid: six rectangles laid flat, with the surface area and the volume worked out from the edges.",
+   "blurb": "The net of a cube, prism, pyramid, cylinder or cone, laid flat with its fold lines and its measures on its edges.",
    "params": [
     {
-     "key": "solid",
-     "label": "Solid",
+     "key": "shape",
+     "label": "3D shape",
      "kind": "choice",
      "options": [
       "Cube",
-      "Cuboid"
+      "Prism",
+      "Pyramid",
+      "Cylinder",
+      "Cone"
      ],
-     "default": "Cuboid"
+     "default": "Prism"
     },
     {
-     "key": "a",
-     "label": "Length a",
-     "kind": "float",
+     "key": "base",
+     "label": "Base",
+     "kind": "choice",
+     "options": [
+      "Rectangle",
+      "Right triangle",
+      "Isosceles triangle",
+      "Regular polygon"
+     ],
+     "default": "Rectangle"
+    },
+    {
+     "key": "pyr_base",
+     "label": "Base",
+     "kind": "choice",
+     "options": [
+      "Rectangle",
+      "Regular polygon"
+     ],
+     "default": "Rectangle"
+    },
+    {
+     "key": "sides",
+     "label": "Sides",
+     "kind": "int",
      "options": [],
-     "default": "4.0"
+     "default": "6"
     },
     {
-     "key": "b",
-     "label": "Width b",
-     "kind": "float",
-     "options": [],
-     "default": "3.0"
-    },
-    {
-     "key": "c",
-     "label": "Height c",
-     "kind": "float",
-     "options": [],
-     "default": "2.0"
-    },
-    {
-     "key": "dec",
-     "label": "Decimal places",
+     "key": "cube_net",
+     "label": "Net",
      "kind": "int",
      "options": [],
      "default": "1"
+    },
+    {
+     "key": "side",
+     "label": "Side",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "length",
+     "label": "Length",
+     "kind": "text",
+     "options": [],
+     "default": "5"
+    },
+    {
+     "key": "width",
+     "label": "Width",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "tri_base",
+     "label": "Base",
+     "kind": "text",
+     "options": [],
+     "default": "6"
+    },
+    {
+     "key": "tri_height",
+     "label": "Triangle's height",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "radius",
+     "label": "Radius",
+     "kind": "text",
+     "options": [],
+     "default": "3"
+    },
+    {
+     "key": "height",
+     "label": "Height",
+     "kind": "text",
+     "options": [],
+     "default": "4"
+    },
+    {
+     "key": "slant",
+     "label": "Slant height",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "diameter",
+     "label": "Diameter instead",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "lab_length",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_length",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_width",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_width",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_tri_base",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_tri_base",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_tri_height",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_tri_height",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_hyp",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_hyp",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_side",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_side",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_height",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_height",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_slant",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_slant",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_slant_w",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_slant_w",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_circ",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_circ",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_apothem",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_apothem",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_radius",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "Measure"
+    },
+    {
+     "key": "txt_radius",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "lab_angle",
+     "label": "Label",
+     "kind": "choice",
+     "options": [
+      "Measure",
+      "Text",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "txt_angle",
+     "label": "Label text",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "folds",
+     "label": "Fold lines",
+     "kind": "choice",
+     "options": [
+      "Dashed",
+      "Solid"
+     ],
+     "default": "Dashed"
+    },
+    {
+     "key": "tabs",
+     "label": "Glue tabs",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "in_face",
+     "label": "In each face",
+     "kind": "choice",
+     "options": [
+      "Nothing",
+      "Names",
+      "Areas",
+      "Names and areas"
+     ],
+     "default": "Nothing"
+    },
+    {
+     "key": "tint",
+     "label": "Tint matching faces",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_3d",
+     "label": "Show the 3D shape",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "squares",
+     "label": "Right-angle squares",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "unit",
+     "label": "Unit",
+     "kind": "choice",
+     "options": [
+      "None",
+      "cm",
+      "m",
+      "mm",
+      "in",
+      "ft",
+      "yd",
+      "units",
+      "Other…"
+     ],
+     "default": "cm"
+    },
+    {
+     "key": "unit_other",
+     "label": "Unit name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "round",
+     "label": "Round to",
+     "kind": "choice",
+     "options": [
+      "Whole numbers",
+      "Tenths",
+      "Hundredths"
+     ],
+     "default": "Tenths"
+    },
+    {
+     "key": "readout",
+     "label": "Surface area and volume",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "show_answers",
@@ -30440,11 +35066,43 @@
       "Small"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "label_offsets",
+     "label": "Label positions",
+     "kind": "text",
+     "options": [],
+     "default": ""
     }
    ],
-   "handle_list": [],
-   "handles": false,
-   "label_drag": false,
+   "handle_list": [
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    },
+    {
+     "actions": [
+      "drag",
+      "label"
+     ],
+     "edit": null,
+     "tip": "Drag to move this label"
+    }
+   ],
+   "handles": true,
+   "label_drag": true,
    "show_answers": true,
    "style": true,
    "label_size": true
@@ -30614,8 +35272,39 @@
   "circular-motion": {
    "id": "circular-motion",
    "title": "Circular motion",
-   "blurb": "A body going round a circle at a steady speed, with its velocity along the tangent and the centripetal acceleration towards the centre.",
+   "blurb": "Draw tangent velocity and centripetal acceleration from above, or show gravity and tension on a string in a vertical circle.",
    "params": [
+    {
+     "key": "setup",
+     "label": "Setup",
+     "kind": "choice",
+     "options": [
+      "Top view",
+      "Vertical circle"
+     ],
+     "default": "Top view"
+    },
+    {
+     "key": "position",
+     "label": "Drawn at",
+     "kind": "choice",
+     "options": [
+      "Top",
+      "Bottom",
+      "Top and bottom"
+     ],
+     "default": "Top and bottom"
+    },
+    {
+     "key": "direction",
+     "label": "Going round",
+     "kind": "choice",
+     "options": [
+      "Counterclockwise",
+      "Clockwise"
+     ],
+     "default": "Counterclockwise"
+    },
     {
      "key": "mass",
      "label": "Mass (kg)",
@@ -31288,6 +35977,23 @@
       "5 per block"
      ],
      "default": "None"
+    },
+    {
+     "key": "grid_directions",
+     "label": "Gridlines run",
+     "kind": "choice",
+     "options": [
+      "Across",
+      "Both ways"
+     ],
+     "default": "Across"
+    },
+    {
+     "key": "axis_arrows",
+     "label": "Arrowheads on the axes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "title_mode",
@@ -32072,7 +36778,7 @@
   "scatterplot": {
    "id": "scatterplot",
    "title": "Scatterplot",
-   "blurb": "A scatterplot of x, y pairs with an optional line of best fit, its equation and the correlation r.",
+   "blurb": "A scatterplot of x, y pairs with automatic or explicit axes, independently bounded grids, major/minor grid colours, plain or outlined points with preset or custom radius, and an optional best-fit line, equation and r. Manual axes also support blank graph paper.",
    "params": [
     {
      "key": "pts",
@@ -32114,8 +36820,260 @@
      "default": "Medium"
     },
     {
+     "key": "point_radius",
+     "label": "Custom point radius",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
      "key": "grid",
      "label": "Gridlines",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "axes_mode",
+     "label": "Axis ranges",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "Manual"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "xmin",
+     "label": "x-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "xmax",
+     "label": "x-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "xstep",
+     "label": "Vertical grid spacing",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "ymin",
+     "label": "y-axis from",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "ymax",
+     "label": "y-axis to",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "ystep",
+     "label": "Horizontal grid spacing",
+     "kind": "float",
+     "options": [],
+     "default": "1.0"
+    },
+    {
+     "key": "grid_bounds_mode",
+     "label": "Grid extent",
+     "kind": "choice",
+     "options": [
+      "Follow axes",
+      "Explicit"
+     ],
+     "default": "Follow axes"
+    },
+    {
+     "key": "grid_xmin",
+     "label": "Grid left edge",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "grid_xmax",
+     "label": "Grid right edge",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "grid_ymin",
+     "label": "Grid bottom edge",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "grid_ymax",
+     "label": "Grid top edge",
+     "kind": "float",
+     "options": [],
+     "default": "10.0"
+    },
+    {
+     "key": "x_ticks",
+     "label": "Explicit x tick labels",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "y_ticks",
+     "label": "Explicit y tick labels",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "zero_labels",
+     "label": "Print zero tick labels",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "grid_directions",
+     "label": "Grid directions",
+     "kind": "choice",
+     "options": [
+      "Horizontal",
+      "Both"
+     ],
+     "default": "Horizontal"
+    },
+    {
+     "key": "grid_color",
+     "label": "Grid colour",
+     "kind": "color",
+     "options": [
+      "#dfe3ea",
+      "#777777",
+      "#000000",
+      "#b0b0b0"
+     ],
+     "default": "#dfe3ea"
+    },
+    {
+     "key": "x_major_every",
+     "label": "Darker vertical gridline every",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "y_major_every",
+     "label": "Darker horizontal gridline every",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "minor_grid_color",
+     "label": "Minor grid colour",
+     "kind": "color",
+     "options": [
+      "#dfe3ea",
+      "#c7c7c7",
+      "#b0b0b0",
+      "#777777"
+     ],
+     "default": "#dfe3ea"
+    },
+    {
+     "key": "axis_style",
+     "label": "Axes",
+     "kind": "choice",
+     "options": [
+      "Left and bottom",
+      "Box",
+      "None"
+     ],
+     "default": "Left and bottom"
+    },
+    {
+     "key": "axis_x_extension",
+     "label": "x-axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "axis_y_extension",
+     "label": "y-axis extra length (grid steps)",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "axis_width",
+     "label": "Axis thickness",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
+     "key": "axis_arrows",
+     "label": "Arrowheads on the axis ends",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "x_end_label",
+     "label": "Letter at the x-axis end",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "y_end_label",
+     "label": "Letter at the y-axis end",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "tick_marks",
+     "label": "Tick marks outside the grid",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "square_plot",
+     "label": "Square plot area",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "point_color",
+     "label": "Point colour",
+     "kind": "choice",
+     "options": [
+      "Automatic",
+      "#0000ff",
+      "#000000",
+      "#ff0000"
+     ],
+     "default": "Automatic"
+    },
+    {
+     "key": "point_outline",
+     "label": "Outline the points",
      "kind": "bool",
      "options": [],
      "default": "true"
@@ -32140,6 +37098,16 @@
      "kind": "text",
      "options": [],
      "default": "Score"
+    },
+    {
+     "key": "y_title_at",
+     "label": "Vertical axis title sits",
+     "kind": "choice",
+     "options": [
+      "Turned, left of the axis",
+      "Across, above the axis"
+     ],
+     "default": "Turned, left of the axis"
     },
     {
      "key": "style",
@@ -32330,9 +37298,20 @@
      "options": [
       "Values",
       "z-scores",
-      "Values and z-scores"
+      "Values and z-scores",
+      "None"
      ],
      "default": "Values"
+    },
+    {
+     "key": "tick_direction",
+     "label": "Tick direction",
+     "kind": "choice",
+     "options": [
+      "Below",
+      "Above"
+     ],
+     "default": "Below"
     },
     {
      "key": "title",
@@ -33279,6 +38258,293 @@
    "style": true,
    "label_size": true
   },
+  "table-of-values": {
+   "id": "table-of-values",
+   "title": "Table of Values",
+   "blurb": "A table of x and y values worked out from a rule, or typed: exact fractions, π and degrees, undefined where the rule has no value, any value a blank for students, and the answers listed on the key.",
+   "params": [
+    {
+     "key": "source",
+     "label": "Values",
+     "kind": "choice",
+     "options": [
+      "From a rule",
+      "Typed"
+     ],
+     "default": "From a rule"
+    },
+    {
+     "key": "rule",
+     "label": "Rule",
+     "kind": "text",
+     "options": [],
+     "default": "y = 2x + 1"
+    },
+    {
+     "key": "xs",
+     "label": "x-values from",
+     "kind": "choice",
+     "options": [
+      "A range",
+      "A list"
+     ],
+     "default": "A range"
+    },
+    {
+     "key": "from",
+     "label": "From",
+     "kind": "text",
+     "options": [],
+     "default": "-2"
+    },
+    {
+     "key": "to",
+     "label": "To",
+     "kind": "text",
+     "options": [],
+     "default": "2"
+    },
+    {
+     "key": "step",
+     "label": "Step",
+     "kind": "text",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "list",
+     "label": "x-values",
+     "kind": "text",
+     "options": [],
+     "default": "-2, 0, 1/2, 3"
+    },
+    {
+     "key": "typed",
+     "label": "Pairs",
+     "kind": "long",
+     "options": [],
+     "default": "1, 5\\n2, 8\\n3, 11\\n4, 14"
+    },
+    {
+     "key": "blanks",
+     "label": "Blanks",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "blank_y",
+     "label": "Blank every y",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "heads",
+     "label": "Headings",
+     "kind": "choice",
+     "options": [
+      "x and y",
+      "Input / Output",
+      "x / f(x)",
+      "n / aₙ",
+      "Your own"
+     ],
+     "default": "x and y"
+    },
+    {
+     "key": "head1",
+     "label": "First heading",
+     "kind": "text",
+     "options": [],
+     "default": "x"
+    },
+    {
+     "key": "head2",
+     "label": "Second heading",
+     "kind": "text",
+     "options": [],
+     "default": "y"
+    },
+    {
+     "key": "title_kind",
+     "label": "Table title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Text",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title",
+     "label": "Title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_rule",
+     "label": "The rule, above the table",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Written",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "as",
+     "label": "Worked-out values as",
+     "kind": "choice",
+     "options": [
+      "Fractions",
+      "Decimals"
+     ],
+     "default": "Fractions"
+    },
+    {
+     "key": "round",
+     "label": "Round the rest to",
+     "kind": "choice",
+     "options": [
+      "Whole numbers",
+      "1 decimal place",
+      "2 decimal places",
+      "3 decimal places",
+      "4 decimal places"
+     ],
+     "default": "2 decimal places"
+    },
+    {
+     "key": "runs",
+     "label": "The table runs",
+     "kind": "choice",
+     "options": [
+      "Across",
+      "Down"
+     ],
+     "default": "Across"
+    },
+    {
+     "key": "head_look",
+     "label": "Headings",
+     "kind": "choice",
+     "options": [
+      "Gray",
+      "Plain"
+     ],
+     "default": "Gray"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = −2: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 2: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = −1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 3: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 0: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 4: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 1: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "x in column 5: click to make a blank"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "y for x = 2: click to make a blank"
+    }
+   ],
+   "handles": true,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
   "pie-chart": {
    "id": "pie-chart",
    "title": "Pie Chart",
@@ -33445,7 +38711,7 @@
   "bar-chart": {
    "id": "bar-chart",
    "title": "Bar Chart",
-   "blurb": "A bar chart of categories and their counts or percents, with gaps between the bars: one group or two side by side, in typed, sorted or Pareto order.",
+   "blurb": "A bar chart of categories and their counts or percents, with gaps between the bars: one group or two side by side, in typed, sorted or Pareto order. Bars can be thin lines for a vertical line graph (stick graph), with tick marks on both axes and an arrowed value axis.",
    "params": [
     {
      "key": "data",
@@ -33512,9 +38778,31 @@
      "options": [
       "Narrow",
       "Medium",
-      "Wide"
+      "Wide",
+      "Lines"
      ],
      "default": "Medium"
+    },
+    {
+     "key": "cat_ticks",
+     "label": "Tick marks at the categories",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "cat_names_up",
+     "label": "Turn the category names",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "val_arrow",
+     "label": "Arrowhead on the value axis",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "values",

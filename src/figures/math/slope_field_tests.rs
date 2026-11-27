@@ -1445,3 +1445,208 @@ fn round7_checks_the_approach_even_in_the_first_cell() {
         assert!(matches!(result, nm::Along::Fails(x) if x > 0. && x < 0.01));
     }
 }
+
+/// Check 7, cap-10. (1) An equilibrium at the edge of dy/dx's domain is found whatever the window: √y is 0 at y = 0 and
+/// undefined below it, √(1 − y²) is 0 at ±1, √(4 − y²) at ±2, √(1 − y) at 1, y√y at 0 (each f(x, c) = √0 = 0 for every x).
+/// (2) A height where dy/dx has no value is never an equilibrium, however close to 0 f comes beside it: x(y − 1)²/(y − 1)
+/// is undefined on y = 1 (0/0) and is x(y − 1) elsewhere, nonzero for y ≠ 1 and x ≠ 0; (y² − 2y)/(y − 2) − 2 = y − 2 off
+/// y = 2, undefined on it; y²/y = y off 0; sin²y/sin y = sin y off the multiples of π, undefined on them. Neither depends
+/// on whether a sample height lands on the point.
+#[test]
+fn round7_equilibria_at_domain_edges_and_cancelled_factors() {
+    let cases: Vec<(&str, f64, f64, Vec<f64>)> = vec![
+        ("sqrt(y)", -1.0, 5.0, vec![0.0]), ("sqrt(y)", -4.0, 4.0, vec![0.0]), ("sqrt(y)", -2.0, 6.0, vec![0.0]),
+        ("sqrt(1 - y^2)", -3.0, 3.0, vec![-1.0, 1.0]), ("sqrt(1 - y^2)", -1.5, 1.5, vec![-1.0, 1.0]),
+        ("sqrt(4 - y^2)", -3.0, 3.0, vec![-2.0, 2.0]), ("sqrt(1 - y)", -3.0, 3.0, vec![1.0]), ("y sqrt(y)", -3.7, 4.1, vec![0.0]),
+        ("x(y - 1)^2/(y - 1)", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.0, 3.0, vec![]), ("(y^2 - 2y)/(y - 2) - 2", -3.7, 4.1, vec![]),
+        ("y^2/y", -3.7, 4.1, vec![]), ("sin(y)^2/sin(y)", -3.7, 4.1, vec![]), ("y^2/y", -4.0, 4.0, vec![]),
+        // check 8: edges that are no float (√2, √3, π/2, ln 2, ∛2), and cancelled factors at heights with no short value;
+        // (2 − y) ln(2 − y) runs to 0 at 2 but has no value there (ln 0), and is 0 at y = 1 (ln 1 = 0)
+        ("sqrt(2 - y^2)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]), ("sqrt(2 - y^2)", -3.7, 4.1, vec![-2f64.sqrt(), 2f64.sqrt()]),
+        ("sqrt(3 - y^2)", -3.0, 3.0, vec![-3f64.sqrt(), 3f64.sqrt()]), ("sqrt(y^2 - 2)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]),
+        ("sqrt(cos(y))", -2.0, 2.0, vec![-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2]),
+        ("sqrt(sin(y))", -4.0, 4.0, vec![-std::f64::consts::PI, 0.0, std::f64::consts::PI]),
+        ("sqrt(2 - e^y)", -3.0, 3.0, vec![2f64.ln()]), ("sqrt(y^3 - 2)", -3.0, 3.0, vec![2f64.cbrt()]), ("sqrt(y - 0.15)", -3.0, 3.0, vec![0.15]),
+        ("(2 - y) ln(2 - y)", -3.0, 3.0, vec![1.0]),
+        ("(y - 0.15)^2/(y - 0.15)", -3.0, 3.0, vec![]), ("(y - 0.15)^2/(y - 0.15)", -3.7, 4.1, vec![]), ("(y - e)^2/(y - e)", -3.7, 4.1, vec![]),
+        ("x(y - 0.0625)^2/(y - 0.0625)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.0, 3.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -3.7, 4.1, vec![]),
+        ("(e^y - 2)^2/(e^y - 2)", -1.0, 5.0, vec![]), ("(e^y - 2)^2/(e^y - 2)", -4.0, 4.0, vec![]), ("1/sqrt(2 - y^2)", -3.0, 3.0, vec![]),
+        // check 9: roots of any order inside the domain (∛y at 0, ∛(y − 1) at 1), edges reached more slowly than a square root
+        // ((1 − y²)^(1/4) at ±1, √(arccos y) at 1 where arccos 1 = 0, y^(1/6), y^(1/8)), irrational powers (0^π = 0); no line
+        // where f has no value though it runs to 0 (ln ∛y at 0, quotients by a fourth root), and none from underflow
+        ("y^(1/3)", -1.0, 5.0, vec![0.0]), ("y^(1/3)", -3.7, 4.1, vec![0.0]), ("y^(1/3)", -1.3, 6.2, vec![0.0]), ("(y - 1)^(1/3)", -3.0, 3.0, vec![1.0]),
+        ("(1 - y^2)^(1/4)", -3.0, 3.0, vec![-1.0, 1.0]), ("(4 - y^2)^(1/4)", -3.7, 4.1, vec![-2.0, 2.0]), ("sqrt(arccos(y))", -3.0, 3.0, vec![1.0]),
+        ("y^(1/6)", -1.0, 5.0, vec![0.0]), ("y^(1/8)", -1.3, 6.2, vec![0.0]),
+        ("y^pi", -1.0, 5.0, vec![0.0]), ("y^sqrt(2)", -3.7, 4.1, vec![0.0]), ("y^e", -1.0, 5.0, vec![0.0]),
+        ("y ln(y^(1/3))", -1.0, 5.0, vec![1.0]), ("(1 - y^2)/(1 - y^2)^(1/4)", -3.0, 3.0, vec![]), ("y/y^(1/4)", -1.0, 5.0, vec![]),
+        ("e^(-y^3)", -10.0, 10.0, vec![]), ("e^(-1/y)", -1.0, 5.0, vec![]),
+        // check 10: windows whose left edge zeroes f (x√y from x = 0), touching roots of fractional order (√|y|, (y − 0.37)^(2/3),
+        // (y² − 2)^(2/3)), underflow toward denormals (y e^(−y²) far out), powers in x (0^(x² + 1) = 0)
+        ("x sqrt(y)", -1.0, 5.0, vec![0.0]), ("x sqrt(4 - y^2)", -3.0, 3.0, vec![-2.0, 2.0]), ("x(y - 1)^(1/3)", -3.0, 3.0, vec![1.0]),
+        ("sqrt(abs(y))", -1.0, 5.0, vec![0.0]), ("sqrt(abs(y))", -3.7, 4.1, vec![0.0]), ("(y - 0.37)^(2/3)", -3.0, 3.0, vec![0.37]),
+        ("(y^2 - 2)^(2/3)", -3.0, 3.0, vec![-2f64.sqrt(), 2f64.sqrt()]), ("y e^(-y^2)", -31.0, 29.0, vec![0.0]), ("y^(x^2 + 1)", -1.0, 5.0, vec![0.0]),
+        // still found: a true root beside a pole, and a polynomial
+        ("y/(x + y)", -3.7, 4.1, vec![0.0]), ("y(4 - y)", -3.7, 4.1, vec![0.0, 4.0]), ("(y - 1)^2", -3.7, 4.1, vec![1.0]),
+    ];
+    // (windows that start at x = 0, the usual ones for time: f is 0 along x = 0 when it has a factor x)
+    for (eqt, xa, xb, y0, y1, want) in [("x sqrt(y)", 0.0, 6.0, -1.0, 5.0, vec![0.0]), ("x sqrt(4 - y^2)", 0.0, 6.0, -3.0, 3.0, vec![-2.0, 2.0]),
+                                        ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.5, vec![-1.0, 1.0]), ("(x - 1) sqrt(1 - y^2)", 1.0, 5.0, -2.0, 2.5, vec![-1.0, 1.0]),
+                                        ("x(y - 1)^(1/3)", 0.0, 5.0, -3.0, 3.0, vec![1.0]), ("sqrt(x y)", 0.0, 10.0, -1.0, 5.0, vec![0.0]),
+                                        // (check 11: whole-number windows, whose edges fall on sampled heights)
+                                        ("x sqrt(1 - y^2)", 0.0, 5.0, -2.0, 2.0, vec![-1.0, 1.0]), ("x sqrt(y)", 0.0, 5.0, 0.0, 5.0, vec![0.0]),
+                                        ("sin(x) sqrt(1 - y^2)", 0.0, 6.0, -2.0, 2.0, vec![-1.0, 1.0]), ("(x - 2) sqrt(y)", 2.0, 6.0, 0.0, 4.0, vec![0.0]),
+                                        ("x sqrt(4 - y^2)", 0.0, 5.0, -4.0, 4.0, vec![-2.0, 2.0]), ("x sqrt(1 - y^2)", 0.0, 10.0, -1.3, 6.2, vec![-1.0, 1.0]),
+                                        // (and no line where a tiny minimum is no root)
+                                        ("y^2 + 0.0000001", 0.0, 5.0, -100.0, 100.0, vec![]), ("(y - 1)^2 + 0.00001", 0.0, 5.0, -1000.0, 1000.0, vec![]),
+                                        // (check 12: small everywhere is not 0 anywhere; no fixed size decides it)
+                                        ("y^2 + 0.0000001", -4.0, 4.0, -1000.0, 1000.0, vec![]), ("y^2 + 0.000000001", -4.0, 4.0, -100.0, 100.0, vec![]),
+                                        ("y^2 + 0.00000000001", -4.0, 4.0, -10.0, 10.0, vec![]), ("0.0000000001(y - x)", -4.0, 4.0, -4.0, 4.0, vec![]),
+                                        ("e^(-x)(y - x)", 30.0, 60.0, 0.0, 100.0, vec![]),
+                                        // (check 13: nearly 0 along a line but not on it, decided exactly for polynomials in y, and by f falling five
+                                        // decades in otherwise)
+                                        ("y - 0.0000000001x", -4.0, 4.0, -4.0, 4.0, vec![]), ("y - 1 + 0.000000001x", -4.0, 4.0, -4.0, 4.0, vec![]),
+                                        ("(y - 1)(y - 0.0000000001x)", -4.0, 4.0, -4.0, 4.0, vec![1.0]), ("y + 0.0000000001 sin(x)", -4.0, 4.0, -4.0, 4.0, vec![]),
+                                        ("y^2 + 0.00000000000001", -4.0, 4.0, -4.0, 4.0, vec![]), ("(y - 900)^2 + 0.00000001", -4.0, 4.0, 800.0, 1000.0, vec![]),
+                                        ("1000000y^2 + 0.00000001", -4.0, 4.0, -4.0, 4.0, vec![]), ("100(y - 500)^2 + 0.000001", -4.0, 4.0, 400.0, 600.0, vec![]),
+                                        ("(y - 900)^2", -4.0, 4.0, 800.0, 1000.0, vec![900.0]), ("y^2 - 2", -4.0, 4.0, -4.0, 4.0, vec![-2f64.sqrt(), 2f64.sqrt()]),
+                                        // (check 15: each root keeps its own exact value, so a second root is never lost; e and quadratic surds)
+                                        ("y(1 - 2y)", -4.0, 4.0, -4.0, 4.0, vec![0.0, 0.5]), ("y(1 - y/0.8)", -4.0, 4.0, 0.0, 1.0, vec![0.0, 0.8]),
+                                        ("(y - 1)(y - 1.5)", -4.0, 4.0, -4.0, 4.0, vec![1.0, 1.5]), ("(y - 1)(y - 1.5)", -4.0, 4.0, 1.2, 4.0, vec![1.5]),
+                                        ("y^3 - y", -4.0, 4.0, -0.3, 0.7, vec![0.0]), ("y^3 - y", -4.0, 4.0, -3.7, 4.1, vec![-1.0, 0.0, 1.0]),
+                                        ("y - e", -4.0, 4.0, -4.0, 4.0, vec![std::f64::consts::E]),
+                                        ("sin(x)(y^2 - 3y + 1)", -4.0, 4.0, -4.0, 4.0, vec![(3.0 - 5f64.sqrt()) / 2.0, (3.0 + 5f64.sqrt()) / 2.0]),
+                                        // (check 16: close typed roots keep their own values)
+                                        ("(y - 0.5)(y - 0.5000001)", -4.0, 4.0, 0.0, 1.0, vec![0.5, 0.5000001]), ("(y - 1)(y - 1.000000001)", -4.0, 4.0, 0.999999995, 1.000000005, vec![1.0, 1.000000001]),
+                                        ("(y - 0.3333333)(3y - 1)", -4.0, 4.0, 0.0, 1.0, vec![0.3333333, 1.0 / 3.0]), ("y(y^2 - 0.0000000000001)", -4.0, 4.0, -1.0, 1.0, vec![-1e-13f64.sqrt(), 0.0, 1e-13f64.sqrt()]),
+                                        // (check 17: roots 10⁻¹² apart stay two lines; a root just outside the window is not listed)
+                                        ("(y - 100)(y - 100.0000000001)", -4.0, 4.0, 0.0, 200.0, vec![100.0, 100.0000000001]), ("(y - 1)(y - 1.000000000001)", -4.0, 4.0, 0.0, 2.0, vec![1.0, 1.000000000001]),
+                                        ("y(y - 0.000000000001)", -4.0, 4.0, -1.0, 1.0, vec![0.0, 1e-12]), ("y - 1.000000000001", -4.0, 4.0, 0.0, 1.0, vec![]),
+                                        // (and true roots of small functions are still found)
+                                        ("0.0000000001 y", -4.0, 4.0, -4.0, 4.0, vec![0.0]), ("0.000001(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0]), ("(y - 1)^2", -4.0, 4.0, -3.7, 4.1, vec![1.0])] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("xmin", f(xa)), ("xmax", f(xb)), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on x [{xa}, {xb}], y [{y0}, {y1}]: {got:?}");
+        // (each line within 5·10⁻¹⁰ of the truth, written ≈ where its exact value is not recovered, and no two lines one value)
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 5e-10 * (1.0 + w.abs()), "{eqt}: {got:?}"); }
+        assert!(got.windows(2).all(|p| p[1] > p[0]), "{eqt}: two lines one value: {got:?}");
+    }
+    for (eqt, y0, y1, want) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}");
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-9, "{eqt} on [{y0}, {y1}]: {got:?}"); }
+    }
+}
+
+
+/// Check 18: a line is never given the value of a root outside the window. When the search finds one root alone, a
+/// neighbouring root just past the window edge, 2 beside 2.0000003 on y 2.0000001..2.0000005, is not its exact value: the
+/// line drawn is the root inside, or none is drawn and the height is named as possible. And a root whose float is the
+/// window edge's is inside only when it is exactly so: 1/3 is not in y 0..0.3333333333333333, √2 not in y 0..1.414213562373095.
+#[test]
+fn round18_no_line_takes_a_value_outside_the_window() {
+    let cases: Vec<(&str, f64, f64, f64)> = vec![
+        ("(y - 2)(y - 2.0000003) sin(x)", 2.0000001, 2.0000005, 2.0000003), ("(y - 1)(y - 1.0000009) sin(x)", 1.0000005, 1.000002, 1.0000009),
+        ("(y - 1)(y - 1.0000001) e^(-x)", 1.00000005, 1.00000015, 1.0000001), ("(y - 100)(y - 100.0000000001)", 100.00000000005, 100.00000000015, 100.0000000001),
+        ("(y - 3)(y - 3.0000000001)", 3.00000000005, 3.00000000015, 3.0000000001), ("(y - 1/3)(y - 0.3333334) sin(x)", 0.33333337, 0.4, 0.3333334),
+        ("(y + 1)(y + 1.0000001) sin(x)", -1.0000002, -1.00000005, -1.0000001), ("(y + 1)(y + 1.0000001) e^(-x)", -1.0000002, -1.00000005, -1.0000001),
+        ("(y - 1)(y - 1.0000005) sin(x)", 1.0000002, 1.000001, 1.0000005), ("y(y - 0.000001) cos(x)", 5e-7, 2e-6, 1e-6),
+        ("(y - 0.5)(y - 0.5000001) sin(x)", 0.50000005, 0.6, 0.5000001),
+    ];
+    for (eqt, y0, y1, inside) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        for l in &q.lines {
+            assert!(l.y >= y0 && l.y <= y1, "{eqt} on [{y0}, {y1}]: a line outside the window: {:?}", q.lines.iter().map(|l| l.y).collect::<Vec<_>>());
+            assert!((l.y - inside).abs() < 1e-12 * (1.0 + inside.abs()), "{eqt} on [{y0}, {y1}]: {:?}", l.y);
+        }
+    }
+    for (eqt, y0, y1) in [("3y - 1", 0.0, 0.3333333333333333), ("(3y - 1)(y + 5)", 0.0, 0.3333333333333333), ("y^2 - 2", 0.0, 1.414213562373095),
+                          ("y^2 - 3", 0.0, 1.7320508075688772), ("y^2 - 5", 2.23606797749979, 3.0), ("y^2 - y - 1", 1.618033988749895, 2.0), ("7y - 1", 0.0, 0.14285714285714285)] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert!(got.is_empty(), "{eqt} on [{y0}, {y1}]: a root outside the window by less than an ulp listed: {got:?}");
+    }
+    // (an edge that holds the root exactly keeps it: 0.5 on y 0..0.5, 0 on y 0..1, 1/4 on y 0.25..1)
+    for (eqt, y0, y1, want) in [("2y - 1", 0.0, 0.5, vec![0.5]), ("y(1 - y)", 0.0, 1.0, vec![0.0, 1.0]), ("4y - 1", 0.25, 1.0, vec![0.25])] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got, want, "{eqt} on [{y0}, {y1}]");
+    }
+}
+
+/// Check 19: an equilibrium on a window edge typed as a decimal is in the window: the edge is the decimal typed, not the
+/// binary value of its float (0.7 is stored as 0.69999999999999995559…, below 7/10). y(y − 0.7) on y 0..0.7 has the lines
+/// y = 0 and y = 0.7, every one; y − d on y 0..d and on y d..1 has y = d for every two-place d, with or without sin x; and
+/// a list called complete is.
+#[test]
+fn round19_a_root_on_a_typed_decimal_edge_is_in_the_window() {
+    let cases: Vec<(&str, f64, f64, Vec<f64>)> = vec![
+        ("y(y - 0.7)", 0.0, 0.7, vec![0.0, 0.7]), ("y - 0.3", 0.0, 0.3, vec![0.3]), ("y - 0.1", 0.1, 1.0, vec![0.1]), ("10y - 1", 0.1, 1.0, vec![0.1]),
+        ("(y - 0.3)(y + 1)", -2.0, 0.3, vec![-1.0, 0.3]), ("(y - 0.2)(1 - y)", 0.2, 1.0, vec![0.2, 1.0]), ("y - 0.6", 0.0, 0.6, vec![0.6]),
+        ("(y - 0.3)x", 0.0, 0.3, vec![0.3]), ("(y - 0.3) sin(x)", 0.0, 0.3, vec![0.3]), ("(y - 0.3) e^(-x)", 0.0, 0.3, vec![0.3]), ("y(1 - y/0.7)", 0.0, 0.7, vec![0.0, 0.7]),
+    ];
+    for (eqt, y0, y1, want) in cases {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let got: Vec<f64> = out.equils.as_ref().unwrap().lines.iter().map(|l| l.y).collect();
+        assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}");
+        for (g, w) in got.iter().zip(&want) { assert!((g - w).abs() < 1e-12, "{eqt} on [{y0}, {y1}]: {got:?}"); }
+    }
+    for k in 1..100 {
+        let d = k as f64 / 100.0;
+        let ds = format!("{d}");
+        for (eqt, y0, y1) in [(format!("y - {ds}"), 0.0, d), (format!("y - {ds}"), d, 1.0), (format!("y(y - {ds}) sin(x)"), 0.0, d), (format!("y(y - {ds})"), 0.0, d)] {
+            let out = build(&with(&[("dydx", s(&eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+            let q = out.equils.as_ref().unwrap();
+            let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+            // (d is a line, drawn; a list called complete holds every root in the window)
+            assert!(got.iter().any(|g| (g - d).abs() < 1e-12), "{eqt} on [{y0}, {y1}]: no line at {d}: {got:?}, unsure {:?}", q.unsure);
+            if q.complete && eqt.starts_with("y(") { assert!(got.iter().any(|g| *g == 0.0), "{eqt} on [{y0}, {y1}]: complete without 0: {got:?}"); }
+        }
+    }
+}
+
+/// Check 20: a root within a float step of an edge is decided exactly whatever the degree, never kept because the test
+/// overflowed: √3 is above y 0..1.7320508075688772 (as typed and as its float), so (y² − 3)(y − 9) there has no line and
+/// no "every one"; ∛3 is above y 0..1.4422495703074083; √5 is below y 2.23606797749979..10. And a root typed to nine or
+/// more places on an edge is in the window: y − 2.343846715 on y 2.343846715..3.343846715 has y = 2.343846715.
+#[test]
+fn round20_edge_roots_decided_exactly_at_any_degree() {
+    for (eqt, y0, y1) in [("(y^2 - 3)(y - 9)", 0.0, 1.7320508075688772), ("y^3 - 3", 0.0, 1.4422495703074083), ("(y^2 - 5)(y - 9)", 2.23606797749979, 8.0),
+                          ("(y^2 - 2)(y - 7)(y + 9)", 0.0, 1.414213562373095), ("300000000000y - 1", 0.0, 3.333333333333333e-12)] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert!(got.is_empty(), "{eqt} on [{y0}, {y1}]: a root outside the window drawn: {got:?} (complete {})", q.complete);
+    }
+    for (eqt, y0, y1, want) in [("y - 2.343846715", 2.343846715, 3.343846715, 2.343846715), ("y - 1.123456789012", 0.0, 1.123456789012, 1.123456789012),
+                                ("(y - 0.123456789)(y - 5)(y + 7)", 0.123456789, 1.0, 0.123456789), ("(y^2 - 3)(y - 9)", 0.0, 1.7320508075688774, 3f64.sqrt())] {
+        let out = build(&with(&[("dydx", s(eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+        let q = out.equils.as_ref().unwrap();
+        let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+        assert!(got.iter().any(|g| (g - want).abs() < 1e-12) || (!q.complete && q.unsure.iter().any(|u| (u - want).abs() < 1e-9)), "{eqt} on [{y0}, {y1}]: {got:?}, unsure {:?}, complete {}", q.unsure, q.complete);
+    }
+}
+
+/// Check 21: two equilibria 2·10⁻⁷ apart whose polynomial's coefficients pass 2⁵³ are each found at its own height: the
+/// root is halved exactly, so (y − 20.0000001)(y − 20.0000003) on y 19.9999999..20.0000005 has the lines 20.0000001 and
+/// 20.0000003, and (y − 10.0000001)(y − 10.0000003) on y 9..10.0000002 has y = 10.0000001, never "No equilibrium solutions".
+#[test]
+fn round21_close_roots_with_large_coefficients_keep_their_heights() {
+    for c in [10.0, 12.0, 15.0, 20.0, 30.0, 100.0] {
+        let (r1, r2) = (c + 1e-7, c + 3e-7);
+        let (t1, t2) = (format!("{}", r1), format!("{}", r2));
+        let eqt = format!("(y - {t1})(y - {t2})");
+        for (y0, y1, want) in [(c - 1e-7, c + 5e-7, vec![r1, r2]), (c - 1.0, c + 2e-7, vec![r1]), (c - 1.0, c + 1.0, vec![r1, r2])] {
+            let out = build(&with(&[("dydx", s(&eqt)), ("equilibria", b(true)), ("points", s("")), ("ymin", f(y0)), ("ymax", f(y1))]));
+            let q = out.equils.as_ref().unwrap();
+            let got: Vec<f64> = q.lines.iter().map(|l| l.y).collect();
+            // (every line drawn is a true root at its own height; fewer than all only where the list is not called complete)
+            for g in &got { assert!(want.iter().any(|w| (g - w).abs() <= 2e-15 * w.abs()), "{eqt} on [{y0}, {y1}]: {got:?}"); }
+            assert!(got.windows(2).all(|p| p[1] > p[0]), "{eqt}: {got:?}");
+            if got.len() != want.len() { assert!(!q.complete, "{eqt} on [{y0}, {y1}]: {got:?} called complete"); }
+            if (y1 - y0) < 1e-5 || c < 50.0 { assert_eq!(got.len(), want.len(), "{eqt} on [{y0}, {y1}]: {got:?}, unsure {:?}", q.unsure); }
+        }
+    }
+}

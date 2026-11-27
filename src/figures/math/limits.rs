@@ -18,6 +18,9 @@ pub const ID: &str = "limits-discontinuities";
 /// The exact analysis: constants, the typed formula, limits by series, zeros.
 #[path = "limits_cas.rs"]
 pub(crate) mod cas;
+/// The same questions on the coordinate grid's own graphs (off by default there).
+#[path = "limits_grid.rs"]
+pub(crate) mod grid;
 #[cfg(test)]
 #[path = "limits_cas_tests.rs"]
 mod cas_tests;

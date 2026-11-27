@@ -401,6 +401,23 @@ pub(crate) fn kink_args(e: &Ex, out: &mut Vec<Ex>) {
     }
 }
 
+/// The expressions whose zeros make a derivative singular or kinked: the base of a power with a non-whole exponent (of any
+/// sign: sin(x)^(−1/3) in sin(x)^(5/3)″), the inside of |u|, and a denominator.
+pub(crate) fn singular_bases(e: &Ex, out: &mut Vec<Ex>) {
+    match e {
+        Fun(F::Abs, a) => { if has_x(a) { out.push((**a).clone()); } singular_bases(a, out); }
+        Fun(F::Sqrt, a) => { if has_x(a) { out.push((**a).clone()); } singular_bases(a, out); }
+        Pow(a, b) => {
+            if let Some(c) = konst(b) { if c.fract() != 0.0 && has_x(a) { out.push((**a).clone()); } }
+            singular_bases(a, out); singular_bases(b, out);
+        }
+        Div(a, b) => { if has_x(b) { out.push((**b).clone()); } singular_bases(a, out); singular_bases(b, out); }
+        Neg(a) | Fun(_, a) => singular_bases(a, out),
+        Add(a, b) | Sub(a, b) | Mul(a, b) | LogB(a, b) => { singular_bases(a, out); singular_bases(b, out); }
+        _ => {}
+    }
+}
+
 /// How many nodes: a guard against derivatives too long to draw.
 pub(crate) fn size(e: &Ex) -> usize {
     match e {

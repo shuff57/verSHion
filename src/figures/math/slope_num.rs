@@ -180,6 +180,53 @@ fn guards_of(n: &Node, out: &mut Vec<Node>, br: &mut Vec<Node>) {
     }
 }
 
+/// The parts whose 0 leaves f with no value: a denominator's factors, the inside of ln or log, a base to a negative power, cos
+/// under tan or sec, sin under csc or cot. (Not the inside of √ or of a positive fractional power: f has a value where
+/// those are 0, √0 = 0, so an equilibrium can sit at the edge they make.)
+pub(crate) fn open_guards(n: &Node, out: &mut Vec<Node>) {
+    use Node::*;
+    match n {
+        Num(..) | X | Pi | Euler => {}
+        Neg(a) => open_guards(a, out),
+        Add(a, c) | Sub(a, c) | Mul(a, c) => { open_guards(a, out); open_guards(c, out); }
+        Div(a, c) => { open_guards(a, out); open_guards(c, out); factors(c, out); }
+        Pow(a, e) => {
+            open_guards(a, out);
+            open_guards(e, out);
+            // (a constant power above 0, rational or not, has a value at a base of 0: 0^π = 0; a power in x alone is decided
+            // at each x, by `xpow_guards`: 0^(x² + 1) = 0)
+            let positive = !has_x(e) && !has_y(e) && ev(e, 0.0, 0.0) > 0.0;
+            if !positive && (has_y(e) || !has_x(e)) { factors(a, out); }
+        }
+        LogB(bs, a) => { open_guards(bs, out); open_guards(a, out); out.push((**a).clone()); out.push((**bs).clone()); }
+        Func(f, a) => {
+            open_guards(a, out);
+            match *f {
+                "ln" | "log" => out.push((**a).clone()),
+                "tan" | "sec" => out.push(Func("cos", a.clone())),
+                "csc" | "cot" => out.push(Func("sin", a.clone())),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Bases raised to a power in x alone (y^(x² + 1), y^x): f has no value where the base is 0 only at the x's where the power
+/// is 0 or less there.
+pub(crate) fn xpow_guards(n: &Node, out: &mut Vec<(Node, Node)>) {
+    use Node::*;
+    match n {
+        Num(..) | X | Pi | Euler => {}
+        Neg(a) | Func(_, a) => xpow_guards(a, out),
+        Add(a, c) | Sub(a, c) | Mul(a, c) | Div(a, c) | LogB(a, c) => { xpow_guards(a, out); xpow_guards(c, out); }
+        Pow(a, e) => {
+            xpow_guards(a, out);
+            xpow_guards(e, out);
+            if has_x(e) && !has_y(e) { let mut fs = vec![]; factors(a, &mut fs); for q in fs { out.push((q, (**e).clone())); } }
+        }
+    }
+}
+
 // ───────────────────────── solution curves ─────────────────────────
 
 /// Why a curve ends where it does.
@@ -394,16 +441,46 @@ pub(crate) fn deg_x(n: &Node) -> Option<i128> {
 /// degree d is 0 when it is exactly 0 at d + 1 points.
 pub(crate) fn zero_fn(n: &Node) -> bool {
     use Node::*;
-    if !has_x(n) { return ex::exact(n, None).is_some_and(|v| v.is_zero()); }
+    // (a constant the exact layer holds is 0 or not; one it does not hold, 0^π, is decided by its structure below)
+    if !has_x(n) { if let Some(v) = ex::exact(n, None) { return v.is_zero(); } }
     let poly_zero = || deg_x(n).filter(|d| *d <= 24).is_some_and(|d| (0..=d).all(|k| ex::exact(n, Some(&Ex::rat(R(k, 1)))).is_some_and(|v| v.is_zero())));
     match n {
         Mul(a, c) => zero_fn(a) || zero_fn(c) || poly_zero(),
         Div(a, _) => zero_fn(a),
         Neg(a) => zero_fn(a),
         Pow(a, e) if !has_x(e) => ex::exact(e, None).is_some_and(|v| v.value() > 0.0) && zero_fn(a),
+        // (a power in x that is positive for every x, as x² + 1: 0 to it is 0)
+        Pow(a, e) if !has_y(e) && positive(e) => zero_fn(a),
         Func("sqrt" | "abs" | "sin" | "tan" | "arcsin" | "arctan", a) => zero_fn(a),
         Add(a, c) | Sub(a, c) => poly_zero() || (zero_fn(a) && zero_fn(c)),
         _ => poly_zero(),
+    }
+}
+
+/// The expression (in x, no y) is above 0 for every x where it has a value, shown by its structure: a positive constant, a
+/// sum of things at least 0 with one above, a product of positives, e to anything, a positive base to any power.
+fn positive(n: &Node) -> bool {
+    use Node::*;
+    match n {
+        _ if !has_x(n) && !has_y(n) => ex::exact(n, None).is_some_and(|v| v.value() > 0.0) || matches!(n, Pi | Euler),
+        Add(a, c) => (positive(a) && nonneg(c)) || (nonneg(a) && positive(c)),
+        Mul(a, c) | Div(a, c) => positive(a) && positive(c),
+        Pow(a, _) if positive(a) => true,
+        Func("exp", _) => true,
+        _ => false,
+    }
+}
+/// The expression is at least 0 for every x where it has a value: a positive one, an even whole power, |u|, √u.
+fn nonneg(n: &Node) -> bool {
+    use Node::*;
+    match n {
+        _ if positive(n) => true,
+        _ if !has_x(n) && !has_y(n) => ex::exact(n, None).is_some_and(|v| v.value() >= 0.0),
+        Pow(_, e) => ex::exact(e, None).and_then(|v| v.rational()).is_some_and(|(p, q)| q == 1 && p % 2 == 0),
+        Func("abs" | "sqrt", _) => true,
+        Add(a, c) => nonneg(a) && nonneg(c),
+        Mul(a, c) => nonneg(a) && nonneg(c),
+        _ => false,
     }
 }
 
@@ -423,6 +500,130 @@ fn poly_rem(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
     }
     Some(trim(r))
 }
+/// a / d, the quotient of polynomial long division (None on overflow).
+fn poly_div(a: &[Q], d: &[Q]) -> Option<Vec<Q>> {
+    let d = trim(d.to_vec());
+    let mut r = trim(a.to_vec());
+    if r.len() < d.len() { return Some(vec![Q(0, 1)]); }
+    let dl = *d.last()?;
+    let mut q = vec![Q(0, 1); r.len() - d.len() + 1];
+    while r.len() >= d.len() && !(r.len() == 1 && r[0].0 == 0) {
+        let k = r.len() - d.len();
+        let t = r.last()?.div(dl)?;
+        q[k] = t;
+        for (i, di) in d.iter().enumerate() { r[k + i] = r[k + i].sub(t.mul(*di)?)?; }
+        r.pop();
+        if r.is_empty() { r.push(Q(0, 1)); }
+        r = trim(r);
+    }
+    Some(trim(q))
+}
+fn is_zero_poly(c: &[Q]) -> bool { c.iter().all(|q| q.0 == 0) }
+/// A rational exactly, without overflow.
+fn big(q: Q) -> num_rational::BigRational { num_rational::BigRational::new(q.0.into(), q.1.into()) }
+/// A window edge as typed: the shortest decimal that gives back its float, exactly (0.7 is 7/10, 1.7320508075688772 is
+/// 17320508075688772/10¹⁶, which is less than √3).
+fn edge_big(v: f64) -> Option<num_rational::BigRational> {
+    if !v.is_finite() { return None; }
+    let t = format!("{v}");
+    let (neg, t) = match t.strip_prefix('-') { Some(r) => (true, r), None => (false, t.as_str()) };
+    let (ip, fp) = t.split_once('.').unwrap_or((t, ""));
+    if !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) { return None; }
+    let n: num_bigint::BigInt = format!("{ip}{fp}").parse().ok()?;
+    let d = num_traits::pow(num_bigint::BigInt::from(10), fp.len());
+    Some(num_rational::BigRational::new(if neg { -n } else { n }, d))
+}
+/// The sign of a polynomial with rational coefficients at a rational, exactly.
+fn sign_big(c: &[Q], x: &num_rational::BigRational) -> i32 {
+    use num_traits::{Signed, Zero};
+    let mut acc = num_rational::BigRational::zero();
+    for k in c.iter().rev() { acc = acc * x + big(*k); }
+    if acc.is_zero() { 0 } else if acc.is_positive() { 1 } else { -1 }
+}
+/// Within a few float steps of an edge: too near for the floats to say which side a value is on.
+fn near_edge(v: f64, e: f64) -> bool { (v - e).abs() <= 4.0 * f64::EPSILON * v.abs().max(e.abs()) + 4.0 * f64::MIN_POSITIVE }
+
+/// The distinct real roots of a square-free c in [lo, hi], each isolated by Sturm counts and then found by exact halving.
+/// Each distinct real root in [lo, hi]: its float, its exact value where rational, its interval as floats and exactly (the
+/// root is the only one in (a, b], or b itself).
+fn isolate_roots(c: &[Q], lo: Q, hi: Q) -> Option<Vec<(f64, Option<Q>, (f64, f64), (Q, Q))>> {
+    let count = |a: Q, b: Q| -> Option<usize> { let n = sturm_count(c, a, b)?; Some(n - (poly_eval(c, a)?.0 == 0) as usize) };
+    let mut out = vec![];
+    let mut stack = vec![(lo, hi, 0u32)];
+    while let Some((a, b, depth)) = stack.pop() {
+        let n = count(a, b)?;
+        if n == 0 { continue; }
+        if poly_eval(c, b)?.0 == 0 { let bf = b.0 as f64 / b.1 as f64; out.push((bf, Some(b), (bf, bf), (b, b))); if n > 1 { let m = a.add(b)?.mul(Q(1, 2))?; stack.push((a, m, depth + 1)); stack.push((m, b, depth + 1)); } continue; }
+        if n == 1 || depth > 90 {
+            // (halved exactly, in big rationals, oriented by the exact sign at the right end, which is no root here (a, the left
+            // end, may be one), until the two ends are one float apart: the float is the root's to the last place however
+            // large the coefficients, and a midpoint where the polynomial is exactly 0 is the root itself)
+            use num_traits::ToPrimitive;
+            let sv = sign_big(c, &big(b));
+            let (mut ua, mut ub) = (big(a), big(b));
+            let two = num_rational::BigRational::from_integer(2.into());
+            let mut hit: Option<num_rational::BigRational> = None;
+            for _ in 0..400 {
+                let (fa, fb) = (ua.to_f64().unwrap_or(f64::NAN), ub.to_f64().unwrap_or(f64::NAN));
+                if !(fa < fb) || fa.next_up() >= fb { break; }
+                let mid = (&ua + &ub) / &two;
+                let sm = sign_big(c, &mid);
+                if sm == 0 { hit = Some(mid); break; }
+                if sm == sv { ub = mid; } else { ua = mid; }
+            }
+            let r = match &hit { Some(h) => h.to_f64().unwrap_or(f64::NAN), None => ((&ua + &ub) / &two).to_f64().unwrap_or(f64::NAN) };
+            let hit_q = hit.as_ref().and_then(|h| Q::new(h.numer().to_i128()?, h.denom().to_i128()?));
+            // (a rational root, recovered from its float by continued fractions and checked exactly)
+            let mut rq = hit_q;
+            let (mut h0, mut h1, mut k0, mut k1, mut xv) = (0i128, 1i128, 1i128, 0i128, r);
+            for _ in 0..if rq.is_some() { 0 } else { 40 } {
+                let ai = xv.floor();
+                if ai.abs() > 1e15 { break; }
+                let ai_i = ai as i128;
+                let (h2, k2) = (ai_i.checked_mul(h1).and_then(|t| t.checked_add(h0)), ai_i.checked_mul(k1).and_then(|t| t.checked_add(k0)));
+                let (Some(h2), Some(k2)) = (h2, k2) else { break };
+                if k2 > 1_000_000_000_000 { break; }
+                (h0, h1, k0, k1) = (h1, h2, k1, k2);
+                // (only a root inside this root's own interval: another root of the polynomial is another line)
+                if let Some(q) = Q::new(h1, k1) {
+                    let inside = big(q) > big(a) && big(q) <= big(b);
+                    if inside && sign_big(c, &big(q)) == 0 { rq = Some(q); break; }
+                }
+                let fr = xv - ai;
+                if fr.abs() < 1e-18 { break; }
+                xv = 1.0 / fr;
+            }
+            out.push((rq.map_or(r, |q| q.0 as f64 / q.1 as f64), rq, (a.0 as f64 / a.1 as f64, b.0 as f64 / b.1 as f64), (a, b)));
+            continue;
+        }
+        let m = a.add(b)?.mul(Q(1, 2))?;
+        stack.push((a, m, depth + 1));
+        stack.push((m, b, depth + 1));
+    }
+    out.sort_by(|p, q| p.0.total_cmp(&q.0));
+    // (a root on the end of two intervals is found twice, as the same exact value; two roots the Sturm counts keep apart are
+    // never merged, however close: 100 and 100.0000000001 are two lines)
+    out.dedup_by(|p, q| p.1.is_some() && p.1 == q.1);
+    Some(out)
+}
+
+/// The greatest common divisor of two polynomials, made monic (None on overflow).
+fn poly_gcd(a: &[Q], b: &[Q]) -> Option<Vec<Q>> {
+    let (mut a, mut b) = (trim(a.to_vec()), trim(b.to_vec()));
+    while !is_zero_poly(&b) { let r = poly_rem(&a, &b)?; a = b; b = r; }
+    let lead = *a.last()?;
+    if lead.0 == 0 { return Some(a); }
+    a.iter().map(|c| c.div(lead)).collect()
+}
+/// The polynomial with each of its roots once: c / gcd(c, c′).
+fn square_free(c: &[Q]) -> Option<Vec<Q>> {
+    let c = trim(c.to_vec());
+    if c.len() <= 1 { return Some(c); }
+    let d: Vec<Q> = (1..c.len()).map(|k| c[k].mul(Q(k as i128, 1))).collect::<Option<_>>()?;
+    let g = poly_gcd(&c, &d)?;
+    poly_div(&c, &g)
+}
+
 /// The number of distinct real roots of the polynomial in [lo, hi] (Sturm's theorem), or None on overflow.
 pub(crate) fn sturm_count(c: &[Q], lo: Q, hi: Q) -> Option<usize> {
     let c = trim(c.to_vec());
@@ -491,7 +692,42 @@ pub(crate) struct Equil { pub y: f64, pub exact: Option<Ex>, pub runs: Vec<(f64,
 /// The equilibrium solutions in the window: the lines, whether the list is shown to be complete, and whether f is 0
 /// everywhere (every horizontal line).
 #[derive(Clone, Debug)]
-pub(crate) struct Equils { pub lines: Vec<Equil>, pub complete: bool, pub everywhere: bool }
+pub(crate) struct Equils { pub lines: Vec<Equil>, pub complete: bool, pub everywhere: bool,
+    /** heights the search found f near 0 on, but could not show to be equilibria exactly: never drawn as one */ pub unsure: Vec<f64> }
+
+/// Whether f(x, c) = 0 for every x, shown exactly, for a candidate c: by substitution and exact arithmetic, or, for c = ln n
+/// and c = ∛n, which the exact layer does not hold, by putting n for e^y (or exp y) and for y³ (y to a multiple of 3), and
+/// then f must have no y left and be 0 for every x: √(2 − eʸ) at ln 2, √(y³ − 2) at ∛2.
+pub(crate) fn proves(tree: &Node, c: &Node) -> bool {
+    if zero_fn(&subst(tree, None, Some(c))) { return true; }
+    fn map(n: &Node, k: &dyn Fn(&Node) -> Option<Node>) -> Node {
+        use Node::*;
+        if let Some(r) = k(n) { return r; }
+        let m = |a: &Node| b(map(a, k));
+        match n {
+            Neg(a) => Neg(m(a)), Func(f, a) => Func(f, m(a)),
+            Add(a, c) => Add(m(a), m(c)), Sub(a, c) => Sub(m(a), m(c)), Mul(a, c) => Mul(m(a), m(c)), Div(a, c) => Div(m(a), m(c)),
+            Pow(a, c) => Pow(m(a), m(c)), LogB(a, c) => LogB(m(a), m(c)),
+            other => other.clone(),
+        }
+    }
+    let num = |v: i128| Node::Num(v as f64, R::new(v, 1));
+    let replaced = match c {
+        Node::Func("ln", a) => {
+            let Some((nv, 1)) = ex::exact(a, None).and_then(|v| v.rational()) else { return false };
+            map(tree, &|t| match t { Node::Pow(e, y) if matches!(**e, Node::Euler) && is_y(y) => Some(num(nv)), Node::Func("exp", y) if is_y(y) => Some(num(nv)), _ => None })
+        }
+        Node::Pow(a, e) if ex::exact(e, None).and_then(|v| v.rational()) == Some((1, 3)) => {
+            let Some((nv, 1)) = ex::exact(a, None).and_then(|v| v.rational()) else { return false };
+            map(tree, &|t| match t {
+                Node::Pow(y, k) if is_y(y) => match ex::exact(k, None).and_then(|v| v.rational()) { Some((p, 1)) if p > 0 && p % 3 == 0 => nv.checked_pow((p / 3) as u32).map(num), _ => None },
+                _ => None,
+            })
+        }
+        _ => return false,
+    };
+    !has_y(&replaced) && zero_fn(&replaced)
+}
 
 /// The exact candidates near a root: p/q, (p/q)√n, (p/q)π (q ≤ 12, n square-free ≤ 50), tried only to be shown exactly.
 fn candidates(y: f64) -> Vec<Node> {
@@ -510,6 +746,38 @@ fn candidates(y: f64) -> Vec<Node> {
     for q in 1..=12i128 {
         let p = (y / PI * q as f64).round() as i128;
         if p != 0 && ((p as f64 / q as f64) * PI - y).abs() < 1e-6 { if let Some(c) = rat_node(p, q) { out.push(Node::Mul(b(c), b(Node::Pi))); } }
+    }
+    // (fractions of e, as y − e or y(1 − ln y) have them)
+    for q in 1..=12i128 {
+        let p = (y / EULER * q as f64).round() as i128;
+        if p != 0 && ((p as f64 / q as f64) * EULER - y).abs() < 1e-9 * (1.0 + y.abs()) { if let Some(c) = rat_node(p, q) { out.push(Node::Mul(b(c), b(Node::Euler))); } }
+    }
+    // (quadratic surds (p ± √n)/q, the roots of a quadratic with whole coefficients: (3 ± √5)/2)
+    for n in [2i128, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23] {
+        let sn = (n as f64).sqrt();
+        for q in 1..=12i128 {
+            for sg in [1.0, -1.0] {
+                let p = (y * q as f64 - sg * sn).round() as i128;
+                if p == 0 || ((p as f64 + sg * sn) / q as f64 - y).abs() >= 1e-9 * (1.0 + y.abs()) { continue; }
+                let root = Node::Func("sqrt", b(Node::Num(n as f64, R::new(n, 1))));
+                let top = if sg > 0.0 { Node::Add(b(Node::Num(p as f64, R::new(p, 1))), b(root)) } else { Node::Sub(b(Node::Num(p as f64, R::new(p, 1))), b(root)) };
+                out.push(Node::Div(b(top), b(Node::Num(q as f64, R::new(q, 1)))));
+            }
+        }
+    }
+    // (decimals as typed, to 12 places: 0.15, 0.0625, 0.0001, 1.000000001)
+    for k in 1..=12u32 {
+        let q = 10i128.pow(k);
+        let p = (y * q as f64).round() as i128;
+        if ((p as f64 / q as f64) - y).abs() < 1e-9 * (1.0 + y.abs()) { if let Some(n) = rat_node(p, q) { out.push(n); } }
+    }
+    // (the logs and cube roots of small whole numbers, as an edge such as √(2 − eʸ) at ln 2 or √(y³ − 2) at ∛2 has them)
+    for n in 2..=10i128 {
+        let num = || Node::Num(n as f64, R::new(n, 1));
+        for sg in [1.0, -1.0] {
+            if ((n as f64).ln() * sg - y).abs() < 1e-9 { let l = Node::Func("ln", b(num())); out.push(if sg < 0.0 { Node::Neg(b(l)) } else { l }); }
+            if ((n as f64).cbrt() * sg - y).abs() < 1e-9 { if let Some(t) = rat_node(1, 3) { let c = Node::Pow(b(num()), b(t)); out.push(if sg < 0.0 { Node::Neg(b(c)) } else { c }); } }
+        }
     }
     out
 }
@@ -532,30 +800,90 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     let pick = |t: f64| { let v = x0 + t * w; let s = (v * 64.0).round() / 64.0; if s > x0 && s < x1 { s } else { v } };
     let x_try = [pick(0.381_966), pick(0.618_034)];
     // every y with f(x, y) = 0 for the x tried, by sign changes and by touching minima of |f|
-    let roots_at = |xr: f64| -> Vec<f64> {
+    let opens = { let mut v = vec![]; open_guards(&f.tree, &mut v); v };
+    let xpows = { let mut v = vec![]; xpow_guards(&f.tree, &mut v); v };
+    // A value runs to 0 as y comes to b from one side (`side` points into it): its values 10⁻⁴, 10⁻⁶ and 10⁻⁸ away fall
+    // steadily, by the same factor or faster each time, as any power of the distance does (√, ∛, a fourth root, y^π); a
+    // pole's grow, a jump's and a constant's stay, and a log's slow fall slows down. None where it has no value there.
+    let shrinks = |g: &dyn Fn(f64) -> Option<f64>, b: f64, side: f64| -> Option<bool> {
+        let u = 1.0 + b.abs();
+        let a = [g(b + side * 1e-4 * u)?.abs(), g(b + side * 1e-6 * u)?.abs(), g(b + side * 1e-8 * u)?.abs()];
+        // (values that are 0 or denormal this close are underflow (e^(−1/y) just right of 0, y e^(−y²) far out), not a value
+        // running to 0)
+        if a.iter().any(|v| *v < 1e-300) { return Some(false); }
+        if !(a[0] > a[1] && a[1] > a[2]) { return Some(false); }
+        let (r1, r2) = (a[1] / a[0], a[2] / a[1]);
+        Some(r1 <= 0.9 && r2 <= 0.9 && r2 <= r1 + 0.05)
+    };
+    // an open guard (a denominator, a log's inside, a base to a negative power, …) is 0 at (x, y): f has no value there,
+    // however close to 0 its float comes beside it. Decided by the guard itself running to 0 there, from the side given (0:
+    // from both), or its float being 0 or not finite there: ∛y under ln at y = 0, (1 − y²)^(1/4) under a quotient at ±1
+    let open_at = |x: f64, y: f64, side: f64| xpows.iter().filter(|(_, e)| ev(e, x, y) <= 0.0).map(|(q, _)| q).chain(opens.iter()).any(|q| {
+        let v = ev(q, x, y);
+        if !v.is_finite() || v.abs() <= 1e-12 * (1.0 + y.abs()) { return true; }
+        let gq = |t: f64| { let w = ev(q, x, t); w.is_finite().then_some(w) };
+        if side != 0.0 { shrinks(&gq, y, side) == Some(true) } else { shrinks(&gq, y, -1.0) == Some(true) && shrinks(&gq, y, 1.0) == Some(true) }
+    });
+    // f runs to 0 as y comes to the edge b of its domain from the side it has values on, and no open guard is 0 there
+    // (√(2 − y²) at √2, where rounding leaves no float on the line with a value; (2 − y) ln(2 − y) at 2 runs to 0 too, but
+    // has no value at 2)
+    let edge_zero = |x: f64, b: f64, side: f64| -> bool { !open_at(x, b, side) && shrinks(&|t| f.at(x, t), b, side) == Some(true) };
+    // f is small at r against its own size beside it: its float there is at most 10⁻⁶ of the larger of its values 10⁻⁴ away
+    // (a normal number, not an underflow). Never against a fixed size: 10⁻¹⁰(y − x) or y² + 10⁻⁹ is small everywhere, and is
+    // 0 nowhere but on y = x and nowhere at all.
+    let small_at = |x: f64, r: f64| -> bool {
+        let beside = [-1.0, 1.0].iter().filter_map(|sd: &f64| f.at(x, r + sd * 1e-4 * (1.0 + r.abs()))).map(f64::abs).fold(0.0, f64::max);
+        beside >= 1e-300 && f.at(x, r).is_some_and(|v| v.abs() <= 1e-6 * beside)
+    };
+    // f is 0 at the height r found inside its domain: small against its own size beside it, or running to 0 there from each
+    // side it has values on (∛y at 0, whose float at the bracket's end is 10⁻⁵); a pole's sign change grows instead
+    let zero_near = |x: f64, r: f64| -> Option<bool> {
+        if small_at(x, r) { return Some(true); }
+        match (shrinks(&|t| f.at(x, t), r, -1.0), shrinks(&|t| f.at(x, t), r, 1.0)) {
+            (Some(false), _) | (_, Some(false)) => Some(false),
+            (None, None) => None,
+            _ => Some(true),
+        }
+    };
+    let roots_at = |xr: f64| -> Vec<(f64, f64)> {
         let n = 4000;
         let ys: Vec<f64> = (0..=n).map(|j| y0 + hy * j as f64 / n as f64).collect();
         let g: Vec<Option<f64>> = ys.iter().map(|y| f.at(xr, *y)).collect();
-        let mut out: Vec<f64> = vec![];
+        let mut out: Vec<(f64, f64)> = vec![];
         let bis = |mut a: f64, mut c: f64| { let ga = f.at(xr, a).unwrap_or(0.0); for _ in 0..200 { let m = 0.5 * (a + c); match f.at(xr, m) { Some(gm) if gm == 0.0 => return m, Some(gm) if (gm > 0.0) == (ga > 0.0) => a = m, _ => c = m } if c - a <= 1e-15 * (1.0 + a.abs()) { break; } } 0.5 * (a + c) };
         for j in 0..=n {
+            // (a sample exactly 0 is a root, unless its neighbour is 0 too: a run of zeros is a value underflowing, e^(−y³) for
+            // y past 9, e^(−1/y) just right of 0, not a line of roots)
             match g[j] {
-                Some(v) if v == 0.0 => out.push(ys[j]),
+                Some(v) if v == 0.0 && !(j > 0 && g[j - 1] == Some(0.0)) && !(j < n && g[j + 1] == Some(0.0))
+                    && [-1.0, 1.0].iter().all(|sd: &f64| f.at(xr, ys[j] + sd * 1e-4 * (1.0 + ys[j].abs())).is_none_or(|w| w.abs() >= 1e-300)) => out.push((ys[j], 0.0)),
                 _ => {}
+            }
+            // a root at the edge of f's domain (√y at y = 0, √(2 − y²) at ±√2, √(cos y) at ±π/2): no sign change and no sample
+            // need land on it, and at an irrational edge no float on the line need have a value. The edge is found by halving
+            // between a height where f is defined and one where it is not; it is a root where f runs to 0 there (`edge_zero`)
+            if j < n && g[j].is_some() != g[j + 1].is_some() {
+                let (mut a, mut c) = if g[j].is_some() { (ys[j], ys[j + 1]) } else { (ys[j + 1], ys[j]) };
+                for _ in 0..200 { let m = 0.5 * (a + c); if f.at(xr, m).is_some() { a = m; } else { c = m; } if (c - a).abs() <= 1e-15 * (1.0 + a.abs()) { break; } }
+                let side = if c > a { -1.0 } else { 1.0 };
+                // (the edge itself: a float with a value on it is the edge where there is one, √y at 0; else the halving's end)
+                if edge_zero(xr, a, side) { out.push((a, side)); }
             }
             if j < n {
                 if let (Some(a), Some(c)) = (g[j], g[j + 1]) {
                     if a != 0.0 && c != 0.0 && (a > 0.0) != (c > 0.0) {
                         let r = bis(ys[j], ys[j + 1]);
-                        // a sign change across a pole is no root
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-9 * scale) { out.push(r); }
+                        // a sign change across a pole or a jump is no root
+                        if zero_near(xr, r) == Some(true) { out.push((r, 0.0)); }
                     }
                 }
             }
             // a touching root (no sign change): a small minimum of |f|, refined by golden section
             if j > 0 && j < n {
                 if let (Some(a), Some(m), Some(c)) = (g[j - 1], g[j], g[j + 1]) {
-                    if m != 0.0 && m.abs() <= a.abs() && m.abs() <= c.abs() && (a > 0.0) == (m > 0.0) && (c > 0.0) == (m > 0.0) && m.abs() < 1e-2 * scale {
+                    if m != 0.0 && m.abs() <= a.abs() && m.abs() <= c.abs() && (a > 0.0) == (m > 0.0) && (c > 0.0) == (m > 0.0) && m.abs() < scale {
+                        // (any small local minimum of |f| is looked at: √|y|'s nearest sample to 0 is about 0.02; whether it is a root
+                        // is decided at the minimum itself)
                         let (mut lo, mut hi) = (ys[j - 1], ys[j + 1]);
                         let gr = 0.618_033_988_75;
                         for _ in 0..120 {
@@ -564,38 +892,183 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
                             if v1 < v2 { hi = p2; } else { lo = p1; }
                         }
                         let r = 0.5 * (lo + hi);
-                        if f.at(xr, r).is_some_and(|v| v.abs() < 1e-12 * scale) { out.push(r); }
+                        // (a root of fractional order touches without a sign change too, √|y| at 0: its float at the minimum is about
+                        // 10⁻⁸, and it runs to 0 from both sides)
+                        // (but not merely a tiny minimum: y² + 10⁻⁷ is never 0, though its minimum is small beside a large scale)
+                        let falls = shrinks(&|t| f.at(xr, t), r, -1.0) == Some(true) && shrinks(&|t| f.at(xr, t), r, 1.0) == Some(true);
+                        if small_at(xr, r) || falls { out.push((r, 0.0)); }
                     }
                 }
             }
         }
-        out.sort_by(|a, c| a.total_cmp(c));
-        out.dedup_by(|a, c| (*a - *c).abs() < 1e-7 * hy);
+        out.sort_by(|a, c| a.0.total_cmp(&c.0));
+        // (a root sampled exactly on an edge is found both ways: the one kept is the one with a value on it)
+        out.dedup_by(|a, c| { let same = (a.0 - c.0).abs() < 1e-7 * hy; if same && c.1 != 0.0 && a.1 == 0.0 { *c = *a; } same });
         out
     };
     // f is 0 everywhere: every horizontal line
-    if has_no_vars_zero(&f.tree) { return Equils { lines: vec![], complete: true, everywhere: true }; }
+    if has_no_vars_zero(&f.tree) { return Equils { lines: vec![], complete: true, everywhere: true, unsure: vec![] }; }
+    // The exact way, where it can be taken: f(x, y) at three rational x's is a polynomial in y with rational coefficients
+    // (y − 10⁻¹⁰x, y² + 10⁻¹⁴, the logistic, (y − 1)(y − x)). A line y = c is an equilibrium only if c is a root at every x,
+    // so the lines are the real roots of the exact greatest common divisor of those polynomials (each root once), found
+    // where its square-free part changes sign and counted by Sturm's theorem; no size of f decides anything. (A common
+    // root at three x's but not at every x needs f's coefficients to share a root at those three x's alone: the lines found
+    // are checked at every x below as well.)
+    // (f a polynomial in x too, of degree D: a root common to its polynomials in y at D + 1 x's is a root at every x, so a
+    // line found so is shown exactly; otherwise three x's narrow the search, and a line is shown by an exact value below)
+    let dx = deg_x(&f.tree).filter(|d| *d <= 12);
+    let nx = dx.map_or(3, |d| (d as usize + 1).max(3));
+    let xq: Vec<f64> = (0..nx).map(|k| if k < 2 { x_try[k] } else { pick(0.137_2 + 0.7 * (k - 2) as f64 / nx as f64) }).collect();
+    let polys: Option<Vec<Vec<Q>>> = xq.iter().map(|x| Q::of_f64(*x).and_then(|q| poly_in_y(&f.tree, q))).collect();
+    let distinct = { let mut v = xq.clone(); v.sort_by(|a, c| a.total_cmp(c)); v.windows(2).all(|p| p[0] != p[1]) };
+    if let Some(polys) = polys.filter(|ps| ps.iter().any(|c| !is_zero_poly(c))) {
+        let g = polys.iter().try_fold(vec![Q(0, 1)], |acc, c| poly_gcd(&acc, c));
+        let lo = Q::of_f64(((y0 - 1.0 / 64.0) * 64.0).floor() / 64.0);
+        let hi = Q::of_f64(((y1 + 1.0 / 64.0) * 64.0).ceil() / 64.0);
+        let isolated = g.as_ref().and_then(|g| square_free(g)).zip(lo.zip(hi)).and_then(|(sf, (lo, hi))| isolate_roots(&sf, lo, hi).map(|r| (sf, r)));
+        if let Some((sf, roots)) = isolated {
+            let proven_all_x = dx.is_some() && distinct;
+            let mut lines = vec![];
+            let mut unsure = vec![];
+            // (inside the window as the figure has it, strictly: 1.000000000001 is not in y 0..1; and a root whose float is the
+            // edge's, against the edge as typed: 7/10 is in y 0..0.7, 1/3 is not in y 0..0.3333333333333333)
+            // (a root within a few float steps of an edge is decided exactly, in big rationals, against the edge as typed: by
+            // its own value where rational, else by the sign of the square-free polynomial at the edge, the root being the
+            // only one in its interval (a, b]; one that cannot be decided is named as possible, never kept)
+            let in_window = |r: f64, rq: Option<Q>, (a, b): (Q, Q)| -> Option<bool> {
+                let (lo_near, hi_near) = (near_edge(r, y0), near_edge(r, y1));
+                if !lo_near && !hi_near { return Some(r >= y0 && r <= y1); }
+                let (a, b) = (big(a), big(b));
+                let sb = sign_big(&sf, &b);
+                let below_top = |e1: &num_rational::BigRational| -> bool {
+                    if let Some(q) = rq { return big(q) <= *e1; }
+                    if sb == 0 || b <= *e1 { return b <= *e1; }
+                    if *e1 <= a { return false; }
+                    let s = sign_big(&sf, e1);
+                    s == 0 || s == sb
+                };
+                let above_bottom = |e0: &num_rational::BigRational| -> bool {
+                    if let Some(q) = rq { return big(q) >= *e0; }
+                    if sb == 0 { return b >= *e0; }
+                    if *e0 <= a { return true; }
+                    if b < *e0 { return false; }
+                    sign_big(&sf, e0) != sb
+                };
+                let top = if hi_near { below_top(&edge_big(y1)?) } else { r <= y1 };
+                let bottom = if lo_near { above_bottom(&edge_big(y0)?) } else { r >= y0 };
+                Some(top && bottom)
+            };
+            let mut kept = vec![];
+            for (r, rq, iv, iq) in roots {
+                match in_window(r, rq, iq) { Some(true) => kept.push((r, rq, iv, iq)), Some(false) => {} None => unsure.push(r) }
+            }
+            for (r, rq, (ia, ib), _) in kept {
+                // (an exact value: the root itself where it is rational, else a short exact value f is 0 on for every x, and
+                // only one inside this root's own isolating interval: a neighbouring root's value is another line's)
+                let cand = candidates(r).into_iter().filter(|c| { let v = ev(c, 0.0, 0.0); v > ia && v <= ib + 1e-15 * (1.0 + ib.abs()) }).find(|c| proves(&f.tree, c));
+                let exact = match rq { Some(q) => Some(Ex::rat(R(q.0, q.1))), None => cand.as_ref().and_then(|c| ex::exact(c, None)) };
+                let shown = proven_all_x || cand.is_some();
+                let yv = exact.as_ref().map(|e| e.value()).or_else(|| cand.as_ref().map(|c| ev(c, 0.0, 0.0))).unwrap_or(r);
+                if !shown { unsure.push(yv); continue; }
+                let mut runs: Vec<(f64, f64)> = vec![];
+                let m = 480;
+                let mut start: Option<f64> = None;
+                for i in 0..=m {
+                    let x = x0 + w * i as f64 / m as f64;
+                    match (f.at(x, yv).is_some(), start) { (true, None) => start = Some(x), (false, Some(s0)) => { runs.push((s0, x0 + w * (i as f64 - 1.0) / m as f64)); start = None; } _ => {} }
+                }
+                if let Some(s0) = start { runs.push((s0, x1)); }
+                lines.push(Equil { y: yv, exact, runs });
+            }
+            let _ = sf;
+            // (two lines written with one value would be one line shown twice: never called complete)
+            let twice = lines.windows(2).any(|p| (p[0].y - p[1].y).abs() <= 1e-15 * (1.0 + p[0].y.abs()));
+            return Equils { complete: unsure.is_empty() && !twice, lines, everywhere: false, unsure };
+        }
+    }
     // f(x, y) = 0 for every y at the x tried (y′ = x − 0.37·…): try the other x; when 0 at both, nothing is claimed
     let flat = |xr: f64| (0..=40).all(|j| f.at(xr, y0 + hy * (j as f64 + 0.41) / 41.0) == Some(0.0));
-    let Some(xr) = x_try.into_iter().find(|x| !flat(*x)) else { return Equils { lines: vec![], complete: false, everywhere: false } };
+    let Some(xr) = x_try.into_iter().find(|x| !flat(*x)) else { return Equils { lines: vec![], complete: false, everywhere: false, unsure: vec![] } };
     let found = roots_at(xr);
+    // a "root" a rounding away from a height where f has no value at the exact x tried is no root: f only comes close to 0
+    // there through a factor that cancels (x(y − 1)²/(y − 1), y²/y, sin²y/sin y), and the line itself has no values
+    let xe = Q::of_f64(xr).map(|q| Ex::rat(R(q.0, q.1)));
+    let gap = |r: f64| -> bool {
+        candidates(r).into_iter().any(|c| {
+            let Some(cv) = ex::exact(&c, None).map(|e| e.value()) else { return false };
+            // (cancellation beside the gap leaves f's float near 0 up to about 10⁻⁸ away: (y² − 2y)/(y − 2) − 2 at 2 + 1.5·10⁻⁸)
+            (cv - r).abs() <= 1e-6 * (1.0 + r.abs()) && (f.at(xr, cv).is_none() || xe.as_ref().is_some_and(|x| ex::zero_at(&subst(&f.tree, None, Some(&c)), x)))
+        })
+    };
+    // (and at any height: a root where a denominator, a log's inside or a negative power's base is 0 is no root, (y − 0.15)²/
+    // (y − 0.15) at 0.15, (y − e)²/(y − e) at e, whatever the window)
+    // (an edge root is no gap: at an irrational edge, √2, the float of the exact value has no value, but the line does)
+    let found: Vec<(f64, f64)> = found.into_iter().filter(|r| !(r.1 == 0.0 && gap(r.0)) && !open_at(xr, r.0, r.1)).collect();
     let mut lines = vec![];
-    for &r in &found {
-        // f is 0 on the line y = r at every x where it is defined (and defined at most of them)
-        let vals: Vec<Option<f64>> = xs.iter().map(|x| f.at(*x, r)).collect();
+    let mut unsure: Vec<f64> = vec![];
+    for &(r, side) in &found {
+        // f is 0 on the line y = r at every x where it is defined (and defined at most of them); on an edge, f runs to 0 there
+        let ok_at = |x: f64| -> Option<bool> {
+            // (an edge's own float is a rounding inside it, where √ of the rounding is about 10⁻⁸: the approach decides)
+            if side != 0.0 {
+                // (at an x where f is exactly 0 beside the edge, x√y at x = 0, the line is no less a solution there)
+                let u = 1.0 + r.abs();
+                let near: Vec<Option<f64>> = [1e-4, 1e-6, 1e-8].iter().map(|d| f.at(x, r + side * d * u)).collect();
+                if near.iter().all(|v| *v == Some(0.0)) && !open_at(x, r, side) { return Some(true); }
+                return near[0].map(|_| edge_zero(x, r, side));
+            }
+            if open_at(x, r, 0.0) { return None; }
+            // (an x where f is exactly 0 on the line is on it: x(y − 1)^(1/3) and x√(1 − y²) at x = 0, whether or not the line
+            // is an edge that fell on a sampled height; the underflow guard is the search's, at the x it searches)
+            if f.at(x, r) == Some(0.0) { return Some(true); }
+            // (on the line at this x: f's float there is a rounding of its size beside it, 10⁻⁹ of it for a crossing root
+            // found by halving, 10⁻⁶ for a touching one found by golden section; or f keeps falling toward the line from
+            // each side, five decades in, down to 10⁻¹² away, as every root of any order does and y + 10⁻¹⁰ sin x does not)
+            let u = 1.0 + r.abs();
+            let beside = [-1.0, 1.0].iter().filter_map(|sd: &f64| f.at(x, r + sd * 1e-4 * u)).map(f64::abs).fold(0.0, f64::max);
+            let touching = match (f.at(xr, r - 1e-4 * u), f.at(xr, r + 1e-4 * u)) { (Some(a), Some(c)) => (a > 0.0) == (c > 0.0), _ => false };
+            if let Some(v) = f.at(x, r) { if beside >= 1e-300 && v.abs() <= (if touching { 1e-6 } else { 1e-9 }) * beside { return Some(true); } }
+            let deep = |sd: f64| -> Option<bool> {
+                let a: Vec<f64> = [1e-4, 1e-6, 1e-8, 1e-10, 1e-12].iter().map(|d| f.at(x, r + sd * d * u).map(f64::abs)).collect::<Option<_>>()?;
+                if a.iter().any(|v| *v < 1e-300) { return Some(false); }
+                let rs: Vec<f64> = a.windows(2).map(|p| p[1] / p[0]).collect();
+                Some(rs.iter().all(|q| *q <= 0.9) && rs.windows(2).all(|p| p[1] <= p[0] + 0.05))
+            };
+            match (deep(-1.0), deep(1.0)) { (Some(false), _) | (_, Some(false)) => Some(false), (None, None) => None, _ => Some(true) }
+        };
+        let vals: Vec<Option<bool>> = xs.iter().map(|x| ok_at(*x)).collect();
         let defined = vals.iter().filter(|v| v.is_some()).count();
         // (f is 0 on the line at every one of at least 25 x's where it is defined: a sign change across a pole is no root)
-        if defined < 25 || !vals.iter().flatten().all(|v| v.abs() <= 1e-9 * scale) { continue; }
+        if defined < 25 || !vals.iter().flatten().all(|ok| *ok) { continue; }
         // an exact value, shown exactly: f(x, c) is 0 for every x by exact arithmetic
-        let exact = candidates(r).into_iter().find(|c| zero_fn(&subst(&f.tree, None, Some(c)))).and_then(|c| ex::exact(&c, None));
-        let yv = exact.as_ref().map(|e| e.value()).unwrap_or(r);
+        // (a candidate nearer this root than half the way to any other root found: a neighbouring root's exact value, 1/2 beside
+        // 0.5000001, is another line's)
+        // (and inside the window: a root found alone has no neighbour found, and the root just outside the window, 2 beside
+        // 2.0000003 on y 2.0000001..2.0000005, is not this line. A value whose float is the window edge's is inside only when
+        // it is exactly the edge as typed: 3/10 is inside y 0..0.3, 1/3 is outside y 0..0.3333333333333333)
+        let gap = found.iter().filter(|o| o.0 != r).map(|o| (o.0 - r).abs()).fold(f64::INFINITY, f64::min);
+        let inside = |c: &Node| -> bool {
+            let v = ev(c, 0.0, 0.0);
+            let (lo_near, hi_near) = (near_edge(v, y0), near_edge(v, y1));
+            if !lo_near && !hi_near { return v >= y0 && v <= y1; }
+            // (beside an edge: exactly, a rational value against the edge as typed; any other value is not decided so)
+            let Some(q) = ex::exact(c, None).and_then(|e| e.rational()).and_then(|(p, q)| Q::new(p, q)).map(big) else { return false };
+            (!hi_near || edge_big(y1).is_some_and(|e| q <= e)) && (!lo_near || edge_big(y0).is_some_and(|e| q >= e)) && (lo_near || v >= y0) && (hi_near || v <= y1)
+        };
+        let proof = candidates(r).into_iter().filter(|c| (ev(c, 0.0, 0.0) - r).abs() < 0.5 * gap && inside(c)).find(|c| proves(&f.tree, c));
+        let exact = proof.as_ref().and_then(|c| ex::exact(c, None));
+        // (a value shown but not held exactly, ln 2: its float, to the last place)
+        let yv = exact.as_ref().map(|e| e.value()).or_else(|| proof.as_ref().map(|c| ev(c, 0.0, 0.0))).unwrap_or(r);
+        // (a line is drawn as an equilibrium only where it is shown so exactly: f(x, c) ≡ 0 for a value c. A height the search
+        // finds f near 0 on, but no exact value shows, is named as possible, never drawn: no size of f decides it)
+        if proof.is_none() { unsure.push(r); continue; }
         // the runs of x where f is defined on the line
         let mut runs: Vec<(f64, f64)> = vec![];
         let n = 480;
         let mut start: Option<f64> = None;
         for i in 0..=n {
             let x = x0 + w * i as f64 / n as f64;
-            let ok = f.at(x, yv).is_some();
+            let ok = f.at(x, yv).is_some() || (side != 0.0 && edge_zero(x, r, side)) || (side == 0.0 && zero_near(x, r) == Some(true));
             match (ok, start) { (true, None) => start = Some(x), (false, Some(s)) => { runs.push((s, x0 + w * (i as f64 - 1.0) / n as f64)); start = None; } _ => {} }
         }
         if let Some(s) = start { runs.push((s, x1)); }
@@ -604,7 +1077,8 @@ pub(crate) fn equilibria(f: &F, x0: f64, x1: f64, y0: f64, y1: f64) -> Equils {
     // complete: f(xr, y) is a polynomial in y whose distinct real roots in the window are exactly the roots found there
     let complete = Q::of_f64(xr).and_then(|q| poly_in_y(&f.tree, q)).zip(Q::of_f64(y0).zip(Q::of_f64(y1)))
         .and_then(|(c, (lo, hi))| sturm_count(&c, lo, hi)).is_some_and(|n| n == found.len());
-    Equils { lines, complete, everywhere: false }
+    let twice = lines.windows(2).any(|p| (p[0].y - p[1].y).abs() <= 1e-15 * (1.0 + p[0].y.abs()));
+    Equils { complete: complete && unsure.is_empty() && !twice, lines, everywhere: false, unsure }
 }
 /// f is the number 0 (no variables at all, or a product with an exact 0).
 fn has_no_vars_zero(n: &Node) -> bool { !has_x(n) && !has_y(n) && ex::exact(n, None).is_some_and(|v| v.is_zero()) || matches!(n, Node::Mul(a, c) if has_no_vars_zero(a) || has_no_vars_zero(c)) }
