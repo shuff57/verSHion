@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-28T02:01:48+00:00 · probe: 2026-11-27T18:01:48
+Generated: 2026-11-28T06:01:05+00:00 · probe: 2026-11-27T22:01:05
 
-**Pooled 92.8** · mean 91.9 over 91 figures · built 92 of 94 reference figures (missing: math/composite-3d-shape, physics/electric-and-magnetic-fields)
+**Pooled 93.2** · mean 92.6 over 91 figures · built 92 of 94 reference figures (missing: math/composite-3d-shape, physics/electric-and-magnetic-fields)
 
 Comparable with the frozen baseline: **yes**
 
@@ -48,13 +48,6 @@ Comparable with the frozen baseline: **yes**
   - cap-02 [control 3] Draw the points as crosses instead of dots — no evidence
   - cap-03b [control 3] Draw your own line, typed as y = mx + b — no evidence
   - cap-04a [control 3] Write the line's equation — no evidence
-- `dot-plot`: 42 (20/48)
-  - cap-01b [core 5] Give the data as a frequency table: each value once with how many of it there are — no evidence
-  - cap-01c [core 5] Use fractions and mixed numbers such as 3/4 and 1 1/2 as values, with the number line numbered in fractions — no evidence
-  - cap-01d [version 3] Give students a blank number line to plot the data on — no evidence
-  - cap-02 [control 3] Draw X's instead of dots as the marks — no evidence
-  - cap-03c [version 3] Put a blank line in place of the chart or axis title for students — no evidence
-  - cap-04d [control 3] Choose which ticks are numbered (every tick, every 2nd, 4th, 5th or 10th, or none) — no evidence
 - `normal-curve`: 42 (45/107)
   - cap-04f [core 5] Find a region's bound from its area, as invNorm does — no evidence
   - cap-01b [control 3] Tick the axis out to 4 standard deviations either side instead of 3 — no evidence
@@ -107,6 +100,7 @@ Comparable with the frozen baseline: **yes**
 - `cylinder`: 100 (74/74)
 - `dna-protein-synthesis`: 100 (102/102)
 - `dot-and-cross`: 100 (56/56)
+- `dot-plot`: 100 (48/48)
 - `enzyme-kinetics`: 100 (85/85)
 - `free-body-diagram`: 100 (67/67)
 - `gas-syringe`: 100 (32/32)

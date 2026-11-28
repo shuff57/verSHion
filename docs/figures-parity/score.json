@@ -1,10 +1,10 @@
 {
- "generated_at": "2026-11-28T02:01:48+00:00",
- "probe_checked_at": "2026-11-27T18:01:48",
+ "generated_at": "2026-11-28T06:01:05+00:00",
+ "probe_checked_at": "2026-11-27T22:01:05",
  "comparable": true,
  "drift": [],
- "pooled": 92.8,
- "mean": 91.9,
+ "pooled": 93.2,
+ "mean": 92.6,
  "figures_scored": 91,
  "figures_built": 92,
  "figures_missing": [
@@ -402,68 +402,11 @@
    "gaps": []
   },
   "dot-plot": {
-   "score": 41.7,
-   "got": 20.0,
+   "score": 100.0,
+   "got": 48.0,
    "total": 48.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Give the data as a frequency table: each value once with how many of it there are",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Use fractions and mixed numbers such as 3/4 and 1 1/2 as values, with the number line numbered in fractions",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01d",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Give students a blank number line to plot the data on",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw X's instead of dots as the marks",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of the chart or axis title for students",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose which ticks are numbered (every tick, every 2nd, 4th, 5th or 10th, or none)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an end of the number line with an arrow",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Finish an end of the number line with a circle",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "electrochemical-cells": {
    "score": 88.5,

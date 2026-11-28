@@ -3090,7 +3090,7 @@ const PIE_CHART: &[Faq] = &[
 const DOT_PLOT: &[Faq] = &[
     Faq {
         q: "How do I make a student copy?",
-        a: "Turn off Show answers. The dots and the mean and median marks are hidden and the labelled number line stays, so students plot the data themselves. Student + key saves both versions.",
+        a: "Turn off Show answers to hide the data and the mean and median marks while keeping the number line. Clear the data for a blank 0 to 10 line, or set the range and step yourself. Choose Blank line under Chart title or Axis title to leave room for students to write. Student + key saves both versions.",
     },
     Faq {
         q: "My values are all different, so nothing stacks. What do I do?",
@@ -3102,11 +3102,15 @@ const DOT_PLOT: &[Faq] = &[
     },
     Faq {
         q: "How do I paste data from a spreadsheet?",
-        a: "Copy a column, click in the Numbers box and paste. When you click away the numbers are tidied into a list. Open CSV reads a file, and Generate makes sample data from a seed.",
+        a: "Paste a column into Numbers, or choose Values and counts and paste two columns with a value and its count on each row. Use fractions such as 3/4 and mixed numbers such as 1 1/2. Open CSV reads a file, and Generate makes sample data from a seed.",
+    },
+    Faq {
+        q: "How do I change the marks and number line?",
+        a: "Choose Dots or X’s under Marks. Numbers sets which ticks are labelled. Set Left end and Right end independently to a triangle arrow, line arrow, circle or plain end.",
     },
     Faq {
         q: "Can I print it in black and white?",
-        a: "Set Style to Print. The dots are filled grey with a black outline so they read on a black-and-white copy.",
+        a: "Set Style to Print. Dots are filled grey with a dark outline and X marks are dark.",
     },
 ];
 

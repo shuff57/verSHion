@@ -6,7 +6,7 @@
 //! one `x, y` row per line. A figure reads it back with [`numbers`] / [`pairs`].
 
 /// One pasted or typed cell split out of a line.
-fn split_line(line: &str) -> Vec<String> {
+pub(super) fn split_line(line: &str) -> Vec<String> {
     // a spreadsheet copy is tab separated; a CSV file is comma (or semicolon) separated, possibly
     // quoted; anything else is numbers typed with spaces
     let cells: Vec<String> = if line.contains('\t') {
@@ -32,7 +32,7 @@ fn csv_cells(line: &str) -> Vec<String> {
     out
 }
 
-fn as_number(cell: &str) -> Option<f64> {
+pub(super) fn as_number(cell: &str) -> Option<f64> {
     let c = cell.trim();
     // a percent sign from a spreadsheet is not part of the value
     let c = c.trim_end_matches('%');

@@ -555,10 +555,10 @@ static NORMAL_CURVE: [RefSection; 4] = [
 ];
 
 static DOT_PLOT: [RefSection; 5] = [
-    s("Data", &["data", "group"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Grouping rounds values so close ones share a stack."),
-    s("Number line", &["axis_auto", "axis_min", "axis_max", "axis_step"], ""),
-    s("Dots and marks", &["dot_size", "marks", "show_answers"], "Turn off Show answers for a student copy: the dots and marks are hidden and the number line stays."),
-    s("Labels and text", &["title", "x_title"], ""),
+    s("Data", &["data_form", "data", "data_table", "group"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Grouping rounds values so close ones share a stack."),
+    s("Number line", &["axis_auto", "axis_min", "axis_max", "axis_step", "numbers", "left_end", "right_end"], ""),
+    s("Marks", &["mark_shape", "dot_size", "marks", "show_answers"], "Turn off Show answers to hide the data and mean or median marks."),
+    s("Titles", &["title_mode", "title", "x_title_mode", "x_title"], ""),
     s("Appearance", &["style", "label_size"], ""),
 ];
 

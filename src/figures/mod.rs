@@ -760,6 +760,7 @@ pub fn typed_float(fig: &str, key: &str, text: &str, p: &mut Params) -> Option<f
     match fig {
         chemistry::bond_energy::ID => chemistry::bond_energy::typed_float(key, text, p),
         "coordinate-grid" => math::grid_typed_float(key, text, p),
+        stats::dot_b10::ID => stats::dot_b10::typed_axis(key, text, p),
         "derivative-graphs" => math::derivative_graphs::typed(text).map(|t| t.v),
         _ => text.trim().parse::<f64>().ok(),
     }
@@ -770,6 +771,7 @@ pub fn float_text(fig: &str, key: &str, p: &Params) -> Option<String> {
     match fig {
         chemistry::bond_energy::ID => chemistry::bond_energy::float_text(key, p),
         "coordinate-grid" => math::grid_float_text(key, p),
+        stats::dot_b10::ID => stats::dot_b10::axis_text(key, p).map(str::to_owned),
         _ => None,
     }
 }
@@ -866,6 +868,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "transformations" => transform::relevant(key, p),
         // a graph row's sequence controls only for a sequence, the point controls only with points
         "number-line" => math::number_line_b7::relevant(key, p),
+        stats::dot_b10::ID => stats::relevant(id, key, p),
         // a solid's slider is hidden while its typed box is read; the height switches only where they draw
         "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::relevant(id, key, p) && cards::relevant(id, key, p),
         // only the chosen axis's controls, the switched-on curves and an unknown enzyme's own numbers
@@ -956,6 +959,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     if id == "predator-prey" {
         biology::popdyn::pp_panel_changed(key, p);
     }
+    if id == stats::dot_b10::ID {
+        stats::dot_b10::panel_changed(key, old, p);
+    }
     // switching the histogram to a frequency table fills it with the data set's bins
     if id == stats::histogram::ID {
         stats::histogram::panel_changed(key, p);
@@ -1005,6 +1011,9 @@ pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
     }
     if id == stats::histogram::ID {
         return stats::histogram::warnings(p);
+    }
+    if id == stats::dot_b10::ID {
+        return stats::dot_b10::warnings(p);
     }
     match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "segment-addition" => segment::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), chemistry::bond_energy::ID => chemistry::bond_energy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "boltzmann-distribution" => chemistry::boltzmann::warnings(p), "vsepr-shapes" => chemistry::vsepr::warnings(p), "dot-and-cross" => chemistry::dotcross::warnings(p), "nuclide-notation" => chemistry::nuclide::warnings(p), "periodic-table" => chemistry::periodic::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), "xylem-phloem" => biology::xylem::warnings(p), "ogive" => stats::ogive::warnings(p), "bar-chart" => stats::bar::warnings(p), "pie-chart" => stats::pie::warnings(p), "table-of-values" => stats::tov::warnings(p), "frequency-table" => stats::frequency::warnings(p), "two-way-table" => stats::twoway::warnings(p), "number-line" => math::number_line_b7::warnings(p), "heating-cooling-curve" => chemistry::heatcurve_warnings(p), "cylinder" | "prism" | "cone" | "pyramid" => math::solids_b8::warnings(id, p), "vector-diagram" => physics::vector_warnings(p),
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon" => math::flat_b9::warnings(id, p),
@@ -1067,6 +1076,9 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     // a transformations figure saved before the grid range existed opens on the fitted grid it was saved with
     if id == transform::ID {
         transform::migrate(spec, p);
+    }
+    if id == stats::dot_b10::ID {
+        stats::dot_b10::migrate(spec, p);
     }
     // a two-way table saved before typed totals and blank boxes: its counts are rewritten as the numbers it drew
     if id == stats::twoway::ID {
@@ -1184,8 +1196,19 @@ pub fn start_params(def: &FigureDef) -> Params {
     for (k, v) in start::overrides(def.id) {
         p.0.insert(k.to_string(), v);
     }
+    mark_new(def.id, &mut p);
     p.normalize(&defs, false);
     p
+}
+
+/// Marks params as a figure made now, not one saved before: the dot plot's hidden layout marker (round 413), which a
+/// saved figure lacks so that it keeps its old drawing. For every way a new figure is made: the opening state and a figure the
+/// AI importer fits from a picture (checker, round 413: that one was built from a spec with no marker and drew the old layout,
+/// fraction data then reading as "Enter some data").
+pub fn mark_new(id: &str, p: &mut Params) {
+    if id == stats::dot_b10::ID {
+        p.set_b(stats::dot_b10::LAYOUT, true);
+    }
 }
 
 /// Params for `def`: its opening state (`start_params`) overridden by a JSON object of strings, bools and numbers

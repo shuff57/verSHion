@@ -13,6 +13,7 @@ mod chisq;
 mod discrete;
 pub(crate) mod dist;
 mod dot;
+pub(crate) mod dot_b10;
 pub(crate) mod frequency;
 mod interval;
 mod hypothesis;

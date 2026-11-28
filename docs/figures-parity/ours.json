@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-28T02:01:34+00:00",
-  "src_mtime": 1795829400.7903674,
-  "git": "ecdfe4e+dirty",
+  "built_at": "2026-11-28T06:00:01+00:00",
+  "src_mtime": 1795844063.3002005,
+  "git": "90f806d+dirty",
   "figures": 213
  },
  "figures": {
@@ -37383,11 +37383,28 @@
    "blurb": "A dot plot of a data list: one dot per value, stacked above a number line, with optional mean and median marks.",
    "params": [
     {
+     "key": "data_form",
+     "label": "Data as",
+     "kind": "choice",
+     "options": [
+      "List of values",
+      "Values and counts"
+     ],
+     "default": "List of values"
+    },
+    {
      "key": "data",
      "label": "Numbers",
      "kind": "data",
      "options": [],
      "default": "5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 12"
+    },
+    {
+     "key": "data_table",
+     "label": "Value and count",
+     "kind": "data",
+     "options": [],
+     "default": ""
     },
     {
      "key": "group",
@@ -37425,8 +37442,56 @@
      "default": "1.0"
     },
     {
+     "key": "numbers",
+     "label": "Numbers",
+     "kind": "choice",
+     "options": [
+      "Every tick",
+      "Every 2nd tick",
+      "Every 4th tick",
+      "Every 5th tick",
+      "Every 10th tick",
+      "No numbers"
+     ],
+     "default": "Every tick"
+    },
+    {
+     "key": "left_end",
+     "label": "Left end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "right_end",
+     "label": "Right end",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Triangle arrow",
+      "Line arrow",
+      "Circle"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "mark_shape",
+     "label": "Marks",
+     "kind": "choice",
+     "options": [
+      "Dots",
+      "X's"
+     ],
+     "default": "Dots"
+    },
+    {
      "key": "dot_size",
-     "label": "Dot size",
+     "label": "Mark size",
      "kind": "choice",
      "options": [
       "Small",
@@ -37437,7 +37502,7 @@
     },
     {
      "key": "marks",
-     "label": "Mark",
+     "label": "Mean or median",
      "kind": "choice",
      "options": [
       "None",
@@ -37448,15 +37513,37 @@
      "default": "None"
     },
     {
+     "key": "title_mode",
+     "label": "Chart title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "title",
-     "label": "Title",
+     "label": "Title text",
      "kind": "text",
      "options": [],
      "default": ""
     },
     {
+     "key": "x_title_mode",
+     "label": "Axis title",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
      "key": "x_title",
-     "label": "Horizontal axis title",
+     "label": "Axis title text",
      "kind": "text",
      "options": [],
      "default": ""

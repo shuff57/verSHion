@@ -68,10 +68,12 @@ fn to_json(v: &Value) -> serde_json::Value {
 
 /// The share link for figure `id` showing `cur`, relative to its opening state `base`.
 pub fn encode(id: &str, cur: &Params, base: &Params) -> String {
+    use super::stats::dot_b10 as dot;
     let diff: serde_json::Map<String, serde_json::Value> = cur
         .0
         .iter()
-        .filter(|(k, v)| base.0.get(*k) != Some(*v))
+        .filter(|(k, v)| base.0.get(*k) != Some(*v)
+            || (id == dot::ID && k.as_str() == dot::LAYOUT))
         .map(|(k, v)| (k.clone(), to_json(v)))
         .collect();
     if diff.is_empty() {
@@ -124,6 +126,10 @@ pub fn link_params(def: &super::FigureDef, changed: serde_json::Map<String, serd
     }
     for k in dropped_before(def.id, v) {
         params.remove(*k);
+    }
+    // New dot-plot links carry the layout marker to opt into the current number line.
+    if def.id == super::stats::dot_b10::ID {
+        params.remove(super::stats::dot_b10::LAYOUT);
     }
     params.extend(changed);
     super::stats::venn::migrate_link(def.id, v, &mut params);
@@ -306,6 +312,10 @@ mod tests {
                 let (id, m) = decode(&link).unwrap_or_else(|e| panic!("{}: {e}", d.id));
                 assert_eq!(id, d.id);
                 let mut back = base.clone();
+                // The dot-plot marker is carried explicitly by links for the current layout.
+                if d.id == super::super::stats::dot_b10::ID {
+                    back.0.remove(super::super::stats::dot_b10::LAYOUT);
+                }
                 for (k, j) in m {
                     let v = match (base.0.get(&k), j) {
                         (Some(Value::F(_)), j) => Value::F(j.as_f64().unwrap()),

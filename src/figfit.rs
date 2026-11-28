@@ -80,7 +80,9 @@ fn render(def: &FigureDef, params: &Value) -> Result<(FigureSpec, Vec<u8>), Stri
         spec.params.insert(k.clone(), v.clone());
     }
     // params_from_spec coerces by declared kind, drops unknown keys, clamps to ranges.
-    let p = crate::figures::spec::params_from_spec(def, &spec);
+    let mut p = crate::figures::spec::params_from_spec(def, &spec);
+    // (a fitted figure is a new figure, not one saved before)
+    crate::figures::mark_new(def.id, &mut p);
     let png = figures::to_png(&def.svg(&p), 2.0)?;
     let png = crate::figures::spec::flatten_white(&png)?;
     Ok((crate::figures::spec::spec_for(def.id, &p), png))
@@ -250,6 +252,19 @@ mod tests {
         assert!(png.starts_with(b"\x89PNG"));
         assert!(!spec.params.contains_key("bogus"));
         assert_eq!(spec.params["preset"], "CH₃COCl, acetyl chloride");
+    }
+
+    /// A dot plot the importer fits is a new figure: fraction data plots (checker, round 413: built from a spec with no layout
+    /// marker, it drew the old layout and read the fractions as "Enter some data"), and the saved spec keeps the marker.
+    #[test]
+    fn a_fitted_dot_plot_is_a_new_figure() {
+        let dot = figures::registry().into_iter().find(|d| d.id == "dot-plot").unwrap();
+        let (spec, _) = render(&dot, &serde_json::json!({"data": "1/4, 1/2, 1/2, 3/4, 1 1/4"})).unwrap();
+        assert_eq!(spec.params.get("dot_layout"), Some(&serde_json::json!(true)));
+        let p = crate::figures::spec::params_from_spec(&dot, &spec);
+        let svg = dot.svg(&p);
+        assert!(!svg.contains("Enter some data"));
+        assert_eq!(svg.matches("<circle").count() - svg.matches("data-end=\"circle\"").count(), 5);
     }
 
     /// A real, renderable figure, for the retry loop's success case.

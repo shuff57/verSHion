@@ -4075,7 +4075,11 @@ fn fmt_measure(v: f64) -> String {
 /// A named starting point (example or classic setup): the figure's defaults with its overrides.
 fn example_params(def: &FigureDef, e: &figures::Example) -> Params {
     let defs = (def.params)();
-    let mut p = Params::defaults(&defs);
+    let mut p = if def.id == figures::stats::dot_b10::ID {
+        figures::start_params(def)
+    } else {
+        Params::defaults(&defs)
+    };
     for (k, v) in &e.params {
         p.0.insert((*k).to_string(), v.clone());
     }
@@ -4448,7 +4452,8 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 });
             });
         }
-        Kind::Float { min, max, .. } if theme::chem_skin() || fig == figures::chemistry::bond_energy::ID => {
+        Kind::Float { min, max, .. } if theme::chem_skin() || fig == figures::chemistry::bond_energy::ID
+            || (fig == figures::stats::dot_b10::ID && matches!(pd.key, "axis_min" | "axis_max" | "axis_step")) => {
             // the chemistry page types every number into a boxed field (no sliders)
             param_label(ui, label, pd.hint);
             let id = ui.make_persistent_id(("chem_float", fig, pd.key));
@@ -5335,6 +5340,90 @@ mod tests {
         let (print, _) = figures::answer_pair(def, &ws.params).unwrap();
         assert!(print.contains("vs-hatch0") && !print.contains("#4f7cd4"));
         assert!(figures::to_png(&print, 1.0).is_ok());
+    }
+
+    #[test]
+    fn old_dot_plot_keeps_its_number_line_through_panel_edits_and_round_trips() {
+        use egui::{Key, Modifiers, accesskit::Role};
+        use egui_kittest::kittest::Queryable;
+
+        let (i, def) = find_def("dot-plot").unwrap();
+        let defs = (def.params)();
+        let spec = |manual: bool| serde_json::json!({
+            "id":def.id,
+            "params":{"data":"5, 6, 6, 7, 8, 9, 10, 12", "axis_auto":!manual,
+                "axis_min":0.5, "axis_max":12, "axis_step":1}
+        }).to_string();
+        let labels = |ws: &Workspace| -> Vec<String> {
+            def.svg(&ws.params).split("<text").skip(1).map(|tag| {
+                tag.split('>').nth(1).unwrap().split('<').next().unwrap().to_owned()
+            }).collect()
+        };
+        let mut ws = Workspace::new(false);
+        ws.apply_spec_text(&spec(true)).unwrap();
+        let original = def.svg(&ws.params);
+        let mut h = ui_test::harness(
+            move |ui, (ws, key): &mut (Workspace, &str)| {
+                let pd = defs.iter().find(|pd| pd.key == *key).unwrap();
+                let old = ws.params.0[pd.key].clone();
+                param_control(ui, def.id, pd, &mut ws.params);
+                if ws.params.0[pd.key] != old {
+                    figures::after_panel_change(def.id, pd.key, &old, &mut ws.params);
+                }
+                let _ = ui.button("Done");
+                ws.track_history(ui.ctx());
+            },
+            (ws, "data"),
+        );
+        let edit = |h: &mut _, role, value: &str| {
+            let h: &mut egui_kittest::Harness<'_, (Workspace, &str)> = h;
+            h.get_by_role(role).focus();
+            h.run();
+            h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+            h.event(egui::Event::Paste(value.into()));
+            h.run();
+            h.get_by_label("Done").focus();
+            h.run();
+            h.run();
+        };
+        let manual: Vec<_> = (1..=12).map(|x| x.to_string()).collect();
+        edit(&mut h, Role::MultilineTextInput, "5\n6\n6\n7\n8\n9\n10\n12\n12");
+        assert_eq!(h.state().0.params.s("data"), "5, 6, 6, 7, 8, 9, 10, 12, 12");
+        assert_eq!(labels(&h.state().0), manual);
+
+        for (key, value, first, last) in [
+            ("axis_min", "1.5", "2", "12"), ("axis_max", "11", "1", "11"), ("axis_step", "1", "1", "12"),
+        ] {
+            h.state_mut().0.flush_history();
+            let before = def.svg(&h.state().0.params);
+            h.state_mut().1 = key;
+            h.run();
+            edit(&mut h, Role::TextInput, value);
+            let actual = labels(&h.state().0);
+            assert_eq!(actual.first().unwrap(), first, "{key}");
+            assert_eq!(actual.last().unwrap(), last, "{key}");
+            assert_eq!(figures::float_text(def.id, key, &h.state().0.params).as_deref(), Some(value));
+            h.state_mut().0.step_history(true);
+            assert_eq!(def.svg(&h.state().0.params), before);
+        }
+
+        let edited = def.svg(&h.state().0.params);
+        let saved = h.state().0.spec_json().unwrap();
+        let link = h.state().0.share_link().unwrap();
+        for linked in [false, true] {
+            let mut reopened = Workspace::new(false);
+            if linked { reopened.apply_link(&link).unwrap(); } else { reopened.apply_spec_text(&saved).unwrap(); }
+            assert_eq!(reopened.sel, Some(i));
+            assert_eq!(def.svg(&reopened.params), edited);
+        }
+        h.state_mut().0.step_history(true);
+        assert_eq!(def.svg(&h.state().0.params), original);
+
+        h.state_mut().0.apply_spec_text(&spec(false)).unwrap();
+        h.state_mut().1 = "data";
+        h.run();
+        edit(&mut h, Role::MultilineTextInput, "5, 6, 6, 7, 8, 9, 10, 12, 12");
+        assert_eq!(labels(&h.state().0), (4..=13).map(|x| x.to_string()).collect::<Vec<_>>());
     }
 
     #[test]

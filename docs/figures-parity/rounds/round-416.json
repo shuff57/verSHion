@@ -1,0 +1,35 @@
+{
+ "round": 416,
+ "figure": "dot-plot",
+ "capability": "cap-02",
+ "hypothesis": "Batch dot-plot (rounds 413-420), cap-02: built in the same batch as round 413",
+ "started_at": "2026-11-27T22:01:04",
+ "git": "90f806d",
+ "before": {
+  "figure": 68.8,
+  "pooled": 92.9
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-27T22:01:04",
+ "after": {
+  "figure": 75.0,
+  "pooled": 93.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:mark_shape=X's",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/dot-plot/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/parity-math-figures-18f093f1ef25e6b0/.figures-parity/renders/dot-plot/0666908eb8d4b38c.png"
+   }
+  ]
+ },
+ "checker": "pass: third independent check (checkers 1 and 2 failed the batch; every finding fixed and rechecked). All eight capabilities pass against the reference page and its JS; 21,000 old saved specs and share links byte-identical SVG to 90f806d, and 5,000 random edit chains through the panel's own handlers keep old figures on their old drawing; real egui panel drives of paste, blur, undo, redo, save, share. Two moderate findings fixed after (an AI-fitted dot plot opens on the new layout; capped stacks say so in the notes), each with a test that fails without the fix",
+ "result": "hit",
+ "evidence": "figures::stats 483, census 5, figures::interact 5, figuresui 130 (pedigree test flaky under load, passes alone 3/3), faq 24, figures::data 9, figures::share 7, figfit 7; figures suite 3824 passed; probe 1887 pass / 0 fail; comparable",
+ "next": "dot-plot: thinning still odd off zero (1-100 by 1 numbers 1, 6 ... 96; 0-1000 by 25 at Large 0, 125, 250); then probability-tree, scatterplot, normal-curve"
+}

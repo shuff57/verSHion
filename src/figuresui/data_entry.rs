@@ -7,6 +7,7 @@
 use egui::{Button, DragValue, Id, TextEdit, Ui};
 
 use crate::figures::data::{self, Dist};
+use crate::figures::stats::dot_b10 as dot;
 use crate::figures::{ParamDef, Params, Value};
 use crate::theme;
 
@@ -43,7 +44,16 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
     let mut text = p.s(pd.key).to_string();
     let mut set: Option<String> = None;
 
-    let hint = if columns <= 1 { "Type or paste numbers" } else { "Paste two columns (x, y)" };
+    let frequency = (fig, pd.key) == (dot::ID, dot::TABLE);
+    let dot_list = (fig, pd.key) == (dot::ID, "data");
+    let preserve = |text: &str| frequency || (dot_list && text.contains('/'));
+    let hint = if frequency {
+        "Value, count"
+    } else if columns <= 1 {
+        "Type or paste numbers"
+    } else {
+        "Paste two columns (x, y)"
+    };
     // the box scrolls inside a fixed height, so 500 generated rows do not stretch the whole panel
     let r = egui::ScrollArea::vertical()
         .id_salt(id.with("scroll"))
@@ -55,6 +65,7 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
     }
     // a spreadsheet paste is tidied once the box is left, so typing is never rewritten under the cursor
     if r.lost_focus()
+        && !preserve(&text)
         && let Some(c) = data::canonical(&text, columns)
         && c != text
     {
@@ -63,7 +74,8 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
 
     let note_id = id.with("note");
     let note: String = ctx.data(|d| d.get_temp(note_id)).unwrap_or_default();
-    let count = data::summary(set.as_deref().unwrap_or(&text), columns);
+    let shown = set.as_deref().unwrap_or(&text);
+    let count = if preserve(shown) { dot::summary(shown, frequency) } else { data::summary(shown, columns) };
     let skin = theme::chem_skin();
     ui.label(theme::muted(if note.is_empty() { count } else { format!("{count} · {note}") }).size(if skin { 13.0 } else { 11.5 }));
 
@@ -78,13 +90,17 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
                 None => String::new(),
                 Some(path) => match crate::platform::read(&path) {
                     Ok(b) if b.len() > 2_000_000 => "That file is too large".to_string(),
-                    Ok(b) => match data::canonical(&String::from_utf8_lossy(&b), columns) {
-                        Some(c) => {
-                            set = Some(c);
-                            format!("read {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"))
+                    Ok(b) => {
+                        let raw = String::from_utf8_lossy(&b);
+                        let imported = if preserve(&raw) { Some(raw.into_owned()) } else { data::canonical(&raw, columns) };
+                        match imported {
+                            Some(imported) => {
+                                set = Some(imported);
+                                format!("read {}", path.file_name().and_then(|n| n.to_str()).unwrap_or("file"))
+                            }
+                            None => "No numbers found in that file".to_string(),
                         }
-                        None => "No numbers found in that file".to_string(),
-                    },
+                    }
                     Err(e) => format!("Couldn't read the file: {e}"),
                 },
             };
@@ -142,7 +158,8 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
             });
             if ui.add(Button::new("Make data")).clicked() {
                 set = Some(if columns <= 1 {
-                    data::column_text(&data::generate(Dist::ALL[g.dist], g.n as usize, g.seed, g.mean, g.sd, g.decimals))
+                    let values = data::generate(Dist::ALL[g.dist], g.n as usize, g.seed, g.mean, g.sd, g.decimals);
+                    if frequency { dot::generated_table(values) } else { data::column_text(&values) }
                 } else {
                     data::pairs_text(&data::generate_pairs(g.n as usize, g.seed, g.mean, g.sd, g.slope, g.intercept, g.noise, g.decimals))
                 });
@@ -204,6 +221,60 @@ mod tests {
         assert_eq!(got, data::canonical("x\ty\n1\t2\n3\t4\n", 2).unwrap());
         assert!(!got.contains('x') && got.contains("1") && got.contains("4"), "{got:?}");
         assert!(h.query_by_label_contains("2 points").is_some() || h.query_by_label_contains("2 ").is_some());
+    }
+
+    #[test]
+    fn dot_plot_keeps_fractions_and_frequency_rows_as_typed() {
+        for (pd, pasted, count) in [
+            (ParamDef::data("data", "Numbers", 1, ""), "1 1/2,  3/4", "2 values"),
+            (ParamDef::data("data_table", "Value and count", 1, ""), "Value\tCount\n1 1/2\t3\n  2\t5", "8 values"),
+        ] {
+            let key = pd.key;
+            let mut h = crate::figuresui::ui_test::harness(
+                move |ui, p: &mut Params| data_control(ui, "dot-plot", &pd, 1, pd.label, p),
+                Params::default(),
+            );
+            h.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+            h.run();
+            h.event(egui::Event::Paste(pasted.into()));
+            h.run();
+            h.get_by_label("Clear").focus();
+            h.run();
+            h.run();
+            assert_eq!(h.state().s(key), pasted);
+            assert!(h.query_by_label_contains(count).is_some());
+        }
+    }
+
+    #[test]
+    fn dot_plot_keeps_the_typed_step_after_blur() {
+        use egui::accesskit::Role;
+
+        let def = crate::figures::registry().into_iter().find(|d| d.id == dot::ID).unwrap();
+        let step = (def.params)().into_iter().find(|pd| pd.key == "axis_step").unwrap();
+        let mut p = crate::figures::start_params(&def);
+        p.set_s("data", "");
+        p.set_b("axis_auto", false);
+        p.set_f("axis_max", 2.0);
+        let mut h = crate::figuresui::ui_test::harness(
+            move |ui, p: &mut Params| {
+                super::super::param_control(ui, dot::ID, &step, p);
+                let _ = ui.button("Done");
+            },
+            p,
+        );
+        h.get_by_role(Role::TextInput).focus();
+        h.run();
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.get_by_role(Role::TextInput).type_text("2 / 8");
+        h.run();
+        h.get_by_label("Done").focus();
+        h.run();
+        h.run();
+        assert!(!h.get_by_role(Role::TextInput).is_focused());
+        assert_eq!(h.get_by_role(Role::TextInput).value().as_deref(), Some("2 / 8"));
+        assert_eq!(h.state().f("axis_step"), 0.25);
+        assert_eq!(def.svg(h.state()).matches("stroke-width=\"1.1\"").count(), 6);
     }
 
     #[test]

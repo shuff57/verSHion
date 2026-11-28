@@ -97,7 +97,7 @@ dna-protein-synthesis__start 41bb336383f7343a
 dot-and-cross__defaults 2bb0a1734113e969
 dot-and-cross__start 2bb0a1734113e969
 dot-plot__defaults bf00470ec7dd43be
-dot-plot__start bf00470ec7dd43be
+dot-plot__start 7155ab2e75d6da88
 earth-cycles__defaults c9f850b2236a77fd
 earth-cycles__start c9f850b2236a77fd
 earth-layers__defaults 5c198a44e20e05bf

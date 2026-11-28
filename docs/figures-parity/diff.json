@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-28T02:01:48+00:00",
+ "generated_at": "2026-11-28T06:01:05+00:00",
  "spec_generated_at": "2026-11-28T02:01:15+00:00",
  "figures": [
   {
@@ -980,21 +980,29 @@
    },
    "text_sha256": "80407ea4b088118d852f82147f77c20d328d12f936293ef20371dd986c55569a",
    "params": [
+    "data_form",
     "data",
+    "data_table",
     "group",
     "axis_auto",
     "axis_min",
     "axis_max",
     "axis_step",
+    "numbers",
+    "left_end",
+    "right_end",
+    "mark_shape",
     "dot_size",
     "marks",
+    "title_mode",
     "title",
+    "x_title_mode",
     "x_title",
     "style",
     "label_size",
     "show_answers"
    ],
-   "param_count": 13,
+   "param_count": 21,
    "handles": 0,
    "label_drag": false,
    "show_answers": true,
