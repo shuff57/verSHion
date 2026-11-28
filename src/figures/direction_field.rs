@@ -40,6 +40,8 @@ fn params() -> Vec<ParamDef> {
     ParamDef::float("field_clip_padding","Field clip padding (SVG px)",0.0,20.0,0.5,0.0).hint("Explicit extra room for whole observed outer marks, in SVG pixels. Expands only the field's clipping rectangle; never expands the axes/frame or adds sample rows/columns. Keep zero when the source intentionally clips its marks; inspect the original before changing it. Never applied automatically."),
     ParamDef::color("color","Segment colour",&["#0000ff","#000000","#ff0000"],"#0000ff"),ParamDef::float("line_width","Segment thickness",0.5,4.0,0.1,1.6),
     ParamDef::bool("grid","Draw gridlines",false),ParamDef::bool("numbers","Number the axes",true),ParamDef::bool("origin_zero","Print origin zero",false),
+    ParamDef::bool("tick_marks", "Draw tick marks with axis numbers", true)
+        .hint("Turn off when the source has axis numbers without perpendicular marks. The axis numbers, gridlines and supplied segments stay in place."),
     ParamDef::text("xlabel","Horizontal axis letter","x"),ParamDef::text("ylabel","Vertical axis letter","y"),ParamDef::bool("arrows","Arrowheads on axes",true),
 ]
 }
@@ -352,18 +354,23 @@ fn render(p: &Params) -> String {
         d.line(ax, f.bottom(), ax, f.top(), "#000000", 1.2);
     }
     if p.b("numbers") {
+        let tick_marks = p.b("tick_marks");
         for (v, t) in &xt {
             if v.abs() < 1e-9 && !p.b("origin_zero") {
                 continue;
             }
-            d.line(f.px(*v), ay - 3.0, f.px(*v), ay + 3.0, "#000000", 0.8);
+            if tick_marks {
+                d.line(f.px(*v), ay - 3.0, f.px(*v), ay + 3.0, "#000000", 0.8);
+            }
             number(&mut d, p, f.px(*v), ay + 16.0, "middle", t);
         }
         for (v, t) in &yt {
             if v.abs() < 1e-9 {
                 continue;
             }
-            d.line(ax - 3.0, f.py(*v), ax + 3.0, f.py(*v), "#000000", 0.8);
+            if tick_marks {
+                d.line(ax - 3.0, f.py(*v), ax + 3.0, f.py(*v), "#000000", 0.8);
+            }
             number(&mut d, p, ax - 7.0, f.py(*v) + 4.0, "end", t);
         }
     }
@@ -526,6 +533,29 @@ mod tests {
         assert!(validate(&p).is_err());
         p.set_s("x_tick_labels", "99 = outside");
         assert!(validate(&p).is_err());
+    }
+    #[test]
+    fn axis_numbers_can_appear_without_tick_marks() {
+        let mut p = figures::start_params(&def());
+        p.set_s("segments", "-1,-0.1,-1,0.1\n0,0,0.2,0.3");
+        p.set_s("x_tick_labels", "-pi = −π; pi = π");
+        p.set_b("grid", true);
+        let with_marks = render(&p);
+        p.set_b("tick_marks", false);
+        let without_marks = render(&p);
+        let is_mark = |line: &str| {
+            line.contains("<line ") && line.contains("stroke=\"#000000\"") && line.contains("stroke-width=\"0.8\"")
+        };
+        assert!(with_marks.split_inclusive('>').any(is_mark));
+        assert_eq!(
+            with_marks.split_inclusive('>').filter(|tag| !is_mark(tag)).collect::<Vec<_>>(),
+            without_marks.split_inclusive('>').collect::<Vec<_>>()
+        );
+        assert!(without_marks.contains("−π"));
+        let figure = def();
+        let mut old_spec = spec::spec_for(figure.id, &p);
+        old_spec.params.remove("tick_marks");
+        assert_eq!(render(&spec::params_from_spec(&figure, &old_spec)), with_marks);
     }
     #[test]
     fn source_endpoints_survive_exactly_without_a_formula_or_solution() {

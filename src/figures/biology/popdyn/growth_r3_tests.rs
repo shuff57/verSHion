@@ -308,6 +308,9 @@ fn dec(line: &str) -> Vec<(String, Value)> {
 
 /// A seeded set of figures whose inflection and phase labels are Text or None (any K label), and the checker's, hashed
 /// from the code before this round (written once to tests/fixtures/popdyn_r3_no_blank.txt); each draws the same bytes.
+/// Large label size is left out since the round 410 follow-up, which deliberately moved the y-axis title and widened
+/// the margin and census table at Large (pinned instead by versions_b9's listed corrections and growth_r5_tests::large_labels_keep_clear_of_each_other); every
+/// Small and Medium row still draws byte for byte, so that change touches no other size.
 #[test]
 fn figures_with_no_blank_line_label_draw_as_before() {
     let d = def(PG);
@@ -324,9 +327,10 @@ fn figures_with_no_blank_line_label_draw_as_before() {
     for line in text.lines() {
         let (h, spec) = line.split_once('\t').unwrap();
         let c = dec(spec);
+        if c.iter().any(|(k, v)| k == "label_size" && *v == Value::S("Large".into())) { continue; }
         let over: Vec<(&str, Value)> = c.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
         assert_eq!(crate::figures::versions_b9_frozen::fnv(&d.svg(&params(PG, &over))), h, "{spec}");
         n += 1;
     }
-    assert!(n >= 2800, "{n} figures");
+    assert!(n >= 1900, "{n} figures");
 }

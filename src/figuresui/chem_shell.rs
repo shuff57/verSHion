@@ -764,7 +764,9 @@ impl Workspace {
                 ui.ctx().copy_text(l);
                 self.toast = Some(("Link copied. Share it, and anyone who opens it sees this exact figure.".into(), false));
             }
-            share.context_menu(|ui| {
+            // (closes on a click outside or Escape only: egui's default shuts a menu on any click inside it,
+            // which closed it on the paste box before a link could be pasted. The actions close it themselves.)
+            egui::Popup::context_menu(&share).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
                 ui.set_min_width(300.0);
                 ui.label(theme::muted("Share link works offline: the link itself holds the settings.").size(11.0));
                 ui.separator();
@@ -774,7 +776,11 @@ impl Workspace {
                 // this app's extras live here, so the toolbar itself matches the reference's
                 if !shell {
                     ui.separator();
+                    let handles = self.hide_handles;
                     self.chem_extras(ui, &mut act);
+                    if !matches!(act, Act::None) || self.hide_handles != handles {
+                        ui.close();
+                    }
                 }
             });
             if !narrow {
@@ -1502,7 +1508,7 @@ pub fn fit_checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response {
         *on = !*on;
         resp.mark_changed();
     }
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *on, label));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::CheckBox, true, *on, label));
     let b = Rect::from_min_size(Pos2::new(rect.left() + 4.0, rect.center().y - 8.5), Vec2::splat(17.0));
     if *on {
         ui.painter().rect_filled(b, CornerRadius::same(4), theme::accent_col());
@@ -1580,7 +1586,7 @@ pub fn segmented_track(ui: &mut Ui, opts: &[&'static str], cur: &mut String) {
         let cell = Rect::from_min_size(Pos2::new(track.left() + pad + i as f32 * cell_w, track.top() + pad), Vec2::new(cell_w, cell_h));
         let resp = ui.interact(cell, track_resp.id.with(i), Sense::click());
         let sel = cur == o;
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, *o));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, sel, *o));
         if sel {
             // the app's shell: a card chip on its field barely showed which cell was chosen (light
             // and dark alike), so the chosen one takes the accent wash, an accent edge and accent type

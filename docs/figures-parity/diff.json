@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-28T01:20:33+00:00",
- "spec_generated_at": "2026-11-24T16:38:52+00:00",
+ "generated_at": "2026-11-28T02:01:48+00:00",
+ "spec_generated_at": "2026-11-28T02:01:15+00:00",
  "figures": [
   {
    "site": "math",
@@ -434,6 +434,43 @@
   },
   {
    "site": "math",
+   "slug": "composite-3d-shape",
+   "status": "missing",
+   "title": "Composite 3D Shape Editor | Math Figures",
+   "ours_id": null,
+   "cross_listed": false,
+   "can_set": [],
+   "flags": {
+    "click": false,
+    "drag": false,
+    "type": false,
+    "paste": false,
+    "add": false,
+    "remove": false,
+    "rows": false,
+    "student": false,
+    "question": false,
+    "answer_key": false,
+    "color": false,
+    "black_and_white": false,
+    "unit": false,
+    "round": false,
+    "axis": false,
+    "grid": false,
+    "title": false,
+    "key": false,
+    "shading": false,
+    "preset": false,
+    "example": false,
+    "print": false,
+    "share": false,
+    "download": false,
+    "direct_manipulation": false
+   },
+   "text_sha256": "201b1ab63d679407b51fc59f44f8ba1aa4e3ff8ba55fcc54ec81a2ca3b23ca3e"
+  },
+  {
+   "site": "math",
    "slug": "composite-shape",
    "status": "mapped",
    "title": "Composite Shape Editor | Math Figures",
@@ -471,7 +508,7 @@
     "download": false,
     "direct_manipulation": false
    },
-   "text_sha256": "fade7f75a7253df53ee6f800737cd9783b1660b8385aba9cef47f261888fddb5",
+   "text_sha256": "0721f3d26ec25b50cb9fea34238676ec2158a289af640ae9022303a0bd95aa90",
    "params": [
     "preset",
     "spec",
@@ -532,7 +569,7 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "8c940f127e78b950dc72159dbcb85b744c684b004e66cf7c0776fd2a772ce998",
+   "text_sha256": "63be3c2b11c2f36ad4e8c008a57d2d7c8eee0c527520742dd2690ff76e5414d8",
    "params": [
     "stands",
     "lean",
@@ -699,9 +736,20 @@
     "x_left_extension",
     "x_right_extension",
     "y_bottom_extension",
-    "y_top_extension"
+    "y_top_extension",
+    "lim_ask_at",
+    "lim_inf",
+    "lim_disc",
+    "lim_hasym",
+    "lim_kinds",
+    "lim_rows",
+    "lim_points",
+    "lim_inf_answer",
+    "lim_dne",
+    "lim_stu_kinds",
+    "lim_stu_asym"
    ],
-   "param_count": 83,
+   "param_count": 94,
    "handles": 2,
    "label_drag": false,
    "show_answers": true,
@@ -848,7 +896,7 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "37b3e7245c5a2131e0ed51470f581292042d951a81694af60053d391dca4c2e1",
+   "text_sha256": "b8f6f8cac814c611dc01504b2ffff6b3e5e892f3ec1cd43188c67299695e369b",
    "params": [
     "stands",
     "lean",
@@ -1885,7 +1933,7 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "2a1b9a5962b60b9debdef6266af783144b2111b76d1f012e462bf4ca2b724338",
+   "text_sha256": "d941790f3c9cacdbb9484b76d6282c9a146af0b5c2dfa8c5526587092d4f2d53",
    "params": [
     "base",
     "stands",
@@ -1979,7 +2027,7 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "d8688dde6f432b712c30c6c75ce9da268c81da86a069eb3533cf19481323459f",
+   "text_sha256": "61ff6c15f5121e1f795df9294c3486e2c388e2e09a5a5f8122c0309b8343143d",
    "params": [
     "base",
     "stands",
@@ -2473,7 +2521,7 @@
     "download": false,
     "direct_manipulation": true
    },
-   "text_sha256": "61b1d58347235096062048f007d7b36dc46d581609f02ab180e4262ae6a34b03",
+   "text_sha256": "5b40b93e743289d10aec47c497f2dd134034e77da4dc714ac1da47a6ebc60ae9",
    "params": [
     "draw",
     "radius",
@@ -3350,9 +3398,9 @@
   {
    "site": "physics",
    "slug": "electric-and-magnetic-fields",
-   "status": "mapped",
+   "status": "missing",
    "title": "Electric and Magnetic Field Generator | Physics Figures",
-   "ours_id": "electric-field",
+   "ours_id": null,
    "cross_listed": false,
    "can_set": [
     "One point charge, positive or negative",
@@ -3389,23 +3437,7 @@
     "download": false,
     "direct_manipulation": false
    },
-   "text_sha256": "d1a24394b20322f880a45f666a0142fdec8e5ef020cdc1504646ae6d43604e85",
-   "params": [
-    "sign",
-    "q",
-    "r",
-    "q0",
-    "dec",
-    "show_answers",
-    "style",
-    "label_size"
-   ],
-   "param_count": 8,
-   "handles": 0,
-   "label_drag": false,
-   "show_answers": true,
-   "style": true,
-   "interaction_gaps": []
+   "text_sha256": "d1a24394b20322f880a45f666a0142fdec8e5ef020cdc1504646ae6d43604e85"
   },
   {
    "site": "physics",

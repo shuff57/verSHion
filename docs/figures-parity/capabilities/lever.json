@@ -5,17 +5,17 @@
  "capabilities": [
   {
    "id": "cap-01",
-   "text": "Choose a class 1, 2 or 3 lever (fulcrum, load or effort in the middle)",
+   "text": "Draw a class 1, 2 or 3 lever: fulcrum, load or effort in the middle",
    "class": "core",
-   "evidence": "changes:class=Class 2 + changes:class=Class 3",
+   "evidence": "changes:class=Class 2 + changes:{\"class\":\"Class 3\",\"effort_arm\":0.5,\"load_arm\":1.5}",
    "note": ""
   },
   {
    "id": "cap-02a",
    "text": "Set the effort arm and the load arm, drawn to scale",
    "class": "core",
-   "evidence": "changes:effort_arm=2 + changes:load_arm=1",
-   "note": "Ours clamps very unequal arms and says “Arm lengths are schematized for legibility.”"
+   "evidence": "changes:effort_arm=1.0 + changes:load_arm=0.8",
+   "note": "very uneven arms are drawn schematic (ratio held to 0.14–0.86) with a note saying so"
   },
   {
    "id": "cap-02b",
@@ -26,20 +26,13 @@
   },
   {
    "id": "cap-03a",
-   "text": "Set the load as a force in N or lb",
+   "text": "Type the load as a force in N or lb, or as a mass in kg or g",
    "class": "core",
-   "evidence": "changes:load=500 + changes:load_units=lbf",
+   "evidence": "changes:load=200 + changes:load_units=kg",
    "note": ""
   },
   {
    "id": "cap-03b",
-   "text": "Give the load as a mass in kg or g",
-   "class": "control",
-   "evidence": "changes:load_units=kg",
-   "note": ""
-  },
-  {
-   "id": "cap-03c",
    "text": "Draw the load as a block on the beam or as a force arrow",
    "class": "control",
    "evidence": "changes:load_shape=Force arrow",
@@ -50,60 +43,60 @@
    "text": "Work out the effort from the load and the arms, to 3 significant figures",
    "class": "core",
    "evidence": "changes:show_answers=true",
-   "note": "Ours writes the effort value only with Show answers on; the student copy has a blank line there."
+   "note": "the effort is written beside its arrow and in the key line when answers are shown"
   },
   {
    "id": "cap-05a",
-   "text": "Label the load and each arm with its value",
-   "class": "control",
-   "evidence": "changes:load=500 + changes:effort_arm=2",
-   "note": "The value labels are the opening state; the tokens show they follow the values."
-  },
-  {
-   "id": "cap-05b",
-   "text": "Write your own text, such as F_E or ?, in the load, effort or arm labels",
-   "class": "control",
-   "evidence": "changes:load_label=F_L + changes:effort_label=F_E + changes:effort_arm_label=?",
+   "text": "Label the load with its value, your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:load_label=F_L + changes:load_label=- + changes:load_label=none",
    "note": ""
   },
   {
-   "id": "cap-05c",
-   "text": "Put a blank line in the load, effort or arm labels for students",
+   "id": "cap-05b",
+   "text": "Label the effort with its value, your own text, a blank line, or nothing",
    "class": "version",
-   "evidence": "changes:load_label=- + changes:load_arm_label=-",
+   "evidence": "changes:effort_label=F_E + changes:effort_label=none + changes:show_answers=true",
+   "note": "the blank line is the opening (student copy); Show answers writes the value"
+  },
+  {
+   "id": "cap-05c",
+   "text": "Label the effort arm with its length, your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:effort_arm_label=x + changes:effort_arm_label=- + changes:effort_arm_label=none",
    "note": ""
   },
   {
    "id": "cap-05d",
-   "text": "Leave the load, effort or arm labels off",
-   "class": "control",
-   "evidence": "changes:load_label=none + changes:effort_label=none + changes:effort_arm_label=none",
+   "text": "Label the load arm with its length, your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:load_arm_label=d + changes:load_arm_label=- + changes:load_arm_label=none",
    "note": ""
   },
   {
    "id": "cap-06a",
-   "text": "Name the effort, load and fulcrum",
-   "class": "control",
-   "evidence": "changes:fulcrum_name=Pivot",
-   "note": "Names are written at the opening state."
+   "text": "Name the effort, leave a blank line, or leave it off",
+   "class": "version",
+   "evidence": "changes:effort_name=Push + changes:effort_name=- + changes:effort_name=none",
+   "note": ""
   },
   {
    "id": "cap-06b",
-   "text": "Put a blank line in place of a name for students to label",
+   "text": "Name the load, leave a blank line, or leave it off",
    "class": "version",
-   "evidence": "changes:fulcrum_name=- + changes:load_name=- + changes:effort_name=-",
+   "evidence": "changes:load_name=Rock + changes:load_name=- + changes:load_name=none",
    "note": ""
   },
   {
    "id": "cap-06c",
-   "text": "Leave a name off",
-   "class": "control",
-   "evidence": "changes:fulcrum_name=none + changes:effort_name=none",
+   "text": "Name the fulcrum, leave a blank line, or leave it off",
+   "class": "version",
+   "evidence": "changes:fulcrum_name=Pivot + changes:fulcrum_name=- + changes:fulcrum_name=none",
    "note": ""
   },
   {
    "id": "cap-07",
-   "text": "Turn the two arms’ dimension lines on or off",
+   "text": "Turn the two arms' dimension lines on or off",
    "class": "control",
    "evidence": "changes:show_arms=false",
    "note": ""
@@ -117,14 +110,14 @@
   },
   {
    "id": "cap-08b",
-   "text": "Print an answer key with the mechanical advantage under the figure",
+   "text": "Print an answer key with the mechanical advantage",
    "class": "version",
    "evidence": "changes:show_answers=true",
    "note": ""
   },
   {
    "id": "cap-08c",
-   "text": "Set the label size",
+   "text": "Choose the label size",
    "class": "control",
    "evidence": "changes:label_size=Large",
    "note": ""
@@ -138,7 +131,7 @@
   },
   {
    "id": "cap-08e",
-   "text": "Color the figure for slides",
+   "text": "Draw in color for slides, or black and white",
    "class": "control",
    "evidence": "changes:style=Colour",
    "note": ""

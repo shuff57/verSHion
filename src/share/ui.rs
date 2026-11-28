@@ -448,14 +448,17 @@ fn field_noted(ui: &mut Ui, label: &str, note: Option<&str>, value: &mut String,
             ui.visuals_mut().extreme_bg_color = theme::card();
             ui.visuals_mut().text_edit_bg_color = Some(theme::card());
             ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, theme::muted_col().gamma_multiply(0.5));
-            ui.add(
+            let r = ui.add(
                 egui::TextEdit::singleline(value)
                     .id(egui::Id::new(id))
                     .password(secret)
                     .hint_text(hint)
                     .margin(egui::Margin::symmetric(12, 10))
                     .desired_width(ui.available_width().min(FORM_WIDTH)),
-            )
+            );
+            // named for screen readers: the label above (a field with no hint has no name otherwise)
+            r.widget_info(|| egui::WidgetInfo::labeled(if secret { egui::Role::PasswordInput } else { egui::Role::TextInput }, true, label));
+            r
         })
         .inner;
     ui.add_space(10.0);

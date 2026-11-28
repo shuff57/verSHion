@@ -4,88 +4,60 @@
  "slug": "cladogram",
  "capabilities": [
   {
-   "id": "cap-01a",
-   "text": "Build the tree: 2 to 16 taxa, grouped into clades inside clades",
+   "id": "cap-01",
+   "text": "Build a tree of 2 to 16 taxa in clades nested inside clades, in any order",
    "class": "core",
-   "evidence": "changes:tree=((A, B), (C, (D, E)))",
+   "evidence": "changes:tree=((((Lamprey, Shark), Perch), Frog), Lizard)",
    "note": ""
   },
   {
-   "id": "cap-01b",
-   "text": "Put the taxa in any order",
-   "class": "control",
-   "evidence": "changes:tree=(Orangutan, (Gorilla, (Chimp, Human)))",
-   "note": "Ours draws the leaves in the typed order."
-  },
-  {
    "id": "cap-02a",
-   "text": "Give each clade a trait, and the root one trait shared by every taxon",
+   "text": "Mark a trait as a tick on the branch leading into each clade",
    "class": "core",
-   "evidence": "changes:tree=(((Human, Chimp)Bipedal, Gorilla)Hair, Orangutan)Spine",
-   "note": "Ours writes the name at the clade’s branching point (a typed ancestor name), not as a tick on the branch; see cap-02b."
+   "evidence": "",
+   "note": "ours writes a name at an ancestor node (a name after a bracket), not a tick on the branch"
   },
   {
    "id": "cap-02b",
-   "text": "Draw each trait as a tick on the branch leading into its clade",
+   "text": "Mark one trait on the root, shared by every taxon",
    "class": "control",
    "evidence": "",
-   "note": "Ours has no ticks; a trait name sits at the node."
+   "note": ""
   },
   {
    "id": "cap-03",
-   "text": "Start from a setup (vertebrates, land plants, apes, taxa A to F with numbered traits)",
-   "class": "control",
-   "evidence": "changes:{\"tree\":\"(((Lizard, Bird), (Frog, Fish)), Lamprey)\",\"shape\":\"slanted\"}",
-   "note": "A preset list is one capability (owner decision 2026-11-08). Token is our “A slanted tree of vertebrates” example; ours has apes and vertebrates examples but no land plants or A–F numbered-trait setup."
-  },
-  {
-   "id": "cap-04a",
-   "text": "Draw diagonal branches with the taxa along the top",
+   "text": "Start from a ready-made tree: vertebrates, land plants, apes, or taxa A to F with numbered traits",
    "class": "control",
    "evidence": "",
-   "note": "Ours’ slanted shape keeps the taxa down the right; no taxa-along-the-top layout."
+   "note": ""
   },
   {
-   "id": "cap-04b",
-   "text": "Draw rectangular branches with the taxa down the right",
+   "id": "cap-04",
+   "text": "Draw the branches diagonally with the taxa along the top, instead of rectangular with the taxa down the right",
    "class": "control",
-   "evidence": "changes:shape=slanted",
-   "note": "The opening state; the token shows the switch that reaches it is live."
+   "evidence": "",
+   "note": "ours' slanted shape keeps the taxa down the right side"
   },
   {
    "id": "cap-05a",
-   "text": "Write the taxon names as blank lines",
+   "text": "Write the taxon names, or leave blank lines for them",
    "class": "version",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-05b",
-   "text": "Leave any one taxon blank",
+   "text": "Leave any one taxon's name blank",
    "class": "version",
    "evidence": "",
    "note": ""
   },
   {
-   "id": "cap-06a",
-   "text": "Write the traits as numbered blank lines",
+   "id": "cap-06",
+   "text": "Write the traits, leave numbered blank lines, draw ticks alone, or leave them off",
    "class": "version",
    "evidence": "",
    "note": ""
-  },
-  {
-   "id": "cap-06b",
-   "text": "Show the traits as ticks alone, with no names",
-   "class": "version",
-   "evidence": "",
-   "note": ""
-  },
-  {
-   "id": "cap-06c",
-   "text": "Leave the traits off without deleting them",
-   "class": "control",
-   "evidence": "",
-   "note": "Ours shows whatever is typed; traits are removed only by editing the tree text."
   },
   {
    "id": "cap-07a",

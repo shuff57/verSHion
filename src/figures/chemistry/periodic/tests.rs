@@ -1383,7 +1383,7 @@ fn drawing_is_pure_and_within_a_cpu_budget() {
                 for hl in ["Au", "La", ""] {
                     for ans in [true, false] {
                         let p = with(&[s("block", block), s("label_size", size), s("style", style), s("highlight", hl), b(SHOW_ANSWERS, ans)]);
-                        let t = std::time::Instant::now();
+                        let t = crate::testclock::Stopwatch::start();
                         let svg = (def().render)(&p);
                         let dt = t.elapsed();
                         assert!(svg.len() > 9_000);

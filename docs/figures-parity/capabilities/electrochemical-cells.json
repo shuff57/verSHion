@@ -4,50 +4,36 @@
  "slug": "electrochemical-cells",
  "capabilities": [
   {
-   "id": "cap-01a",
-   "text": "Choose the two metals, each in a solution of its own ion, one on either side",
+   "id": "cap-01",
+   "text": "Choose the two metals, each standing in a solution of its own ion",
    "class": "core",
    "evidence": "changes:left=Mg + changes:right=Ag",
    "note": ""
   },
   {
-   "id": "cap-01b",
-   "text": "Take E°cell from the table or type your own",
-   "class": "control",
-   "evidence": "changes:{\"voltage_source\":\"Custom\",\"voltage\":2.0}",
-   "note": "From the page’s E°cell control."
-  },
-  {
    "id": "cap-02",
-   "text": "Connect a digital voltmeter, a dial voltmeter or a coil of wire between the electrodes",
+   "text": "Join the electrodes through a digital voltmeter, a dial voltmeter or a coil of wire",
    "class": "control",
    "evidence": "changes:meter=Dial voltmeter + changes:meter=Coil of wire",
    "note": ""
   },
   {
-   "id": "cap-03a",
-   "text": "Name the metals, solutions and salt bridge",
-   "class": "control",
-   "evidence": "changes:names=false",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-03b",
-   "text": "Leave the names off for students to fill in",
+   "id": "cap-03",
+   "text": "Name the metals, solutions and salt bridge, or leave them off for students to fill in",
    "class": "version",
    "evidence": "changes:names=false",
    "note": ""
   },
   {
    "id": "cap-04a",
-   "text": "Label the anode and cathode with their signs",
+   "text": "Mark the anode and the cathode with their signs",
    "class": "control",
    "evidence": "changes:electrodes=true",
-   "note": "Checked by hand: Anode (−), Cathode (+)."
+   "note": ""
   },
   {
    "id": "cap-04b",
-   "text": "Draw electron flow arrows",
+   "text": "Draw arrows for the electron flow",
    "class": "control",
    "evidence": "changes:flow=true",
    "note": ""
@@ -56,22 +42,22 @@
    "id": "cap-05a",
    "text": "Write a chart title",
    "class": "control",
-   "evidence": "changes:title=A zinc–copper cell",
+   "evidence": "changes:title=Daniell cell",
    "note": ""
   },
   {
    "id": "cap-05b",
-   "text": "Print an answer key with the anode, cathode and E°cell",
+   "text": "Print an answer key: the anode, cathode, E°cell, both half-reactions and the balanced overall reaction",
    "class": "version",
    "evidence": "changes:show_answers=true",
    "note": ""
   },
   {
-   "id": "cap-05c",
-   "text": "Add the half-reactions and the balanced overall reaction to the answer key",
-   "class": "version",
-   "evidence": "changes:show_answers=true",
-   "note": "Checked by hand: oxidation, reduction and overall lines."
+   "id": "cap-06",
+   "text": "Type your own E°cell instead of the value from the table",
+   "class": "control",
+   "evidence": "",
+   "note": "ours' custom value (voltage_source=Custom) changes only the meter reading; the answer key still works E°cell out from the table"
   }
  ]
 }

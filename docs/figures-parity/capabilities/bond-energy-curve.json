@@ -5,119 +5,84 @@
  "capabilities": [
   {
    "id": "cap-01a",
-   "text": "Draw up to three bonds’ curves",
+   "text": "Plot up to three bonds on the same axes",
    "class": "core",
    "evidence": "changes:count=3",
    "note": ""
   },
   {
    "id": "cap-01b",
-   "text": "Give each bond your own name",
+   "text": "Give each bond a name of your own",
    "class": "control",
-   "evidence": "changes:name1=H–H",
+   "evidence": "changes:name1=H–Cl",
    "note": ""
   },
   {
    "id": "cap-01c",
-   "text": "Set each bond’s length and bond energy",
+   "text": "Type each bond's length and bond energy",
    "class": "core",
-   "evidence": "changes:length1=200 + changes:energy1=400",
+   "evidence": "changes:length1=200 + changes:energy1=450",
    "note": ""
   },
   {
    "id": "cap-02a",
-   "text": "Give lengths in pm, Å or nm",
+   "text": "Measure the lengths in pm, Å or nm",
    "class": "control",
-   "evidence": "changes:length_unit=Å",
+   "evidence": "changes:length_unit=Å + changes:length_unit=nm",
    "note": ""
   },
   {
    "id": "cap-02b",
-   "text": "Write energies as kJ/mol or kJ mol⁻¹",
+   "text": "Write the energies as kJ/mol or as kJ mol⁻¹",
    "class": "control",
    "evidence": "changes:energy_unit=kJ mol⁻¹",
    "note": ""
   },
   {
    "id": "cap-03a",
-   "text": "Draw dashed guide lines from each minimum to both axes",
+   "text": "Draw dashed guides from each minimum across to both axes",
    "class": "control",
    "evidence": "changes:guides=true",
    "note": ""
   },
   {
    "id": "cap-03b",
-   "text": "Label the guide lines with the values",
-   "class": "control",
-   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Values\"}",
-   "note": "Values is the default guide label, so this is the guides render."
+   "text": "Label the guides with their values, with the words Bond length and Bond energy, with blank lines, or not at all",
+   "class": "version",
+   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Bond length and energy\"} + changes:{\"guides\":true,\"guide_labels\":\"Blank lines\"} + changes:{\"guides\":true,\"guide_labels\":\"None\"}",
+   "note": "Values is the default label. Each token passes on guides alone; checked by hand that each label choice renders differently from guides=true with values."
   },
   {
    "id": "cap-03c",
-   "text": "Label the guide lines “Bond length” and “Bond energy”",
-   "class": "control",
-   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Bond length and energy\"}",
-   "note": ""
-  },
-  {
-   "id": "cap-03d",
-   "text": "Put blank lines on the guide lines for students",
-   "class": "version",
-   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"Blank lines\"}",
-   "note": ""
-  },
-  {
-   "id": "cap-03e",
-   "text": "Leave the guide lines unlabeled",
-   "class": "control",
-   "evidence": "changes:{\"guides\":true,\"guide_labels\":\"None\"}",
-   "note": ""
-  },
-  {
-   "id": "cap-03f",
-   "text": "Put a dot on each minimum",
+   "text": "Put a dot on the minimum of each curve",
    "class": "control",
    "evidence": "changes:dots=true",
    "note": ""
   },
   {
-   "id": "cap-04a",
-   "text": "Write Repulsion and Attraction either side of a curve’s minimum",
-   "class": "control",
-   "evidence": "changes:regions=Words",
-   "note": ""
-  },
-  {
-   "id": "cap-04b",
-   "text": "Put blank lines in place of Repulsion and Attraction",
+   "id": "cap-04",
+   "text": "Write Repulsion and Attraction on either side of one curve's minimum, as words or as blank lines",
    "class": "version",
-   "evidence": "changes:regions=Blank lines",
-   "note": ""
+   "evidence": "changes:regions=Words + changes:regions=Blank lines",
+   "note": "None is the opening."
   },
   {
-   "id": "cap-05a",
-   "text": "Show the bond names in a key",
-   "class": "control",
-   "evidence": "changes:hide_names=true",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-05b",
-   "text": "Hide the names as Bond A, B and C",
+   "id": "cap-05",
+   "text": "Name the bonds in a key, or hide the names as Bond A, B and C",
    "class": "version",
    "evidence": "changes:hide_names=true",
-   "note": ""
+   "note": "The opening shows the names in a key."
   },
   {
    "id": "cap-06a",
-   "text": "Number the axes, with a Fit button that fits them to the curves",
+   "text": "Number the axes and fit them to the curves in one step",
    "class": "control",
-   "evidence": "changes:{\"fit\":false,\"x_to\":300}",
-   "note": "Ours’ Fit is a switch (on at the opening state); the token shows it governs the ranges."
+   "evidence": "changes:length1=300",
+   "note": "Fit is on at the opening; the token moves the minimum and the axes refit (checked by hand that the same change with fit=false keeps the old axes)."
   },
   {
    "id": "cap-06b",
-   "text": "Draw the axes as shape only, with just the 0 on the energy axis",
+   "text": "Draw shape-only axes, with only the zero marked on the energy axis",
    "class": "control",
    "evidence": "changes:axes=Shape only",
    "note": ""
@@ -131,66 +96,66 @@
   },
   {
    "id": "cap-07b",
-   "text": "Write a chart title",
+   "text": "Give the chart a title as your own text, a blank line, or none",
    "class": "control",
-   "evidence": "changes:title=Hydrogen",
-   "note": ""
+   "evidence": "changes:title=Hydrogen halides + changes:{\"title\":\"Hydrogen halides\",\"title_style\":\"Blank line\"}",
+   "note": "The opening has no title (Text with an empty title), so None is the opening; checked by hand that Blank line renders differently from the typed title."
   },
   {
    "id": "cap-07c",
-   "text": "Write the axis titles",
+   "text": "Give each axis title as your own text, a blank line, or none",
    "class": "control",
-   "evidence": "changes:xtitle=Distance between nuclei (pm) + changes:ytitle=Energy (kJ/mol)",
+   "evidence": "changes:xtitle=Distance between nuclei (pm) + changes:xtitle_mode=Blank line + changes:ytitle_mode=None",
    "note": ""
   },
   {
    "id": "cap-07d",
-   "text": "Put a blank line in place of the chart or an axis title",
-   "class": "version",
-   "evidence": "changes:title_style=Blank line + changes:xtitle_mode=Blank line + changes:ytitle_mode=Blank line",
+   "text": "Type each axis's range and count-by",
+   "class": "control",
+   "evidence": "changes:{\"fit\":false,\"x_to\":600.0,\"y_by\":25.0}",
    "note": ""
   },
   {
    "id": "cap-07e",
-   "text": "Set the axis ranges and steps",
-   "class": "control",
-   "evidence": "changes:{\"fit\":false,\"x_to\":300} + changes:{\"fit\":false,\"y_by\":100}",
-   "note": ""
-  },
-  {
-   "id": "cap-07f",
-   "text": "Number every line, every 2nd, 5th or 10th line, or none",
+   "text": "Number every line, every 2nd, 5th or 10th line, or no lines on each axis",
    "class": "control",
    "evidence": "changes:x_num=Every 2nd line + changes:y_num=No numbers",
    "note": ""
   },
   {
-   "id": "cap-07g",
-   "text": "Turn the gridlines on or off",
-   "class": "control",
-   "evidence": "changes:grid=false",
-   "note": ""
-  },
-  {
-   "id": "cap-07h",
-   "text": "Draw the gridlines light, standard or bold",
+   "id": "cap-07f",
+   "text": "Draw the gridlines light, standard or bold, or leave them off",
    "class": "control",
    "evidence": "",
-   "note": "Ours has gridlines on or off only."
+   "note": "ours turns gridlines on or off only (grid); no weights"
   },
   {
-   "id": "cap-07i",
+   "id": "cap-07g",
    "text": "Add minor gridlines, 2, 4 or 5 per block",
    "class": "control",
    "evidence": "",
-   "note": ""
+   "note": "no minor gridlines"
   },
   {
-   "id": "cap-07j",
-   "text": "Set the label size",
+   "id": "cap-07h",
+   "text": "Choose the label size",
    "class": "control",
    "evidence": "changes:label_size=Large",
    "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Write a label at the far end of each axis, as your own text or none",
+   "class": "control",
+   "evidence": "",
+   "note": "no axis end labels (the axis titles are cap-07c)"
+  },
+  {
+   "id": "cap-09",
+   "text": "Finish each end of each axis plainly or with an arrowhead",
+   "class": "control",
+   "evidence": "",
+   "note": "no end-cap control: shape-only axes always get arrowheads, numbered axes always plain ends"
   }
  ]
 }

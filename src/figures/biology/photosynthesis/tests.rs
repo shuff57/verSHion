@@ -1246,7 +1246,7 @@ fn drawing_is_pure_and_fast_enough_to_follow_a_checkbox() {
             let mut l = toggle_list(mask);
             l.extend([b(SHOW_ANSWERS, key), s("label_size", "Large"), s("mark", &format!("{}", 1 + mask))]);
             let p = with(&l);
-            let t = std::time::Instant::now();
+            let t = crate::testclock::Stopwatch::start();
             let svg = (def().render)(&p);
             let _ = notes(&l);
             let dt = t.elapsed();

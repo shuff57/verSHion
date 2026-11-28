@@ -7,245 +7,245 @@
    "id": "cap-01",
    "text": "Type the function f(x)",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"x^4 - 4x^2\", \"ymin\": -5.0, \"ymax\": 5.0, \"ymin1\": -10.0, \"ymax1\": 10.0, \"ystep1\": 2.0}",
    "note": ""
   },
   {
    "id": "cap-02",
    "text": "Type a piecewise f, with corners where f' is undefined",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"x^2, x < 1; 2 - x, x >= 1\", \"xmin\": -2.0, \"xmax\": 4.0, \"ymin\": -3.0, \"ymax\": 4.0, \"ymin1\": -4.0, \"ymax1\": 4.0, \"ystep1\": 1.0}",
    "note": ""
   },
   {
    "id": "cap-03",
    "text": "Draw f' under f on aligned axes, the x scales lined up",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"sin(x)\", \"xmin\": -4.0, \"xmax\": 4.0, \"ymin\": -2.0, \"ymax\": 2.0, \"ymin1\": -2.0, \"ymax1\": 2.0, \"ystep1\": 1.0}",
    "note": ""
   },
   {
    "id": "cap-04",
    "text": "Draw f'' as a third aligned graph",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"show_fpp\": true}",
    "note": ""
   },
   {
    "id": "cap-05",
    "text": "Draw f, f' and f'' on one grid in different line styles",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"layout\": \"One grid\", \"show_fpp\": true, \"ymin\": -12.0, \"ymax\": 12.0, \"ystep\": 4.0}",
    "note": ""
   },
   {
    "id": "cap-06",
    "text": "Give the graph of f' as the given one (AP 'graph of f'' questions), with f drawn in the key through a chosen point",
    "class": "core",
-   "evidence": "",
+   "evidence": "changes:{\"start\": \"f′(x)\", \"xmin\": -4.0, \"xmax\": 4.0, \"ymin\": -2.0, \"ymax\": 8.0, \"ymin1\": -3.0, \"ymax1\": 3.0, \"ystep1\": 1.0}",
    "note": ""
   },
   {
    "id": "cap-07",
    "text": "Mark the critical points on f and the zeros of f', joined by dashed vertical guides",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"crit\": false}",
    "note": ""
   },
   {
    "id": "cap-08",
    "text": "Label the local maxima and minima",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"extrema\": true}",
    "note": ""
   },
   {
    "id": "cap-09",
    "text": "Mark the inflection points on f with the matching extrema of f' and zeros of f''",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"show_fpp\": true, \"inflect\": true}",
    "note": ""
   },
   {
    "id": "cap-10",
    "text": "Mark the intervals where f increases and decreases",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"incdec\": true}",
    "note": ""
   },
   {
    "id": "cap-11",
    "text": "Mark the intervals where f is concave up and concave down",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"concavity\": true}",
    "note": ""
   },
   {
    "id": "cap-12",
    "text": "Draw a sign chart for f' under the graphs",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"sign_fp\": true}",
    "note": ""
   },
   {
    "id": "cap-13",
    "text": "Draw a sign chart for f''",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"sign_fpp\": true}",
    "note": ""
   },
   {
    "id": "cap-14",
    "text": "Mark the absolute maximum and minimum on a closed interval, endpoints included",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"absolute\": true, \"abs_a\": \"-1/2\", \"abs_b\": \"2\"}",
    "note": ""
   },
   {
    "id": "cap-15",
    "text": "Give coordinates exactly or rounded to chosen decimals",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"x^3 - 2x\", \"extrema\": true, \"rounding\": \"2 decimals\"}",
    "note": ""
   },
   {
    "id": "cap-16",
    "text": "Label each graph y = f(x), y = f'(x), or with typed names such as g and g'",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"name\": \"g\"}",
    "note": ""
   },
   {
    "id": "cap-17",
    "text": "Draw each graph solid, dashed or dotted",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"line_fp\": \"Dashed\"}",
    "note": ""
   },
   {
    "id": "cap-18",
    "text": "Give each aligned graph its own y range",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"ymin1\": -8.0, \"ymax1\": 12.0, \"ystep1\": 4.0}",
    "note": ""
   },
   {
    "id": "cap-19",
    "text": "Load a classic example (a cubic, a quartic, x e^(-x), sin x, an AP-style f' made of segments and a semicircle)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"x^4 - 6x^2\", \"xmin\": -3.0, \"xmax\": 3.0, \"ymin\": -10.0, \"ymax\": 6.0, \"ystep\": 2.0, \"ymin1\": -20.0, \"ymax1\": 20.0, \"ystep1\": 5.0, \"ymin2\": -15.0, \"ymax2\": 30.0, \"ystep2\": 5.0, \"show_fpp\": true, \"inflect\": true, \"extrema\": true, \"tracer_x\": \"2\"}",
    "note": ""
   },
   {
    "id": "cap-20",
    "text": "Set each axis's From, To and Count by",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"xmin\": -4.0, \"xmax\": 4.0, \"xstep\": 2.0, \"ymin\": -6.0, \"ymax\": 6.0, \"ystep\": 2.0}",
    "note": ""
   },
   {
    "id": "cap-21",
    "text": "Make the gridlines light, standard, bold or none",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"grid\": \"Bold\"}",
    "note": ""
   },
   {
    "id": "cap-22",
    "text": "Add minor gridlines between the numbered lines",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"minor\": 2}",
    "note": ""
   },
   {
    "id": "cap-23",
    "text": "Number the axes, or leave the numbers off",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"numbers\": false}",
    "note": ""
   },
   {
    "id": "cap-24",
    "text": "Set the axis labels at the arrow tips (x and y, or typed names)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"xlabel\": \"t\", \"ylabel\": \"s\"}",
    "note": ""
   },
   {
    "id": "cap-25",
    "text": "Number the x-axis in multiples of π",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"f\": \"sin(x)\", \"xunits\": \"Multiples of π\", \"xmin\": -2.0, \"xmax\": 2.0, \"xstep\": 0.5, \"ymin\": -1.5, \"ymax\": 1.5, \"ystep\": 0.5, \"ymin1\": -1.5, \"ymax1\": 1.5, \"ystep1\": 0.5}",
    "note": ""
   },
   {
    "id": "cap-26",
    "text": "Write a title",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"title\": \"A cubic and its derivative\"}",
    "note": ""
   },
   {
    "id": "cap-27",
    "text": "Put a blank line in place of the title for students",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"title_mode\": \"Blank line\"}",
    "note": ""
   },
   {
    "id": "cap-28",
    "text": "Make the labels small, medium or large",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"label_size\": \"Large\"}",
    "note": ""
   },
   {
    "id": "cap-29",
    "text": "Draw it in black and white for photocopying (Print)",
    "class": "control",
-   "evidence": "",
+   "evidence": "changes:{\"style\": \"Print\"}",
    "note": ""
   },
   {
    "id": "cap-30",
    "text": "A 'sketch f' from f' student copy: f drawn, blank aligned axes for f'",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Sketch f′ from f\"}",
    "note": ""
   },
   {
    "id": "cap-31",
    "text": "A 'sketch f from f'' student copy: f' drawn, blank aligned axes for f",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"student_copy\": \"Sketch f from f′\"}",
    "note": ""
   },
   {
    "id": "cap-32",
    "text": "A student copy with the graphs and none of the marks (critical points, intervals)",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"extrema\": true, \"incdec\": true}",
    "note": ""
   },
   {
    "id": "cap-33",
    "text": "A blank sign chart for students to fill in",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"show_answers\": false, \"sign_fp\": true}",
    "note": ""
   },
   {
    "id": "cap-34",
    "text": "An answer key listing the critical points, extrema, inflection points and intervals",
    "class": "version",
-   "evidence": "",
+   "evidence": "changes:{\"key_list\": true, \"extrema\": true, \"inflect\": true, \"incdec\": true, \"concavity\": true}",
    "note": ""
   },
   {
    "id": "cap-35",
    "text": "Drag a tracer across the graphs on the figure to read f, f' and f'' at the same x, the tangent on f following it",
    "class": "interaction",
-   "evidence": "",
+   "evidence": "handle:drag:Drag the tracer along the graphs to read f",
    "note": "opening state: the tracer is a handle"
   }
  ]

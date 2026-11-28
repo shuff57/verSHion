@@ -443,9 +443,20 @@ pub(super) fn on_plot(a: &Axes, v: (f64, f64)) -> bool {
     v.0 >= a.x0.min(a.x1) && v.0 <= a.x0.max(a.x1) && v.1 >= a.y0.min(a.y1) && v.1 <= a.y0.max(a.y1)
 }
 
+/// The panel's note when the carrying capacity is marked but the population graph's axis leaves K off it, so its
+/// dashed line is not on the graph (never drawn itself).
+fn k_off_graph(p: &Params) -> Option<String> {
+    if !p.b("mark_k") || p.s("growth") == "Exponential (J-curve)" || !on_size_graph(p) { return None; }
+    let k = p.f("k").max(1.0);
+    let ax = axes_of(p, false).into_iter().find(|a| a.kind == 0)?;
+    if ax.inside((ax.x0, k)) { return None; }
+    let side = if k > ax.y1 { "above the top" } else { "below the bottom" };
+    Some(format!("The carrying capacity (K = {}) lies {side} of the population axis, so its dashed line is off the graph. Widen the axis to show it.", sig3(k)))
+}
+
 /// The panel's notes (never drawn): an inflection point outside the graph, and phases with no bracket on it.
 pub(super) fn warnings(p: &Params) -> Vec<String> {
-    let mut out = vec![];
+    let mut out = k_off_graph(p).into_iter().collect::<Vec<_>>();
     if !infl_labelled(p) && !phases_drawn(p) { return out; }
     let Some(ax) = axes_of(p, false).into_iter().find(|a| a.kind == 0) else { return out };
     let ti = t_inf(p).unwrap_or(0.0);

@@ -2119,11 +2119,11 @@ fn critic3_a_flood_of_history_lines_hangs_the_page() {
     r.w.on("Get", &versions_path(), 200, json!({"bank_id": BID, "head_version": n, "versions": lines}), None);
     r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": n, "per_question": true, "versions": []}), Some("\"e1\""));
     r.open(0);
-    let t = std::time::Instant::now();
+    let t = crate::testclock::Stopwatch::start();
     r.frame_at(1280.0, Vec::new());
     let first = t.elapsed();
     r.qpage_mut().show_all = true;
-    let t = std::time::Instant::now();
+    let t = crate::testclock::Stopwatch::start();
     r.frame_at(1280.0, Vec::new());
     r.frame_at(1280.0, Vec::new());
     assert!(first < std::time::Duration::from_millis(300), "first frame {first:?}");

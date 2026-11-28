@@ -5,16 +5,23 @@
  "capabilities": [
   {
    "id": "cap-01a",
-   "text": "Choose zero, first or second order",
+   "text": "Choose a zero-, first- or second-order reaction",
    "class": "core",
-   "evidence": "changes:order=Second + changes:order=Zero",
-   "note": "The reference keeps the first half-life when the order changes; not checked for ours."
+   "evidence": "changes:order=Zero + changes:order=Second",
+   "note": ""
   },
   {
    "id": "cap-01b",
-   "text": "Set [A]₀ and k",
+   "text": "Type the starting concentration [A]₀ and the rate constant k",
    "class": "core",
-   "evidence": "changes:a0=2 + changes:k=0.2 + handle:drag:[A]₀ + handle:drag:half-life",
+   "evidence": "changes:a0=2 + changes:k=0.05",
+   "note": "also drag handles on [A]₀ and the first half-life"
+  },
+  {
+   "id": "cap-01c",
+   "text": "Keep the first half-life the same when the order changes",
+   "class": "control",
+   "evidence": "",
    "note": ""
   },
   {
@@ -22,66 +29,45 @@
    "text": "Draw [A], ln[A] and 1/[A] against time side by side",
    "class": "core",
    "evidence": "",
-   "note": "Ours draws one graph at a time."
+   "note": ""
   },
   {
    "id": "cap-02b",
-   "text": "Draw [A] against time alone",
+   "text": "Draw any one of [A], ln[A] or 1/[A] against time on its own",
    "class": "core",
-   "evidence": "changes:mode=Linearised (integrated rate law)",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-02c",
-   "text": "Draw ln[A] or 1/[A] against time alone",
-   "class": "core",
-   "evidence": "changes:mode=Linearised (integrated rate law) + changes:{\"mode\":\"Linearised (integrated rate law)\",\"order\":\"Second\"}",
-   "note": "Ours draws the straight-line graph for the chosen order only."
+   "evidence": "",
+   "note": "ours draws [A], or the one straight-line plot for the chosen order (ln[A] for first, 1/[A] for second), not any of the three"
   },
   {
    "id": "cap-03a",
-   "text": "Draw the curve",
-   "class": "core",
-   "evidence": "",
-   "note": "A switch on the reference (verified in its page HTML). Ours draws it always, with no switch to turn it off; owner 2026-11-24: a reference show/hide switch ours lacks is an open gap, no credit for the shown half."
-  },
-  {
-   "id": "cap-03b",
-   "text": "Draw 5 to 10 data points, alone or with the curve",
+   "text": "Draw the curve, 5 to 10 data points, or both",
    "class": "core",
    "evidence": "",
    "note": ""
   },
   {
-   "id": "cap-03c",
-   "text": "Scatter the data by about 1, 2 or 5%",
+   "id": "cap-03b",
+   "text": "Scatter the data points by about 1, 2 or 5%, or not at all",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
-   "id": "cap-03d",
-   "text": "Make a new set of data",
+   "id": "cap-03c",
+   "text": "Draw a fresh set of scattered data",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-04a",
-   "text": "Print a data table of time and [A] under the graphs",
+   "text": "Put a data table under the graphs: time and [A], or with ln[A] and 1/[A] too",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-04b",
-   "text": "Add ln[A] and 1/[A] to the data table",
-   "class": "control",
-   "evidence": "",
-   "note": ""
-  },
-  {
-   "id": "cap-04c",
    "text": "Copy the data for a spreadsheet",
    "class": "output",
    "evidence": "",
@@ -89,63 +75,35 @@
   },
   {
    "id": "cap-05a",
-   "text": "Draw dashed guide lines at the half-lives on the [A] graph",
+   "text": "Draw dashed guides at the first 1, 2 or 3 half-lives on the [A] graph",
    "class": "control",
-   "evidence": "changes:half_lives=false",
-   "note": "The opening state; the token shows the switch that reaches it is live."
+   "evidence": "",
+   "note": "ours turns half-life markers on or off; always three"
   },
   {
    "id": "cap-05b",
-   "text": "Choose 1, 2 or 3 half-lives for the guide lines",
-   "class": "control",
-   "evidence": "",
-   "note": "Ours always draws three."
-  },
-  {
-   "id": "cap-05c",
-   "text": "Label the guide lines with their times",
-   "class": "control",
-   "evidence": "changes:half_lives=false",
-   "note": "Times are written at the opening state."
-  },
-  {
-   "id": "cap-05d",
-   "text": "Label the guide lines as half-lives (t½, 2t½…)",
-   "class": "control",
-   "evidence": "",
-   "note": "Ours labels the time axis with values and the concentration axis with [A]₀/2…"
-  },
-  {
-   "id": "cap-05e",
-   "text": "Put blank lines on the guide lines",
+   "text": "Label the half-life guides with their times, as half-lives, with blank lines, or not at all",
    "class": "version",
    "evidence": "",
-   "note": ""
-  },
-  {
-   "id": "cap-05f",
-   "text": "Write nothing on the guide lines",
-   "class": "control",
-   "evidence": "changes:show_answers=false",
-   "note": "Checked by hand: the student copy drops the times from the axis."
+   "note": "ours always writes both the times and [A]₀/2, [A]₀/4…"
   },
   {
    "id": "cap-06a",
-   "text": "Name the reactant or give its formula",
+   "text": "Name the reactant, by name or formula",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-06b",
-   "text": "Give concentration in M, mol/L or mol dm⁻³",
+   "text": "Write concentrations in M, mol/L or mol dm⁻³",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-06c",
-   "text": "Give time in seconds, minutes or hours",
+   "text": "Measure time in seconds, minutes or hours",
    "class": "control",
    "evidence": "",
    "note": ""
@@ -173,28 +131,21 @@
   },
   {
    "id": "cap-07d",
-   "text": "Write a chart title",
+   "text": "Give the chart a title as text, a blank line, or none",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-07e",
-   "text": "Write the axis titles",
+   "text": "Give each axis title as text, a blank line, or none",
    "class": "control",
-   "evidence": "",
-   "note": "Ours’ axis titles are fixed."
-  },
-  {
-   "id": "cap-07f",
-   "text": "Put a blank line in place of the chart or an axis title",
-   "class": "version",
    "evidence": "",
    "note": ""
   },
   {
-   "id": "cap-07g",
-   "text": "Set the label size",
+   "id": "cap-07f",
+   "text": "Choose the label size",
    "class": "control",
    "evidence": "changes:label_size=Large",
    "note": ""

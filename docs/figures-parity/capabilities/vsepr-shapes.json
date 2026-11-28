@@ -4,39 +4,25 @@
  "slug": "vsepr-shapes",
  "capabilities": [
   {
-   "id": "cap-01a",
-   "text": "Draw a molecule with one central atom, chosen by its formula",
-   "class": "core",
-   "evidence": "changes:molecule=NH3",
-   "note": "Ours picks from nine set molecules (BeCl₂, BF₃, CH₄, NH₃, H₂O, PCl₅, SF₆, XeF₄, SF₄); typing any formula is cap-01b."
-  },
-  {
-   "id": "cap-01b",
-   "text": "Type any formula of main-group elements through period 5 with one central atom",
+   "id": "cap-01",
+   "text": "Type any formula with one central atom (main-group elements to period 5), molecule or polyatomic ion",
    "class": "core",
    "evidence": "",
-   "note": "Ours has no typed formula; shapes such as T-shaped, square pyramidal and AX₂E₃ linear are not reachable."
-  },
-  {
-   "id": "cap-01c",
-   "text": "Draw a polyatomic ion, with its charge",
-   "class": "core",
-   "evidence": "",
-   "note": ""
+   "note": "ours picks from nine molecules; no ions"
   },
   {
    "id": "cap-02a",
-   "text": "Choose wedge-and-dash or ball-and-stick",
+   "text": "Draw the molecule wedge-and-dash instead of ball-and-stick",
    "class": "control",
    "evidence": "",
-   "note": "Ours always draws a flat ball-and-stick model (checked by render); no wedge-and-dash and no choice. The reference’s Style is a radio defaulting to wedge-and-dash, so this is a choice, not an always-drawn feature; left open."
+   "note": "ball-and-stick only"
   },
   {
    "id": "cap-02b",
-   "text": "Draw the balls in color or grayscale",
+   "text": "Draw the balls in color or in grayscale",
    "class": "control",
    "evidence": "changes:style=Print",
-   "note": "Print fills the balls with patterns rather than grays."
+   "note": "Print draws the balls black and white with patterns"
   },
   {
    "id": "cap-02c",
@@ -47,87 +33,73 @@
   },
   {
    "id": "cap-03a",
-   "text": "Turn the view any way from the textbook view",
+   "text": "Show the textbook view, or turn the model to any angle",
    "class": "control",
    "evidence": "changes:turn=40 + changes:tilt=20",
-   "note": "Ours turns by typed yaw and pitch."
+   "note": ""
   },
   {
    "id": "cap-03b",
-   "text": "Drag the figure to turn it",
+   "text": "Turn the model by dragging it",
    "class": "interaction",
    "evidence": "",
-   "note": "Ours has no handles on this figure."
+   "note": "no handles; turned by typed angles only"
   },
   {
    "id": "cap-04a",
-   "text": "Draw the central atom’s lone pairs as lobes",
+   "text": "Draw the central atom's lone pairs as lobes, as dots, or hide them",
    "class": "control",
    "evidence": "",
-   "note": "Ours draws lone pairs as dots only."
+   "note": "ours shows them as dots or hides them (lone); no lobes"
   },
   {
    "id": "cap-04b",
-   "text": "Draw the central atom’s lone pairs as dots",
-   "class": "control",
-   "evidence": "changes:molecule=NH3",
-   "note": "Checked by hand: NH₃ shows its lone pair as two dots."
-  },
-  {
-   "id": "cap-04c",
-   "text": "Hide the central atom’s lone pairs",
-   "class": "control",
-   "evidence": "changes:{\"molecule\":\"NH3\",\"lone\":false}",
-   "note": "Token passes on the molecule alone; checked by hand that hiding changes the NH₃ render."
-  },
-  {
-   "id": "cap-04d",
-   "text": "Draw the outer atoms’ lone pairs",
+   "text": "Show the lone pairs on the outer atoms",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-05a",
-   "text": "Label the shape name",
+   "text": "Write the shape's name",
    "class": "control",
    "evidence": "",
-   "note": "A switch on the reference (verified in its page HTML). Ours draws it always, with no switch to turn it off; owner 2026-11-24: a reference show/hide switch ours lacks is an open gap, no credit for the shown half."
+   "note": "written in the answer panel with everything else; no switch for it alone"
   },
   {
    "id": "cap-05b",
-   "text": "Label the electron geometry",
+   "text": "Write the electron geometry",
    "class": "control",
    "evidence": "",
-   "note": "A switch on the reference (verified in its page HTML). Ours draws it always, with no switch to turn it off; owner 2026-11-24: a reference show/hide switch ours lacks is an open gap, no credit for the shown half."
+   "note": "written in the answer panel as Domain geometry; no switch for it alone"
   },
   {
    "id": "cap-05c",
-   "text": "Label the AXE notation",
+   "text": "Write the AXE notation",
    "class": "control",
    "evidence": "",
-   "note": "A switch on the reference (verified in its page HTML). Ours draws it always, with no switch to turn it off; owner 2026-11-24: a reference show/hide switch ours lacks is an open gap, no credit for the shown half."
+   "note": "always written beside the molecule (AX4); no switch"
   },
   {
    "id": "cap-05d",
    "text": "Mark the bond angles",
    "class": "control",
    "evidence": "changes:angles=false",
-   "note": "On at the opening state."
+   "note": ""
   },
   {
    "id": "cap-05e",
-   "text": "Write your own angle labels",
+   "text": "Write your own text on the angle labels",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-06a",
-   "text": "Set a “name the shape” question with the labels blank",
+   "text": "Ask students to name the shape, with the labels left blank",
    "class": "version",
    "evidence": "changes:show_answers=false",
-   "note": "Checked by hand: geometry, shape and angle become blank lines."
+   "note": ""
   },
   {
    "id": "cap-06b",
@@ -141,7 +113,7 @@
    "text": "Print an answer key",
    "class": "version",
    "evidence": "changes:show_answers=false",
-   "note": "Answers are on at the opening state."
+   "note": "the opening is the key copy; the token shows the student copy is a separate render"
   }
  ]
 }

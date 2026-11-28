@@ -5,163 +5,149 @@
  "capabilities": [
   {
    "id": "cap-01a",
-   "text": "Choose the reaction: one of six real reversible reactions or a made-up A + B ⇌ C",
+   "text": "Pick one of six real reversible reactions",
    "class": "core",
-   "evidence": "changes:{\"name_a\":\"N2\",\"name_b\":\"H2\",\"name_c\":\"NH3\",\"coef_b\":3}",
-   "note": "Ours has no reaction list; the teacher types any reaction’s species and coefficients (up to two reactants and two products)."
+   "evidence": "",
+   "note": "ours has no list of reactions: the teacher types the species, coefficients and phases (all six render correctly that way, ions included), and no reaction carries its own ΔH"
   },
   {
    "id": "cap-01b",
+   "text": "Use a made-up reaction A + B ⇌ C",
+   "class": "control",
+   "evidence": "changes:{\"name_a\":\"A\",\"name_b\":\"B\",\"name_c\":\"C\",\"coef_c\":1}",
+   "note": "typed into ours' general aA + bB ⇌ cC + dD"
+  },
+  {
+   "id": "cap-01c",
    "text": "Make the forward reaction exothermic or endothermic",
    "class": "control",
-   "evidence": "changes:{\"dist\":\"Change the temperature\",\"dist_dh\":50}",
-   "note": "Ours uses ΔH only for a temperature stress. Token passes on the stress alone; checked by hand that the sign of ΔH changes the render."
+   "evidence": "",
+   "note": "ours types ΔH on each temperature stress, not on the reaction"
   },
   {
    "id": "cap-02a",
-   "text": "Set each species’ starting concentration (from reactants, products or a mixture)",
+   "text": "Type each species' starting concentration in mol/L, starting from reactants, products or a mixture",
    "class": "core",
-   "evidence": "changes:init_c=0.5 + handle:drag:starting [H₂]",
-   "note": ""
+   "evidence": "changes:init_c=0.5",
+   "note": "also drag handles on each starting concentration"
   },
   {
    "id": "cap-02b",
-   "text": "Set K",
+   "text": "Type K",
    "class": "core",
-   "evidence": "changes:k=10 + handle:drag:change K",
+   "evidence": "changes:k=5",
    "note": ""
   },
   {
    "id": "cap-02c",
-   "text": "Set the time equilibrium is first established",
+   "text": "Set the time at which equilibrium is first reached",
    "class": "control",
    "evidence": "",
-   "note": "Ours draws the approach in arbitrary time units with no control for when it settles."
-  },
-  {
-   "id": "cap-03a",
-   "text": "Add stresses, each at the time you type",
-   "class": "core",
-   "evidence": "changes:{\"dist\":\"Add a species\",\"dist_time\":6} + changes:{\"dist\":\"Add a species\",\"dist2\":\"Change the volume\"}",
-   "note": "Ours allows two stresses."
-  },
-  {
-   "id": "cap-03b",
-   "text": "Add a third stress",
-   "class": "control",
-   "evidence": "",
-   "note": "Ours allows two."
-  },
-  {
-   "id": "cap-03c",
-   "text": "Stress by adding or removing a species",
-   "class": "core",
-   "evidence": "changes:dist=Add a species + changes:dist=Remove a species",
    "note": ""
   },
   {
-   "id": "cap-03d",
-   "text": "Stress by changing the volume",
+   "id": "cap-03a",
+   "text": "Add or remove a species as a stress, at a time you type",
+   "class": "core",
+   "evidence": "changes:dist=Add a species + changes:dist=Remove a species + changes:{\"dist\":\"Add a species\",\"dist_time\":4.0}",
+   "note": ""
+  },
+  {
+   "id": "cap-03b",
+   "text": "Change the volume as a stress",
    "class": "core",
    "evidence": "changes:dist=Change the volume",
    "note": ""
   },
   {
-   "id": "cap-03e",
-   "text": "Stress by raising or lowering the temperature",
+   "id": "cap-03c",
+   "text": "Raise or lower the temperature as a stress",
    "class": "core",
-   "evidence": "changes:dist=Change the temperature + changes:{\"dist\":\"Change the temperature\",\"dist_t2\":250}",
+   "evidence": "changes:dist=Change the temperature + changes:{\"dist\":\"Change the temperature\",\"dist_t2\":250.0}",
    "note": ""
   },
   {
-   "id": "cap-04a",
-   "text": "Write the page’s own words for each stress (“N₂ added”, “Volume halved”) over its dashed line",
-   "class": "control",
-   "evidence": "changes:dist=Add a species",
-   "note": "Checked by hand: ours writes “t = 8: Add 0.5 M H₂” and the Q-vs-K shift above the dashed line."
-  },
-  {
-   "id": "cap-04b",
-   "text": "Write your own words for a stress",
+   "id": "cap-03d",
+   "text": "Apply up to three stresses on one graph",
    "class": "control",
    "evidence": "",
-   "note": ""
+   "note": "two stresses at most (dist, dist2)"
   },
   {
-   "id": "cap-04c",
-   "text": "Leave a stress’s words off",
+   "id": "cap-04",
+   "text": "Write the page's own words over each stress line, your own words, or nothing",
    "class": "control",
    "evidence": "",
-   "note": ""
+   "note": "ours always writes its own words over the stress line"
   },
   {
    "id": "cap-05a",
-   "text": "Write each line’s formula beside it",
+   "text": "Write each line's formula beside it, or hide the formulas",
    "class": "control",
-   "evidence": "changes:init_c=0.5",
-   "note": "Formulas with their final values are written at each line’s end at the opening state; the token shows they follow the data."
+   "evidence": "",
+   "note": "ours always writes the formula and its value beside each line"
   },
   {
    "id": "cap-05b",
-   "text": "Hide the lines’ formulas",
-   "class": "version",
-   "evidence": "",
+   "text": "Draw the lines in color, or in black told apart as solid, dashed and dotted",
+   "class": "control",
+   "evidence": "changes:style=Print",
    "note": ""
   },
   {
-   "id": "cap-05c",
-   "text": "Draw the lines in color or in black, told apart as solid, dashed and dotted",
-   "class": "control",
-   "evidence": "changes:style=Print",
-   "note": "Checked by hand: Print draws solid, dashed and dotted lines with markers."
-  },
-  {
    "id": "cap-06a",
-   "text": "Write a chart title",
+   "text": "Give the chart a title as text, a blank line, or none",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-06b",
-   "text": "Write the axis titles",
+   "text": "Give each axis title as text, a blank line, or none",
    "class": "control",
-   "evidence": "",
-   "note": "Ours’ axis titles are fixed."
-  },
-  {
-   "id": "cap-06c",
-   "text": "Put a blank line in place of the chart or an axis title",
-   "class": "version",
    "evidence": "",
    "note": ""
   },
   {
-   "id": "cap-06d",
-   "text": "Set the axis ranges, with a Fit button",
+   "id": "cap-06c",
+   "text": "Type each axis's range and count-by, with a button to fit them to the graph",
    "class": "control",
    "evidence": "",
-   "note": "Ours always fits the axes; no ranges."
+   "note": "axes are always fitted; no typed range"
+  },
+  {
+   "id": "cap-06d",
+   "text": "Number every line, every 2nd, 5th or 10th line, or no lines on each axis",
+   "class": "control",
+   "evidence": "",
+   "note": ""
   },
   {
    "id": "cap-06e",
-   "text": "Set the axis numbering (every line, 2nd, 5th, 10th, or none)",
+   "text": "Add minor gridlines, 2, 4 or 5 per block",
    "class": "control",
    "evidence": "",
    "note": ""
   },
   {
    "id": "cap-06f",
-   "text": "Add minor gridlines, 2, 4 or 5 per block",
-   "class": "control",
-   "evidence": "",
-   "note": "Ours has major gridlines on or off only."
-  },
-  {
-   "id": "cap-06g",
-   "text": "Set the label size",
+   "text": "Choose the label size",
    "class": "control",
    "evidence": "changes:label_size=Large",
+   "note": ""
+  },
+  {
+   "id": "cap-07",
+   "text": "Write a label at the far end of each axis, as your own text or none",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08",
+   "text": "Finish each end of each axis plainly or with an arrowhead",
+   "class": "control",
+   "evidence": "",
    "note": ""
   }
  ]

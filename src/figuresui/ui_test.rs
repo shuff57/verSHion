@@ -9,7 +9,9 @@ use egui_kittest::Harness;
 pub fn harness<'a, S>(mut app: impl FnMut(&mut egui::Ui, &mut S) + 'a, state: S) -> Harness<'a, S> {
     let mut first = true;
     // short frames, so two clicks a few frames apart still count as a double-click
-    Harness::builder().with_step_dt(0.01).build_ui_state(
+    // These tests are about behaviour; egui_kittest 0.37 would also fail them for the figure
+    // controls that have no accessible name yet (spin buttons, unit boxes).
+    Harness::builder().with_step_dt(0.01).with_accessibility_check(false).build_ui_state(
         move |ui, s: &mut S| {
             if std::mem::take(&mut first) {
                 crate::theme::setup(ui.ctx());

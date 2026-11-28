@@ -4,127 +4,92 @@
  "slug": "pendulum",
  "capabilities": [
   {
-   "id": "cap-01a",
-   "text": "Draw the Swing: the bob at release, at the bottom and at the far side",
-   "class": "core",
-   "evidence": "changes:picture=One bob",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-01b",
-   "text": "Draw one bob",
+   "id": "cap-01",
+   "text": "Show the swing (release point, bottom and far side) or one bob",
    "class": "core",
    "evidence": "changes:picture=One bob",
    "note": ""
   },
   {
    "id": "cap-02a",
-   "text": "Set the angle from the vertical, 5° to 75°",
+   "text": "Set the release angle from the vertical, 5° to 75°",
    "class": "core",
-   "evidence": "changes:angle=50",
-   "note": ""
+   "evidence": "changes:angle=60",
+   "note": "ours takes 0° to 75°, at least 15° in the swing"
   },
   {
    "id": "cap-02b",
-   "text": "Choose which side the bob is released on",
+   "text": "Put the bob on the left or the right",
    "class": "control",
    "evidence": "changes:side=Left",
    "note": ""
   },
   {
    "id": "cap-03a",
-   "text": "Draw the bob’s dashed path",
+   "text": "Draw the bob's path, dashed",
    "class": "control",
    "evidence": "changes:show_path=false",
-   "note": "On at the opening state."
+   "note": "on at the opening"
   },
   {
    "id": "cap-03b",
-   "text": "Mark the angle θ, with its own label",
-   "class": "control",
-   "evidence": "changes:show_angle=false + changes:angle_label=α",
+   "text": "Mark the angle θ and label it with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:angle_label=α + changes:angle_label=- + changes:angle_label=none",
    "note": ""
   },
   {
    "id": "cap-03c",
-   "text": "Mark the string length L, with its own label",
-   "class": "control",
-   "evidence": "changes:length_label=ℓ",
+   "text": "Label the string length L with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:length_label=0.8 m + changes:length_label=- + changes:length_label=none",
    "note": ""
   },
   {
    "id": "cap-03d",
-   "text": "Mark the height h above the lowest point, with its own label",
-   "class": "control",
-   "evidence": "changes:show_height=false + changes:height_label=Δh",
-   "note": ""
-  },
-  {
-   "id": "cap-03e",
-   "text": "Put a blank line in place of a mark’s label for students",
+   "text": "Mark the height h and label it with your own text, a blank line, or nothing",
    "class": "version",
-   "evidence": "changes:angle_label=- + changes:height_label=-",
+   "evidence": "changes:height_label=0.2 m + changes:height_label=- + changes:height_label=none",
    "note": ""
   },
   {
-   "id": "cap-04a",
-   "text": "Letter the Swing’s three bobs A, B and C",
-   "class": "control",
-   "evidence": "changes:show_letters=true",
-   "note": ""
-  },
-  {
-   "id": "cap-04b",
-   "text": "Edit each of the letters",
+   "id": "cap-04",
+   "text": "Letter the swing's three positions A, B and C, each letter editable",
    "class": "control",
    "evidence": "",
-   "note": "Ours draws fixed A, B, C."
+   "note": "ours turns fixed letters A, B, C on or off (show_letters); they cannot be edited"
   },
   {
-   "id": "cap-05a",
-   "text": "Draw the velocity at the bottom of the Swing",
+   "id": "cap-05",
+   "text": "Draw the velocity at the bottom of the swing, with its label",
    "class": "control",
-   "evidence": "changes:show_velocity=true",
+   "evidence": "changes:show_velocity=true + changes:{\"show_velocity\":true,\"velocity_label\":\"v_max\"}",
    "note": ""
   },
   {
-   "id": "cap-05b",
-   "text": "Label the velocity",
-   "class": "control",
-   "evidence": "changes:{\"show_velocity\":true,\"velocity_label\":\"v_max\"}",
-   "note": "Token passes on the arrow alone; checked by hand that the label changes the render."
-  },
-  {
-   "id": "cap-06a",
-   "text": "On one bob, draw the tension and the weight",
+   "id": "cap-06",
+   "text": "On one bob: no forces, tension and weight, or those with weight's components along the string and the path",
    "class": "core",
-   "evidence": "changes:{\"picture\":\"One bob\",\"forces\":\"Weight and tension\"}",
-   "note": "Token passes on the picture alone; checked by hand that the forces change the one-bob render."
-  },
-  {
-   "id": "cap-06b",
-   "text": "On one bob, add the weight’s components along the string and the path",
-   "class": "core",
-   "evidence": "changes:{\"picture\":\"One bob\",\"forces\":\"Components\"}",
-   "note": "Token passes on the picture alone; checked by hand that the components change the one-bob render."
+   "evidence": "changes:{\"picture\":\"One bob\",\"forces\":\"Weight and tension\"} + changes:{\"picture\":\"One bob\",\"forces\":\"Components\"}",
+   "note": "both tokens pass on picture alone; checked by hand that each force choice changes the one-bob render"
   },
   {
    "id": "cap-07a",
-   "text": "Label the bob",
-   "class": "control",
-   "evidence": "changes:bob_label=2 kg",
+   "text": "Label the bob with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:bob_label=2 kg + changes:bob_label=- + changes:bob_label=none",
    "note": ""
   },
   {
    "id": "cap-07b",
    "text": "Write a chart title",
    "class": "control",
-   "evidence": "changes:title=A simple pendulum",
+   "evidence": "changes:title=Simple pendulum",
    "note": ""
   },
   {
    "id": "cap-07c",
-   "text": "Color the figure for slides",
+   "text": "Draw in color for slides, or black and white",
    "class": "control",
    "evidence": "changes:style=Colour",
    "note": ""

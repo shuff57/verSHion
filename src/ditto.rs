@@ -143,6 +143,10 @@ pub const UNRESOLVED_TOPIC: &str = "needs review: source task not visible";
 /// on this page), saved so nothing printed is lost.
 pub const CONTINUED_TOPIC: &str = "needs review: continued from an earlier page";
 
+/// Topic on a multiple-choice question that ends its page before its choices are printed; the
+/// next page's continuation brings them (holdout v15, MCAP #12).
+pub const CHOICES_PENDING_TOPIC: &str = "needs review: choices continue on the next page";
+
 /// The label a reply gives printed content that continues a question begun on an earlier page.
 fn continued_label(label: Option<&str>) -> bool {
     label.is_some_and(|l| l.trim().trim_matches(['(', ')', '[', ']']).trim().eq_ignore_ascii_case("continued"))
@@ -278,13 +282,31 @@ fn split_part_figures_in(v: &mut Value) -> bool {
         // The same box on two parts is one shared picture claimed twice: ownership stays in review.
         let boxes: Vec<_> = parts.iter().filter_map(|p| p.get("figure").and_then(|f| f.get("box"))).collect();
         let distinct = boxes.iter().enumerate().all(|(i, b)| !boxes[..i].contains(b));
+        let letters: Vec<String> = parts.iter().take(26).enumerate().map(|(k, p)| {
+            let own = text(p, "stem");
+            let printed = text(p, "label");
+            part_letter(own)
+                .or_else(|| {
+                    (own.is_empty() && !printed.is_empty() && printed.len() <= 4
+                        && printed.bytes().all(|c| c.is_ascii_alphanumeric()))
+                        .then(|| printed.to_string())
+                })
+                .unwrap_or_else(|| char::from(b'a' + k as u8).to_string())
+        }).collect();
         let splittable = text(&q, "type") == "multipart"
             && distinct
             && !id.is_empty()
             && parts.iter().filter(|p| has_figure(p)).count() >= 2
             && !has_figure(&q)
             && parts.len() <= 26
-            && parts.iter().all(|p| p.get("parts").and_then(Value::as_array).is_none_or(Vec::is_empty) && part(p).is_some());
+            && letters.iter().enumerate().all(|(i, letter)| !letters[..i].contains(letter))
+            && parts.iter().all(|p| {
+                let figure_only = text(p, "stem").is_empty()
+                    && matches!(text(p, "type"), "" | "short-answer")
+                    && has_figure(p);
+                p.get("parts").and_then(Value::as_array).is_none_or(Vec::is_empty)
+                    && (part(p).is_some() || figure_only)
+            });
         if !splittable {
             out.push(q);
             continue;
@@ -295,9 +317,8 @@ fn split_part_figures_in(v: &mut Value) -> bool {
             _ => id.clone(),
         };
         let stem = text(&q, "stem");
-        for (k, p) in parts.iter().enumerate() {
+        for (p, letter) in parts.iter().zip(letters) {
             let own = text(p, "stem");
-            let letter = part_letter(own).unwrap_or_else(|| char::from(b'a' + k as u8).to_string());
             let child_label = if letter.starts_with(&label) { letter.clone() } else { format!("{label}{letter}") };
             let child_id = format!("{id}.{letter}");
             let mut child = p.clone();
@@ -599,18 +620,25 @@ pub fn label_number(label: &str) -> Option<u32> {
     let t = label.trim().trim_end_matches([':', '.']).trim();
     let lower = t.to_ascii_lowercase();
     let mut t = t;
-    for word in ["question", "problem", "exercise", "q", "#"] {
+    let mut part = false;
+    for word in ["question", "problem", "exercise", "part", "q", "#"] {
         if lower.starts_with(word) && t.len() > word.len() {
             let rest = &t[word.len()..];
             // A word prefix needs a separator or a digit/bracket after it: "Question 13", "Q13", "Q[13]".
             if rest.starts_with([' ', '.', '[', '(']) || rest.starts_with(|c: char| c.is_ascii_digit()) {
                 t = rest.trim_start_matches(['.', ' ']);
+                part = word == "part";
                 break;
             }
         }
     }
     let t = t.strip_prefix('[').and_then(|s| s.strip_suffix(']')).or_else(|| t.strip_prefix('(').and_then(|s| s.strip_suffix(')'))).unwrap_or(t);
     let t = t.trim_end_matches(['.', ')']).trim();
+    // "Part 1i", "Part 1vi": a part of printed item 1 (holdout v17, TERRA sets) answers to 1.
+    if part && let Some(split) = t.find(|c: char| !c.is_ascii_digit()).filter(|&i| i > 0)
+        && t[split..].trim_start_matches(['(', ' ']).trim_end_matches(')').chars().all(|c| c.is_ascii_lowercase()) {
+        return t[..split].parse().ok();
+    }
     t.parse().ok().or_else(|| number_word(t))
 }
 
@@ -661,6 +689,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         }
     }
     split_part_figures_in(&mut v);
+    let _boxes = PageBoxes::set(&v, page_no);
     let bank = v.get("bank").ok_or("The file has no \"bank\".")?;
     let name = bank.get("name").and_then(Value::as_str).filter(|n| !n.trim().is_empty()).unwrap_or(fallback_name).to_string();
     let raw = bank.get("questions").and_then(Value::as_array).ok_or("The bank has no \"questions\" list.")?;
@@ -707,6 +736,7 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         // A multipart whose parts carry the whole task needs no shared stem, with or without a
         // shared figure (holdout v4: "1) [graph] (a) ... (d) ..."): it is not figure-only.
         let parts_carry = text(item, "type") == "multipart" && parts_carry_task(item);
+        let mut choices_pending = false;
         let mut built = if text(item, "stem").is_empty() && !parts_carry && matches!(&cropped, Some(Ok(_))) {
             let mut filled = item.clone();
             let stem = match &applied {
@@ -732,6 +762,29 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
         } else {
             question(item)
         };
+        // The last question on a page may print its stem and figure with its choices on the next page:
+        // keep it as an open question flagged for review, so the next page's choices can join it.
+        if built.as_ref().is_err_and(|e| e.contains("at least two choices"))
+            && i + 1 == raw.len()
+            && text(item, "type") == "multiple-choice"
+            && !text(item, "stem").is_empty()
+        {
+            let mut open = item.clone();
+            open["type"] = Value::String("short-answer".into());
+            if let Some(o) = open.as_object_mut() { o.remove("choices"); }
+            built = question(&open);
+            choices_pending = built.is_ok();
+        }
+        // Choices continuing a question begun on the previous page carry no stem of their own.
+        if built.as_ref().is_err_and(|e| e.contains("no stem"))
+            && continued_label(info.label.as_deref())
+            && text(item, "type") == "multiple-choice"
+        {
+            let mut filled = item.clone();
+            filled["stem"] = Value::String(UNRESOLVED_TASK.to_string());
+            built = question(&filled);
+            if built.is_ok() { unresolved = true; }
+        }
         // Promotion cannot conceal an earlier invalid part and shift the raw owner index.
         // Keep a malformed multipart as an explicit dropped raw item instead of a truncated bank item.
         if selected.is_some_and(|s| s.source.part_index.is_some())
@@ -761,6 +814,12 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                     q.topics.push("needs review: source figure ownership".into());
                 }
                 // A continued problem split per figure keeps "continued" as its parent label ("continuede").
+                if choices_pending {
+                    let reason = "its choices are not on this page; kept with its stem so the next page's choices can join it".to_string();
+                    warnings.push(format!("Question {label}: {reason}."));
+                    info.reason = Some(reason);
+                    q.topics.push(CHOICES_PENDING_TOPIC.into());
+                }
                 let continued = continued_label(info.label.as_deref())
                     || continued_label(raw[i].pointer("/splitFrom/label").and_then(Value::as_str));
                 if continued {
@@ -790,6 +849,8 @@ pub fn import_text_in(reply: &str, page_png: Option<&[u8]>, page_no: usize, fall
                     "saved_figure_ownership_unresolved"
                 } else if continued {
                     "saved_continued"
+                } else if choices_pending {
+                    "saved_choices_pending"
                 } else if !bare.is_empty() {
                     "saved_part_picture_missing"
                 } else if !box_review.is_empty() && q.image.is_some() {
@@ -1041,7 +1102,48 @@ fn question(item: &Value) -> Result<Question, String> {
     if q.explanation.is_none() && (unkeyed(item) || item.get("parts").and_then(Value::as_array).is_some_and(|ps| ps.iter().any(unkeyed))) {
         q.explanation = Some(crate::model::KEYLESS_SENTINEL.to_string());
     }
+    escape_currency_in(&mut q);
     Ok(q)
+}
+
+/// Escape currency dollar signs a reply left bare. A `$...$` span that opens with an amount
+/// followed by a plain word ("$80 plus $3 per mile") is prose between two prices, not math: both
+/// of its dollar signs become `\$` (holdout v16, FLVS #14). Real math such as `$3x + 2$` or
+/// `$5\text{ cm}$` is unchanged, and so is an already escaped `\$`.
+fn escape_currency(s: &str) -> String {
+    let bytes: Vec<char> = s.chars().collect();
+    let open: Vec<usize> = (0..bytes.len()).filter(|&i| bytes[i] == '$' && (i == 0 || bytes[i - 1] != '\\')).collect();
+    let mut escape = Vec::new();
+    let mut k = 0;
+    while k + 1 < open.len() {
+        let (a, b) = (open[k], open[k + 1]);
+        let inner: String = bytes[a + 1..b].iter().collect();
+        let prose = {
+            let t = inner.trim_end();
+            let mut chars = t.chars().peekable();
+            let mut amount = false;
+            while chars.peek().is_some_and(|c| c.is_ascii_digit() || *c == ',' || *c == '.') { amount = true; chars.next(); }
+            let rest: String = chars.collect();
+            amount && rest.starts_with(' ') && rest.trim_start().chars().take(2).filter(|c| c.is_ascii_alphabetic()).count() == 2
+                && !rest.trim_start().starts_with('\\')
+        };
+        if prose { escape.extend([a, b]); k += 2; } else { k += 2; }
+    }
+    if escape.is_empty() { return s.to_string(); }
+    bytes.iter().enumerate().map(|(i, c)| if escape.contains(&i) { "\\$".to_string() } else { c.to_string() }).collect()
+}
+
+fn escape_currency_in(q: &mut Question) {
+    q.stem = escape_currency(&q.stem);
+    let fix = |answers: &mut Vec<Answer>| for a in answers { a.text = escape_currency(&a.text); };
+    match &mut q.kind {
+        Kind::Mc { answers } => fix(answers),
+        Kind::Multipart { parts } => for p in parts {
+            p.stem = escape_currency(&p.stem);
+            if let crate::model::PartKind::Mc { answers } = &mut p.kind { fix(answers); }
+        },
+        _ => {}
+    }
 }
 
 /// A problem printed as "1) (a) ... (b) ..." has no shared stem: its parts carry the whole task.
@@ -1404,6 +1506,7 @@ pub fn figure_box_issues(reply: &str, page_png: Option<&[u8]>, page_no: usize) -
 
 fn figure_box_issues_in(v: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Vec<FigureBoxIssue> {
     let Some(raw) = v.pointer("/bank/questions").and_then(Value::as_array) else { return Vec::new() };
+    let _boxes = PageBoxes::set(v, page_no);
     let mut issues = Vec::new();
     let mut boxes = Vec::new();
     for (i, item) in raw.iter().enumerate() {
@@ -1444,6 +1547,7 @@ fn figure_box_issues_in(v: &Value, page: Option<&image::DynamicImage>, page_no: 
 pub fn source_figure_previews(reply: &str, page_png: &[u8], page_no: usize) -> Vec<(usize, String, Vec<u8>)> {
     let Some(v) = json_object(reply) else { return Vec::new() };
     let Ok(page) = image::load_from_memory(page_png) else { return Vec::new() };
+    let _boxes = PageBoxes::set(&v, page_no);
     v.pointer("/bank/questions").and_then(Value::as_array).into_iter().flatten().enumerate().filter_map(|(i,item)| {
         let selected = source_figure(item).ok()??;
         let png = crop(selected.figure, Some(&page), page_no).ok()?;
@@ -1516,6 +1620,59 @@ fn figure_bounds(fig: &Value, page_no: usize) -> Result<[f64; 4], String> {
     Ok(box_fractions(&b).map(|n| n.clamp(0.0, 1.0)))
 }
 
+thread_local! {
+    /// Every figure box on the page being cropped (normalized x0, y0, x1, y1), so one crop's
+    /// padding stops at a neighbouring figure's box.
+    static PAGE_BOXES: std::cell::RefCell<Vec<[f64; 4]>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Holds this page's figure boxes for the crops made while it lives; on drop the boxes set before
+/// it come back (the box-issue check runs inside an import).
+struct PageBoxes(Vec<[f64; 4]>);
+impl PageBoxes {
+    fn set(v: &Value, page_no: usize) -> PageBoxes {
+        let mut boxes: Vec<[f64; 4]> = Vec::new();
+        let mut add = |f: &Value| if let Ok(b) = figure_bounds(f, page_no) && !boxes.iter().any(|o| same_box(o, &b)) { boxes.push(b); };
+        for q in v.pointer("/bank/questions").and_then(Value::as_array).into_iter().flatten() {
+            let figure = |x: &Value| x.get("figure").filter(|f| f.get("box").is_some()).cloned();
+            if let Some(f) = figure(q) { add(&f); }
+            for list in ["parts", "choices"] {
+                for p in q.get(list).and_then(Value::as_array).into_iter().flatten() {
+                    if let Some(f) = figure(p) { add(&f); }
+                    for c in p.get("choices").and_then(Value::as_array).into_iter().flatten() { if let Some(f) = figure(c) { add(&f); } }
+                }
+            }
+        }
+        PageBoxes(PAGE_BOXES.with(|b| std::mem::replace(&mut *b.borrow_mut(), boxes)))
+    }
+}
+impl Drop for PageBoxes {
+    fn drop(&mut self) { PAGE_BOXES.with(|b| *b.borrow_mut() = std::mem::take(&mut self.0)); }
+}
+
+fn same_box(a: &[f64; 4], b: &[f64; 4]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.002)
+}
+
+/// Cut a grown crop back at any distinct figure box beside its own box, never below its own box
+/// (holdout v18, Washoe: three graphs boxed edge to edge; each padded crop took a strip of the next,
+/// and the scope review then held all of them as crops).
+fn stop_at_neighbours(grown: [u32; 4], own: [f64; 4], w: f64, h: f64) -> [u32; 4] {
+    let [mut x0, mut y0, mut x1, mut y1] = grown.map(|v| v as f64);
+    let (l, t, r, b) = (own[0] * w, own[1] * h, own[2] * w, own[3] * h);
+    PAGE_BOXES.with(|boxes| for o in boxes.borrow().iter().filter(|o| !same_box(o, &own)) {
+        let (ol, ot, or, ob) = (o[0] * w, o[1] * h, o[2] * w, o[3] * h);
+        let across = ol < r && or > l;
+        let beside = ot < b && ob > t;
+        let tol = 2.0;
+        if across && ot >= b - tol { y1 = y1.min(b.max(ot)); }
+        if across && ob <= t + tol { y0 = y0.max(t.min(ob)); }
+        if beside && ol >= r - tol { x1 = x1.min(r.max(ol)); }
+        if beside && or <= l + tol { x0 = x0.max(l.min(or)); }
+    });
+    [x0 as u32, y0 as u32, x1 as u32, y1 as u32]
+}
+
 fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Result<Vec<u8>, String> {
     let piece = crop_piece(fig, page, page_no)?;
     let mut out = Vec::new();
@@ -1538,9 +1695,10 @@ fn crop_piece(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -
         (0, 0, 0, 0)
     } else {
         let gray = page.to_luma8();
-        let [x0, y0, x1, y1] = connected_crop_bounds(&gray,
+        let grown = connected_crop_bounds(&gray,
             [l as u32, t as u32, r as u32, bt as u32],
             [(pad * w) as u32, (pad * h) as u32]);
+        let [x0, y0, x1, y1] = stop_at_neighbours(grown, [bx0.clamp(0.0, 1.0), by0.clamp(0.0, 1.0), bx1.clamp(0.0, 1.0), by1.clamp(0.0, 1.0)], w, h);
         (x0, y0, x1 - x0, y1 - y0)
     };
     if pw < 24 || ph < 24 {
@@ -1729,6 +1887,73 @@ mod tests {
         assert_eq!(json_object(&reply), Some(good.clone()));
         // One package with chatter around it is read as before.
         assert_eq!(json_object(&format!("Here you go: {good} Done.")), Some(good));
+    }
+
+    #[test]
+    fn a_question_whose_choices_are_on_the_next_page_is_kept_and_the_choices_page_is_not_dropped() {
+        // Holdout v15, MCAP #12: the stem ends page 1; the four choices open page 2 with no stem.
+        let ending = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q11","label":"11","type":"short-answer","stem":"Eleven."},
+            {"id":"q12","label":"12","type":"multiple-choice","stem":"Which graph shows the best model?","choices":[]}]}}).to_string();
+        let got = import_text(&ending,None,1,"w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        assert_eq!((got.items[1].status.as_str(), got.items[1].number), ("saved_choices_pending", Some(12)));
+        assert!(got.doc.questions[1].topics.iter().any(|t| t == CHOICES_PENDING_TOPIC));
+        assert!(matches!(got.doc.questions[1].kind, Kind::Short { .. }));
+        // Not the last item: a choice-less multiple choice is still refused, never guessed open.
+        let middle = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q12","label":"12","type":"multiple-choice","stem":"Which graph?","choices":[]},
+            {"id":"q13","label":"13","type":"short-answer","stem":"Thirteen."}]}}).to_string();
+        assert_eq!(import_text(&middle,None,1,"w").unwrap().items[0].status, "dropped");
+        let choices = serde_json::json!({"format":FORMAT,"bank":{"name":"G8","questions":[
+            {"id":"q0","label":"continued","type":"multiple-choice","stem":"","choices":[{"text":"A","correct":false},{"text":"B","correct":false}]},
+            {"id":"q13","label":"13","type":"short-answer","stem":"Thirteen."}]}}).to_string();
+        let got = import_text(&choices,None,2,"w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        assert_eq!(got.items[0].status, "saved_continued");
+        assert!(matches!(&got.doc.questions[0].kind, Kind::Mc { answers } if answers.len() == 2));
+        assert!(got.doc.questions[0].topics.iter().any(|t| t == CONTINUED_TOPIC));
+    }
+
+    #[test]
+    fn a_crop_stops_at_the_neighbouring_figure_box_below_it() {
+        // Holdout v18, Washoe: two graphs boxed edge to edge, the lower graph's ink touching the shared edge.
+        let mut img = image::RgbImage::from_pixel(400, 400, image::Rgb([255, 255, 255]));
+        for y in 40..360 { img.put_pixel(200, y, image::Rgb([0, 0, 0])); }
+        let page = image::DynamicImage::ImageRgb8(img);
+        let upper = serde_json::json!({"box":[100, 100, 500, 900]});
+        let lower = serde_json::json!({"box":[500, 100, 900, 900]});
+        let reply = serde_json::json!({"bank":{"questions":[{"figure":upper},{"figure":lower}]}});
+        let alone = crop_piece(&upper, Some(&page), 1).unwrap();
+        assert!(alone.height() > 170, "without neighbours the crop follows the stroke down ({})", alone.height());
+        let _boxes = PageBoxes::set(&reply, 1);
+        let fenced = crop_piece(&upper, Some(&page), 1).unwrap();
+        assert!(fenced.height() <= 165, "the crop stops at the lower box ({})", fenced.height());
+        {
+            let _inner = PageBoxes::set(&serde_json::json!({}), 1);
+        }
+        assert_eq!(crop_piece(&upper, Some(&page), 1).unwrap().height(), fenced.height(), "an inner check restores the boxes");
+    }
+
+    #[test]
+    fn part_labels_answer_to_their_printed_item() {
+        // Holdout v17, TERRA sets: six parts saved as "Part 1i" ... "Part 1vi".
+        for (label, n) in [("Part 1i", Some(1)), ("Part 1vi", Some(1)), ("Part 2", Some(2)), ("Part 3(b)", Some(3)), ("part 12a", Some(12))] {
+            assert_eq!(label_number(label), n, "{label}");
+        }
+        assert_eq!(label_number("2a"), None, "only a Part label drops its suffix");
+        assert_eq!(label_number("Part A"), None);
+        assert_eq!(label_number("Question 7"), Some(7));
+    }
+
+    #[test]
+    fn bare_currency_dollars_are_escaped_and_math_is_left_alone() {
+        // Holdout v16, FLVS #14.
+        assert_eq!(escape_currency("a fee of $80 plus $3 per mile"), "a fee of \\$80 plus \\$3 per mile");
+        assert_eq!(escape_currency("costs $12.50 each and $4 shipping"), "costs \\$12.50 each and \\$4 shipping");
+        for math in ["Solve $3x + 2 = 5$ and $x^2$.", "$5\\text{ cm}$", "pay \\$80 now", "$2 \\times 3$", "$40$ dollars", "only $5"] {
+            assert_eq!(escape_currency(math), math, "{math}");
+        }
     }
 
     #[test]
@@ -2415,6 +2640,32 @@ mod tests {
         assert!(got.warnings.iter().any(|w| w.contains("split from question 2")));
         // import_text splits on its own too, so every path agrees.
         assert_eq!(import_text(&reply, Some(&page()), 1, "w").unwrap().doc.questions.len(), 2);
+    }
+
+    #[test]
+    fn figure_only_parts_split_and_take_the_printed_section_task() {
+        store();
+        let mut raw = json_object(&part_figures_reply(true)).unwrap();
+        let question = &mut raw["bank"]["questions"][0];
+        question["stem"] = Value::String(String::new());
+        for (index, letter) in ["a", "c"].into_iter().enumerate() {
+            question["parts"][index]["stem"] = Value::String(String::new());
+            question["parts"][index]["label"] = Value::String(letter.into());
+        }
+        let task = "Identify the marked side.";
+        raw["exams"][0]["sections"][0]["instructions"] = Value::String(task.into());
+        let reply = raw.to_string();
+        let split = split_part_figures(&reply);
+        assert_eq!(split_part_figures(&split), split);
+        let got = import_text(&reply, Some(&page()), 1, "w").unwrap();
+        assert_eq!(got.doc.questions.len(), 2, "{:?}", got.warnings);
+        for ((question, item), label) in got.doc.questions.iter().zip(&got.items).zip(["2a", "2c"]) {
+            assert_eq!(item.label.as_deref(), Some(label));
+            assert_eq!(item.number, Some(2));
+            assert_eq!(item.status, "saved_figure_only");
+            assert_eq!(question.stem, task);
+            assert!(question.image.is_some());
+        }
     }
 
     #[test]

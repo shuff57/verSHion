@@ -1,0 +1,35 @@
+{
+ "round": 5,
+ "figure": "coordinate-grid",
+ "capability": "cap-01",
+ "hypothesis": "Limit questions on the coordinate grid's own rows (9a46d7c): ten lim_* controls off by default, the limits figure's model reused; evidence for all 10 entries; existing grid drawings, saves and links unchanged; expected 0 -> 100 on an accepting independent check",
+ "started_at": "2026-11-24T10:33:55",
+ "git": "9a46d7c",
+ "before": {
+  "figure": 0.0,
+  "pooled": 78.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-24T19:30:18",
+ "after": {
+  "figure": 100.0,
+  "pooled": 81.2
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"equations\": \"y = x + 2, x < 1; y = 4 - 2x, x >= 1\", \"xmin\": -5.0, \"xmax\": 5.0, \"ymin\": -3.0, \"ymax\": 6.0, \"lim_ask_at\": \"1\"}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/newfig-calculus-finish-c2887751d3897d96/.figures-parity/new-figures-renders/coordinate-grid/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/newfig-calculus-finish-c2887751d3897d96/.figures-parity/new-figures-renders/coordinate-grid/c3ff11e4645e3183.png"
+   }
+  ]
+ },
+ "checker": "accepted on the ninth independent check (1808df4): pass: every removable hole the limit questions name is now drawn as an open circle, the roomy example with equation labels at Large now labels x = −2 on the graph, all 10 entries pass, and every existing drawing is byte-identical",
+ "result": "miss",
+ "evidence": "limits_grid_tests 20 passed; full figures suite earlier 3,720+ passed (one Riemann render-time limit under load, passes alone); grid_b7 frozen saves and links pass; census unchanged; checker sweep 8,046 existing drawings byte-identical to a4bc452",
+ "next": "derivative-graphs and slope-fields: checks 23 and 18 running"
+}

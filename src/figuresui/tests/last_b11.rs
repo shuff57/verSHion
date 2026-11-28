@@ -53,7 +53,7 @@ fn pick_classic(ctx: &egui::Context, ws: &mut Workspace, setup: &str) {
     let dy = item.center().y - first.center().y;
     if dy > 0.0 {
         tall_frame(ctx, ws, vec![egui::Event::PointerMoved(first.center())]);
-        tall_frame(ctx, ws, vec![egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -dy), phase: egui::TouchPhase::Move, modifiers: egui::Modifiers::NONE }]);
+        tall_frame(ctx, ws, vec![egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, source: egui::MouseWheelSource::Wheel, delta: egui::vec2(0.0, -dy), phase: egui::TouchPhase::Move, modifiers: egui::Modifiers::NONE }]);
         for _ in 0..12 {
             tall_frame(ctx, ws, vec![]);
         }

@@ -4,81 +4,53 @@
  "slug": "spring",
  "capabilities": [
   {
-   "id": "cap-01a",
-   "text": "Hang the spring from a ceiling",
-   "class": "core",
-   "evidence": "changes:orientation=Horizontal",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-01b",
-   "text": "Lay the spring horizontal from a wall, with the object on a floor",
+   "id": "cap-01",
+   "text": "Hang the spring from a ceiling, or lay it horizontal from a wall with the object on a floor",
    "class": "core",
    "evidence": "changes:orientation=Horizontal",
    "note": ""
   },
   {
-   "id": "cap-02a",
-   "text": "Draw one spring on its own",
+   "id": "cap-02",
+   "text": "Show one spring, before and after, or three positions for simple harmonic motion",
    "class": "core",
-   "evidence": "changes:picture=One spring",
-   "note": ""
-  },
-  {
-   "id": "cap-02b",
-   "text": "Draw the spring before and after it is loaded",
-   "class": "core",
-   "evidence": "changes:picture=One spring",
-   "note": "The opening state; the token shows the switch that reaches it is live."
-  },
-  {
-   "id": "cap-02c",
-   "text": "Draw three positions for simple harmonic motion",
-   "class": "core",
-   "evidence": "changes:picture=Three positions",
+   "evidence": "changes:picture=One spring + changes:picture=Three positions",
    "note": ""
   },
   {
    "id": "cap-03a",
-   "text": "Put two or three springs in series",
+   "text": "Use one spring, or two or three in series or in parallel",
    "class": "core",
-   "evidence": "changes:arrangement=2 in series + changes:arrangement=3 in series",
+   "evidence": "changes:arrangement=2 in series + changes:arrangement=3 in parallel",
    "note": ""
   },
   {
    "id": "cap-03b",
-   "text": "Put two or three springs in parallel",
-   "class": "core",
-   "evidence": "changes:arrangement=2 in parallel + changes:arrangement=3 in parallel",
-   "note": ""
-  },
-  {
-   "id": "cap-03c",
-   "text": "Number the springs k₁, k₂, k₃ instead of labeling each k",
+   "text": "Label every spring k, or number them k₁, k₂, k₃",
    "class": "control",
    "evidence": "",
-   "note": "Ours writes the one spring label on every spring; no numbering."
+   "note": "one spring label is written on every spring; no numbering"
   },
   {
    "id": "cap-04a",
-   "text": "Set the extension, up to the natural length again",
+   "text": "Stretch the spring, up to its natural length again",
    "class": "core",
-   "evidence": "changes:extension=80",
+   "evidence": "changes:extension=100",
    "note": ""
   },
   {
    "id": "cap-04b",
-   "text": "Squash a spring on a floor by up to half its natural length",
+   "text": "Squash the spring by up to half its length, on a floor",
    "class": "core",
-   "evidence": "changes:{\"orientation\":\"Horizontal\",\"extension\":-30}",
-   "note": ""
+   "evidence": "changes:{\"orientation\":\"Horizontal\",\"extension\":-50.0}",
+   "note": "passes on orientation alone; checked by hand that -50% squashes the horizontal spring (a hanging spring is not drawn squashed)"
   },
   {
    "id": "cap-04c",
-   "text": "Set the amplitude A in the three-position picture",
-   "class": "core",
-   "evidence": "changes:{\"picture\":\"Three positions\",\"amplitude\":60}",
-   "note": "Token passes on the picture alone; checked by hand that amplitude changes the three-position render."
+   "text": "In three positions, set the amplitude A",
+   "class": "control",
+   "evidence": "changes:{\"picture\":\"Three positions\",\"amplitude\":20.0}",
+   "note": "passes on picture alone; checked by hand that the amplitude changes the three-position render"
   },
   {
    "id": "cap-05",
@@ -96,9 +68,9 @@
   },
   {
    "id": "cap-06b",
-   "text": "Give the object its own label",
-   "class": "control",
-   "evidence": "changes:object_label=2 kg",
+   "text": "Label the object with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:object_label=2 kg + changes:object_label=- + changes:object_label=none",
    "note": ""
   },
   {
@@ -106,7 +78,7 @@
    "text": "Mark the extension as a dimension line",
    "class": "control",
    "evidence": "changes:show_extension=false",
-   "note": "On at the opening state."
+   "note": "on at the opening"
   },
   {
    "id": "cap-07b",
@@ -119,68 +91,54 @@
    "id": "cap-07c",
    "text": "Draw a dashed equilibrium line",
    "class": "control",
-   "evidence": "changes:{\"picture\":\"Three positions\",\"show_equilibrium\":false}",
-   "note": "Ours draws the equilibrium guide only in Three positions. Token passes on the picture alone; checked by hand that turning the guide off changes the three-position render."
+   "evidence": "",
+   "note": "show_equilibrium works only in three positions; in the static pictures the dashed line marks the natural length and follows the extension mark"
   },
   {
    "id": "cap-07d",
-   "text": "Draw an applied force pulling or pushing on the object",
+   "text": "Draw an applied force pulling or pushing",
    "class": "control",
-   "evidence": "changes:show_applied=true + changes:{\"show_applied\":true,\"orientation\":\"Horizontal\",\"extension\":-30}",
-   "note": "Checked by hand: a compressed spring gets a pushing arrow."
+   "evidence": "changes:show_applied=true + changes:{\"orientation\":\"Horizontal\",\"extension\":-30.0,\"show_applied\":true}",
+   "note": "pulls on the stretched spring, pushes on the squashed one; checked by hand that the push renders differently from the horizontal pull"
   },
   {
    "id": "cap-08a",
-   "text": "In three positions, draw the velocity at equilibrium",
+   "text": "In three positions, draw the velocity at equilibrium and the acceleration at each end",
    "class": "control",
-   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Velocity\"}",
-   "note": "Token passes on the picture alone; checked by hand that Velocity only differs from Both."
+   "evidence": "changes:picture=Three positions + changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Velocity\"}",
+   "note": "both arrows are on at the opening setting; checked by hand that Velocity alone changes the three-position render"
   },
   {
    "id": "cap-08b",
-   "text": "In three positions, draw the acceleration at each end",
-   "class": "control",
-   "evidence": "changes:{\"picture\":\"Three positions\",\"motion_arrows\":\"Acceleration\"}",
-   "note": "Token passes on the picture alone; the default Both draws it."
-  },
-  {
-   "id": "cap-08c",
    "text": "In three positions, choose which way the object is moving",
    "class": "control",
    "evidence": "changes:{\"picture\":\"Three positions\",\"motion_direction\":\"Toward support\"}",
-   "note": "Token passes on the picture alone; checked by hand that the direction changes the three-position render."
+   "note": "passes on picture alone; checked by hand that the direction changes the three-position render"
   },
   {
    "id": "cap-09a",
-   "text": "Write your own text in any label",
-   "class": "control",
-   "evidence": "changes:spring_label=k₀ + changes:extension_label=Δx",
+   "text": "Label the spring with your own text, a blank line, or nothing",
+   "class": "version",
+   "evidence": "changes:spring_label=k₁ + changes:spring_label=- + changes:spring_label=none",
    "note": ""
   },
   {
    "id": "cap-09b",
-   "text": "Put a blank line in place of a label for students",
+   "text": "Label the extension with your own text, a blank line, or nothing",
    "class": "version",
-   "evidence": "changes:object_label=- + changes:spring_label=-",
-   "note": "A dash in a label field draws a blank line."
+   "evidence": "changes:extension_label=Δx + changes:extension_label=- + changes:extension_label=none",
+   "note": ""
   },
   {
    "id": "cap-09c",
-   "text": "Leave a label off",
+   "text": "Write a chart title",
    "class": "control",
-   "evidence": "changes:spring_label=none + changes:extension_label=none",
+   "evidence": "changes:title=Hooke's law",
    "note": ""
   },
   {
    "id": "cap-09d",
-   "text": "Write a chart title",
-   "class": "control",
-   "evidence": "changes:title=Hooke’s law",
-   "note": ""
-  },
-  {
-   "id": "cap-09e",
-   "text": "Color the figure for slides",
+   "text": "Draw in color for slides, or black and white",
    "class": "control",
    "evidence": "changes:style=Colour",
    "note": ""

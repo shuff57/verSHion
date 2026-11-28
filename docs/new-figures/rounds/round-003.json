@@ -1,0 +1,35 @@
+{
+ "round": 3,
+ "figure": "derivative-graphs",
+ "capability": "cap-01",
+ "hypothesis": "New figure derivative-graphs, already in main (ae72aac), scored: map ours set, evidence for all 35 entries; check 14 rejected a4bc452 (sin^(5/3) residue inflection, tracer at (x^3)^(1/3)), fixed in 8af8342; expected 0 -> 100 on an accepting independent check",
+ "started_at": "2026-11-24T10:33:55",
+ "git": "9a46d7c",
+ "before": {
+  "figure": 0.0,
+  "pooled": 78.3
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-24T22:53:40",
+ "after": {
+  "figure": 100.0,
+  "pooled": 91.1
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"f\": \"x^4 - 4x^2\", \"ymin\": -5.0, \"ymax\": 5.0, \"ymin1\": -10.0, \"ymax1\": 10.0, \"ystep1\": 2.0}",
+    "opening": "/home/shuff57/.t3/worktrees/verSHion/newfig-calculus-finish-c2887751d3897d96/.figures-parity/new-figures-renders/derivative-graphs/opening.png",
+    "override": "/home/shuff57/.t3/worktrees/verSHion/newfig-calculus-finish-c2887751d3897d96/.figures-parity/new-figures-renders/derivative-graphs/d6d0a57be521124d.png"
+   }
+  ]
+ },
+ "checker": "accepted on the twenty-fifth independent check (36aa2bc): pass: every reading is right or honestly undecided across r24's blocking cases, new cases and the earlier corpora (0 false by mpmath); every tracer dot and tangent sits on the true curve (0 of 2,596 dots off); all 35 entries pass, with renders byte-identical to r23's",
+ "result": "miss",
+ "evidence": "derivative_graphs suite 103 passed; full figures suite 3,615 passed (one Riemann render-time limit under load, passes alone); census unchanged; r7 corpus 573 renders byte-identical; checker's n23/n24/dr23 sweeps 0 false",
+ "next": "slope-fields: check 19 of 0460282"
+}

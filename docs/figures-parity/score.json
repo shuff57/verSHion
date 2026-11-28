@@ -1,13 +1,16 @@
 {
- "generated_at": "2026-11-28T01:20:33+00:00",
- "probe_checked_at": "2026-11-27T17:20:33",
+ "generated_at": "2026-11-28T02:01:48+00:00",
+ "probe_checked_at": "2026-11-27T18:01:48",
  "comparable": true,
  "drift": [],
- "pooled": 92.6,
- "mean": 92.5,
- "figures_scored": 92,
- "figures_built": 93,
- "figures_missing": [],
+ "pooled": 92.8,
+ "mean": 91.9,
+ "figures_scored": 91,
+ "figures_built": 92,
+ "figures_missing": [
+  "math/composite-3d-shape",
+  "physics/electric-and-magnetic-fields"
+ ],
  "figures": {
   "angles": {
    "score": 100.0,
@@ -31,23 +34,37 @@
    "gaps": []
   },
   "bond-energy-curve": {
-   "score": 92.9,
-   "got": 79.0,
-   "total": 85.0,
+   "score": 82.9,
+   "got": 58.0,
+   "total": 70.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-07h",
+     "id": "cap-07f",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the gridlines light, standard or bold",
+     "text": "Draw the gridlines light, standard or bold, or leave them off",
      "why": "no evidence"
     },
     {
-     "id": "cap-07i",
+     "id": "cap-07g",
      "class": "control",
      "weight": 3.0,
      "text": "Add minor gridlines, 2, 4 or 5 per block",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Write a label at the far end of each axis, as your own text or none",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-09",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish each end of each axis plainly or with an arrowhead",
      "why": "no evidence"
     }
    ]
@@ -60,16 +77,16 @@
    "gaps": []
   },
   "chromatography": {
-   "score": 94.0,
-   "got": 47.0,
-   "total": 50.0,
+   "score": 92.7,
+   "got": 38.0,
+   "total": 41.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-06b",
+     "id": "cap-06",
      "class": "control",
      "weight": 3.0,
-     "text": "Label the paper and the beaker",
+     "text": "Label the glass rod, paper, solvent front, pencil line, solvent and beaker",
      "why": "no evidence"
     }
    ]
@@ -89,9 +106,9 @@
    "gaps": []
   },
   "circular-motion": {
-   "score": 23.8,
-   "got": 24.0,
-   "total": 101.0,
+   "score": 17.4,
+   "got": 16.0,
+   "total": 92.0,
    "unclassified": 0,
    "gaps": [
     {
@@ -102,38 +119,31 @@
      "why": "no evidence"
     },
     {
+     "id": "cap-05a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Conical pendulum: the string's angle from the vertical, 15° to 60°",
+     "why": "no evidence"
+    },
+    {
      "id": "cap-02a",
      "class": "control",
      "weight": 3.0,
-     "text": "In the top view, put a string around the object",
+     "text": "From above: put a string, a turntable or a road around the object",
      "why": "no evidence"
     },
     {
      "id": "cap-02b",
      "class": "control",
      "weight": 3.0,
-     "text": "In the top view, put the object on a turntable",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "In the top view, put the object on a road",
+     "text": "From above: show the object at 1 to 8 positions",
      "why": "no evidence"
     },
     {
      "id": "cap-02d",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the object at 1 to 8 positions",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Go round clockwise or counterclockwise",
+     "text": "From above: going clockwise or counterclockwise",
      "why": "no evidence"
     },
     {
@@ -144,87 +154,87 @@
      "why": "no evidence"
     },
     {
+     "id": "cap-04a",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Vertical circle: a string, a loop, a hill or a dip",
+     "why": "no evidence"
+    },
+    {
      "id": "cap-04b",
      "class": "control",
      "weight": 3.0,
-     "text": "Run the vertical circle as a loop",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put the object over a hill",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put the object in a dip",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Put the object at the side of the vertical circle",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set the conical pendulum’s string angle from the vertical, 15° to 60°",
+     "text": "Vertical circle: the object at the top, the bottom, the side, or several of these",
      "why": "no evidence"
     },
     {
      "id": "cap-05b",
      "class": "control",
      "weight": 3.0,
-     "text": "Label the conical pendulum’s angle and string length",
+     "text": "Conical pendulum: label the angle and the string's length",
      "why": "no evidence"
     },
     {
      "id": "cap-05c",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the conical pendulum’s velocity into or out of the page",
+     "text": "Conical pendulum: the velocity into or out of the page",
      "why": "no evidence"
     },
     {
      "id": "cap-06a",
      "class": "control",
      "weight": 3.0,
-     "text": "Turn each vector on or off (velocity, centripetal acceleration, inward force, gravity, tension, normal force)",
+     "text": "Velocity arrow on or off, with its own label",
      "why": "no evidence"
     },
     {
-     "id": "cap-06g",
+     "id": "cap-06b",
      "class": "control",
      "weight": 3.0,
-     "text": "Write your own label on each vector, or leave it off",
+     "text": "Centripetal acceleration arrow on or off, with its own label",
      "why": "no evidence"
     },
     {
-     "id": "cap-06h",
-     "class": "version",
+     "id": "cap-06c",
+     "class": "control",
      "weight": 3.0,
-     "text": "Put a blank line in place of a vector’s label for students",
+     "text": "Inward force arrow on or off, with its own label",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Gravity arrow on or off, with its own label",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06e",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Tension arrow on or off, with its own label",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-06f",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Normal force arrow on or off, with its own label",
      "why": "no evidence"
     },
     {
      "id": "cap-07",
      "class": "control",
      "weight": 3.0,
-     "text": "Split the conical pendulum’s tension into horizontal and vertical components",
+     "text": "Conical pendulum: show the tension's horizontal and vertical components",
      "why": "no evidence"
     },
     {
      "id": "cap-08a",
      "class": "control",
      "weight": 3.0,
-     "text": "Mark a radius or a diameter",
+     "text": "Mark the radius or the diameter",
      "why": "no evidence"
     },
     {
@@ -252,14 +262,14 @@
      "id": "cap-09a",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the object as a ball or a block",
+     "text": "Draw a block instead of a ball",
      "why": "no evidence"
     },
     {
      "id": "cap-09b",
-     "class": "control",
+     "class": "version",
      "weight": 3.0,
-     "text": "Give the object its own label",
+     "text": "Label the object with your own text, a blank line, or nothing",
      "why": "no evidence"
     },
     {
@@ -272,58 +282,58 @@
    ]
   },
   "cladogram": {
-   "score": 38.8,
-   "got": 19.0,
-   "total": 49.0,
+   "score": 13.5,
+   "got": 5.0,
+   "total": 37.0,
    "unclassified": 0,
    "gaps": [
+    {
+     "id": "cap-02a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Mark a trait as a tick on the branch leading into each clade",
+     "why": "no evidence"
+    },
     {
      "id": "cap-02b",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw each trait as a tick on the branch leading into its clade",
+     "text": "Mark one trait on the root, shared by every taxon",
      "why": "no evidence"
     },
     {
-     "id": "cap-04a",
+     "id": "cap-03",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw diagonal branches with the taxa along the top",
+     "text": "Start from a ready-made tree: vertebrates, land plants, apes, or taxa A to F with numbered traits",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the branches diagonally with the taxa along the top, instead of rectangular with the taxa down the right",
      "why": "no evidence"
     },
     {
      "id": "cap-05a",
      "class": "version",
      "weight": 3.0,
-     "text": "Write the taxon names as blank lines",
+     "text": "Write the taxon names, or leave blank lines for them",
      "why": "no evidence"
     },
     {
      "id": "cap-05b",
      "class": "version",
      "weight": 3.0,
-     "text": "Leave any one taxon blank",
+     "text": "Leave any one taxon's name blank",
      "why": "no evidence"
     },
     {
-     "id": "cap-06a",
+     "id": "cap-06",
      "class": "version",
      "weight": 3.0,
-     "text": "Write the traits as numbered blank lines",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Show the traits as ticks alone, with no names",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Leave the traits off without deleting them",
+     "text": "Write the traits, leave numbered blank lines, draw ticks alone, or leave them off",
      "why": "no evidence"
     },
     {
@@ -455,83 +465,20 @@
     }
    ]
   },
-  "electric-field": {
-   "score": 17.8,
-   "got": 8.0,
-   "total": 45.0,
+  "electrochemical-cells": {
+   "score": 88.5,
+   "got": 23.0,
+   "total": 26.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-02a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a positive and a negative charge side by side",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw two positive or two negative charges side by side",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw two parallel plates, positive on top, with a uniform field between them",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a bar magnet, with field lines from north round to south",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a straight wire seen end-on, with circular field lines around it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
+     "id": "cap-06",
      "class": "control",
      "weight": 3.0,
-     "text": "Send the wire’s current out of the page (a dot) or into it (a cross)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw fewer, normal or more field lines",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Draw the field lines with or without direction arrows",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Leave the field lines off",
+     "text": "Type your own E°cell instead of the value from the table",
      "why": "no evidence"
     }
    ]
-  },
-  "electrochemical-cells": {
-   "score": 100.0,
-   "got": 32.0,
-   "total": 32.0,
-   "unclassified": 0,
-   "gaps": []
   },
   "enzyme-kinetics": {
    "score": 100.0,
@@ -541,86 +488,100 @@
    "gaps": []
   },
   "equilibrium-graphs": {
-   "score": 60.2,
-   "got": 50.0,
-   "total": 83.0,
+   "score": 45.3,
+   "got": 34.0,
+   "total": 75.0,
    "unclassified": 0,
    "gaps": [
+    {
+     "id": "cap-01a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Pick one of six real reversible reactions",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Make the forward reaction exothermic or endothermic",
+     "why": "no evidence"
+    },
     {
      "id": "cap-02c",
      "class": "control",
      "weight": 3.0,
-     "text": "Set the time equilibrium is first established",
+     "text": "Set the time at which equilibrium is first reached",
      "why": "no evidence"
     },
     {
-     "id": "cap-03b",
+     "id": "cap-03d",
      "class": "control",
      "weight": 3.0,
-     "text": "Add a third stress",
+     "text": "Apply up to three stresses on one graph",
      "why": "no evidence"
     },
     {
-     "id": "cap-04b",
+     "id": "cap-04",
      "class": "control",
      "weight": 3.0,
-     "text": "Write your own words for a stress",
+     "text": "Write the page's own words over each stress line, your own words, or nothing",
      "why": "no evidence"
     },
     {
-     "id": "cap-04c",
+     "id": "cap-05a",
      "class": "control",
      "weight": 3.0,
-     "text": "Leave a stress’s words off",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05b",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Hide the lines’ formulas",
+     "text": "Write each line's formula beside it, or hide the formulas",
      "why": "no evidence"
     },
     {
      "id": "cap-06a",
      "class": "control",
      "weight": 3.0,
-     "text": "Write a chart title",
+     "text": "Give the chart a title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
      "id": "cap-06b",
      "class": "control",
      "weight": 3.0,
-     "text": "Write the axis titles",
+     "text": "Give each axis title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
      "id": "cap-06c",
-     "class": "version",
+     "class": "control",
      "weight": 3.0,
-     "text": "Put a blank line in place of the chart or an axis title",
+     "text": "Type each axis's range and count-by, with a button to fit them to the graph",
      "why": "no evidence"
     },
     {
      "id": "cap-06d",
      "class": "control",
      "weight": 3.0,
-     "text": "Set the axis ranges, with a Fit button",
+     "text": "Number every line, every 2nd, 5th or 10th line, or no lines on each axis",
      "why": "no evidence"
     },
     {
      "id": "cap-06e",
      "class": "control",
      "weight": 3.0,
-     "text": "Set the axis numbering (every line, 2nd, 5th, 10th, or none)",
+     "text": "Add minor gridlines, 2, 4 or 5 per block",
      "why": "no evidence"
     },
     {
-     "id": "cap-06f",
+     "id": "cap-07",
      "class": "control",
      "weight": 3.0,
-     "text": "Add minor gridlines, 2, 4 or 5 per block",
+     "text": "Write a label at the far end of each axis, as your own text or none",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-08",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Finish each end of each axis plainly or with an arrowhead",
      "why": "no evidence"
     }
    ]
@@ -690,8 +651,8 @@
   },
   "lever": {
    "score": 100.0,
-   "got": 68.0,
-   "total": 68.0,
+   "got": 65.0,
+   "total": 65.0,
    "unclassified": 0,
    "gaps": []
   },
@@ -970,16 +931,16 @@
    "gaps": []
   },
   "pendulum": {
-   "score": 95.3,
-   "got": 61.0,
-   "total": 64.0,
+   "score": 93.3,
+   "got": 42.0,
+   "total": 45.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-04b",
+     "id": "cap-04",
      "class": "control",
      "weight": 3.0,
-     "text": "Edit each of the letters",
+     "text": "Letter the swing's three positions A, B and C, each letter editable",
      "why": "no evidence"
     }
    ]
@@ -992,44 +953,58 @@
    "gaps": []
   },
   "phase-diagram": {
-   "score": 38.5,
-   "got": 37.0,
-   "total": 96.0,
+   "score": 17.1,
+   "got": 12.0,
+   "total": 70.0,
    "unclassified": 0,
    "gaps": [
+    {
+     "id": "cap-01a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Pick a real substance: water, carbon dioxide, nitrogen, oxygen, argon, methane or ammonia",
+     "why": "no evidence"
+    },
     {
      "id": "cap-01b",
      "class": "core",
      "weight": 5.0,
-     "text": "Draw nitrogen, oxygen, argon, methane or ammonia",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Give your own substance’s normal melting and boiling points",
+     "text": "Draw your own substance from its triple point, critical point and normal melting and boiling points",
      "why": "no evidence"
     },
     {
      "id": "cap-02a",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw a not-to-scale sketch with the values written at the axes",
+     "text": "Draw it not to scale, with the key values written at the axes",
      "why": "no evidence"
     },
     {
      "id": "cap-03b",
      "class": "control",
      "weight": 3.0,
-     "text": "Give pressures in atm or kPa",
+     "text": "Write pressures in atm or kPa",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04a",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Name the regions, letter them, leave blank lines, or leave them bare",
      "why": "no evidence"
     },
     {
      "id": "cap-04b",
      "class": "version",
      "weight": 3.0,
-     "text": "Letter the regions, points and boundaries instead of naming them",
+     "text": "Name the triple and critical points, letter them, leave blank lines, or leave them bare",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-04c",
+     "class": "version",
+     "weight": 3.0,
+     "text": "Name the phase boundaries, letter them, leave blank lines, or leave them bare",
      "why": "no evidence"
     },
     {
@@ -1041,44 +1016,23 @@
     },
     {
      "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write the values where the guide lines meet the axes",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05c",
      "class": "version",
      "weight": 3.0,
-     "text": "Put blank lines where the guide lines meet the axes",
+     "text": "Write the values, blank lines or nothing where those lines meet the axes",
      "why": "no evidence"
     },
     {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Write nothing where the guide lines meet the axes",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06d",
+     "id": "cap-06b",
      "class": "version",
      "weight": 3.0,
-     "text": "Mark those points by letters",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-06e",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Mark those points with blank lines",
+     "text": "Mark the normal melting and boiling points (or the sublimation point) on it by temperature, name, letter or blank line",
      "why": "no evidence"
     },
     {
      "id": "cap-07a",
      "class": "control",
      "weight": 3.0,
-     "text": "Show or hide the supercritical fluid region",
+     "text": "Shade the supercritical fluid region",
      "why": "no evidence"
     },
     {
@@ -1092,42 +1046,42 @@
      "id": "cap-07c",
      "class": "control",
      "weight": 3.0,
-     "text": "Choose the curve’s color",
+     "text": "Choose the curve's color",
      "why": "no evidence"
     },
     {
      "id": "cap-07d",
      "class": "control",
      "weight": 3.0,
-     "text": "Write a chart title",
+     "text": "Give the chart a title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
      "id": "cap-07e",
      "class": "control",
      "weight": 3.0,
-     "text": "Write the axis titles",
+     "text": "Give each axis title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
      "id": "cap-07f",
-     "class": "version",
+     "class": "control",
      "weight": 3.0,
-     "text": "Put a blank line in place of the chart or an axis title",
+     "text": "Type the axis ranges on the to-scale grid",
      "why": "no evidence"
     },
     {
      "id": "cap-07g",
      "class": "control",
      "weight": 3.0,
-     "text": "Set the axis ranges",
+     "text": "Choose which lines on each axis are numbered",
      "why": "no evidence"
     },
     {
-     "id": "cap-07h",
+     "id": "cap-08",
      "class": "control",
      "weight": 3.0,
-     "text": "Set the axis numbering",
+     "text": "Finish the top of the pressure axis and the end of the temperature axis plainly or with an arrowhead",
      "why": "no evidence"
     }
    ]
@@ -1154,19 +1108,11 @@
    "gaps": []
   },
   "population-growth": {
-   "score": 97.7,
-   "got": 128.0,
+   "score": 100.0,
+   "got": 131.0,
    "total": 131.0,
    "unclassified": 0,
-   "gaps": [
-    {
-     "id": "cap-05e",
-     "class": "version",
-     "weight": 3.0,
-     "text": "The inflection point and phase labels as blank lines, or unlabeled",
-     "why": "no evidence"
-    }
-   ]
+   "gaps": []
   },
   "predator-prey": {
    "score": 100.0,
@@ -1317,9 +1263,9 @@
    "gaps": []
   },
   "reaction-rate-graph": {
-   "score": 39.6,
-   "got": 38.0,
-   "total": 96.0,
+   "score": 26.8,
+   "got": 19.0,
+   "total": 71.0,
    "unclassified": 0,
    "gaps": [
     {
@@ -1330,87 +1276,80 @@
      "why": "no evidence"
     },
     {
+     "id": "cap-02b",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Draw any one of [A], ln[A] or 1/[A] against time on its own",
+     "why": "no evidence"
+    },
+    {
      "id": "cap-03a",
      "class": "core",
      "weight": 5.0,
-     "text": "Draw the curve",
+     "text": "Draw the curve, 5 to 10 data points, or both",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-01c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Keep the first half-life the same when the order changes",
      "why": "no evidence"
     },
     {
      "id": "cap-03b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw 5 to 10 data points, alone or with the curve",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Scatter the data points by about 1, 2 or 5%, or not at all",
      "why": "no evidence"
     },
     {
      "id": "cap-03c",
      "class": "control",
      "weight": 3.0,
-     "text": "Scatter the data by about 1, 2 or 5%",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Make a new set of data",
+     "text": "Draw a fresh set of scattered data",
      "why": "no evidence"
     },
     {
      "id": "cap-04a",
      "class": "control",
      "weight": 3.0,
-     "text": "Print a data table of time and [A] under the graphs",
+     "text": "Put a data table under the graphs: time and [A], or with ln[A] and 1/[A] too",
      "why": "no evidence"
     },
     {
-     "id": "cap-04b",
+     "id": "cap-05a",
      "class": "control",
      "weight": 3.0,
-     "text": "Add ln[A] and 1/[A] to the data table",
+     "text": "Draw dashed guides at the first 1, 2 or 3 half-lives on the [A] graph",
      "why": "no evidence"
     },
     {
      "id": "cap-05b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Choose 1, 2 or 3 half-lives for the guide lines",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05d",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Label the guide lines as half-lives (t½, 2t½…)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-05e",
      "class": "version",
      "weight": 3.0,
-     "text": "Put blank lines on the guide lines",
+     "text": "Label the half-life guides with their times, as half-lives, with blank lines, or not at all",
      "why": "no evidence"
     },
     {
      "id": "cap-06a",
      "class": "control",
      "weight": 3.0,
-     "text": "Name the reactant or give its formula",
+     "text": "Name the reactant, by name or formula",
      "why": "no evidence"
     },
     {
      "id": "cap-06b",
      "class": "control",
      "weight": 3.0,
-     "text": "Give concentration in M, mol/L or mol dm⁻³",
+     "text": "Write concentrations in M, mol/L or mol dm⁻³",
      "why": "no evidence"
     },
     {
      "id": "cap-06c",
      "class": "control",
      "weight": 3.0,
-     "text": "Give time in seconds, minutes or hours",
+     "text": "Measure time in seconds, minutes or hours",
      "why": "no evidence"
     },
     {
@@ -1424,25 +1363,18 @@
      "id": "cap-07d",
      "class": "control",
      "weight": 3.0,
-     "text": "Write a chart title",
+     "text": "Give the chart a title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
      "id": "cap-07e",
      "class": "control",
      "weight": 3.0,
-     "text": "Write the axis titles",
+     "text": "Give each axis title as text, a blank line, or none",
      "why": "no evidence"
     },
     {
-     "id": "cap-07f",
-     "class": "version",
-     "weight": 3.0,
-     "text": "Put a blank line in place of the chart or an axis title",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-04c",
+     "id": "cap-04b",
      "class": "output",
      "weight": 1.0,
      "text": "Copy the data for a spreadsheet",
@@ -1465,16 +1397,23 @@
    "gaps": []
   },
   "roller-coaster": {
-   "score": 96.2,
-   "got": 77.0,
-   "total": 80.0,
+   "score": 88.4,
+   "got": 61.0,
+   "total": 69.0,
    "unclassified": 0,
    "gaps": [
+    {
+     "id": "cap-01a",
+     "class": "core",
+     "weight": 5.0,
+     "text": "Build the track from two to eight points, evenly spaced",
+     "why": "no evidence"
+    },
     {
      "id": "cap-07b",
      "class": "control",
      "weight": 3.0,
-     "text": "Label a rough stretch with its friction",
+     "text": "Write a friction label on a rough stretch",
      "why": "no evidence"
     }
    ]
@@ -1628,16 +1567,23 @@
    "gaps": []
   },
   "spring": {
-   "score": 96.9,
-   "got": 95.0,
-   "total": 98.0,
+   "score": 91.4,
+   "got": 64.0,
+   "total": 70.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-03c",
+     "id": "cap-03b",
      "class": "control",
      "weight": 3.0,
-     "text": "Number the springs k₁, k₂, k₃ instead of labeling each k",
+     "text": "Label every spring k, or number them k₁, k₂, k₃",
+     "why": "no evidence"
+    },
+    {
+     "id": "cap-07c",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw a dashed equilibrium line",
      "why": "no evidence"
     }
    ]
@@ -1678,16 +1624,16 @@
    "gaps": []
   },
   "torque": {
-   "score": 95.4,
-   "got": 104.0,
-   "total": 109.0,
+   "score": 96.8,
+   "got": 90.0,
+   "total": 93.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-07a",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Work out each load’s torque step by step (force × distance)",
+     "id": "cap-06d",
+     "class": "control",
+     "weight": 3.0,
+     "text": "Draw the forces holding the beam up",
      "why": "no evidence"
     }
    ]
@@ -1749,72 +1695,65 @@
    "gaps": []
   },
   "vsepr-shapes": {
-   "score": 44.6,
-   "got": 29.0,
-   "total": 65.0,
+   "score": 36.7,
+   "got": 18.0,
+   "total": 49.0,
    "unclassified": 0,
    "gaps": [
     {
-     "id": "cap-01b",
+     "id": "cap-01",
      "class": "core",
      "weight": 5.0,
-     "text": "Type any formula of main-group elements through period 5 with one central atom",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Draw a polyatomic ion, with its charge",
+     "text": "Type any formula with one central atom (main-group elements to period 5), molecule or polyatomic ion",
      "why": "no evidence"
     },
     {
      "id": "cap-02a",
      "class": "control",
      "weight": 3.0,
-     "text": "Choose wedge-and-dash or ball-and-stick",
+     "text": "Draw the molecule wedge-and-dash instead of ball-and-stick",
      "why": "no evidence"
     },
     {
      "id": "cap-04a",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the central atom’s lone pairs as lobes",
+     "text": "Draw the central atom's lone pairs as lobes, as dots, or hide them",
      "why": "no evidence"
     },
     {
-     "id": "cap-04d",
+     "id": "cap-04b",
      "class": "control",
      "weight": 3.0,
-     "text": "Draw the outer atoms’ lone pairs",
+     "text": "Show the lone pairs on the outer atoms",
      "why": "no evidence"
     },
     {
      "id": "cap-05a",
      "class": "control",
      "weight": 3.0,
-     "text": "Label the shape name",
+     "text": "Write the shape's name",
      "why": "no evidence"
     },
     {
      "id": "cap-05b",
      "class": "control",
      "weight": 3.0,
-     "text": "Label the electron geometry",
+     "text": "Write the electron geometry",
      "why": "no evidence"
     },
     {
      "id": "cap-05c",
      "class": "control",
      "weight": 3.0,
-     "text": "Label the AXE notation",
+     "text": "Write the AXE notation",
      "why": "no evidence"
     },
     {
      "id": "cap-05e",
      "class": "control",
      "weight": 3.0,
-     "text": "Write your own angle labels",
+     "text": "Write your own text on the angle labels",
      "why": "no evidence"
     },
     {
@@ -1828,7 +1767,7 @@
      "id": "cap-03b",
      "class": "interaction",
      "weight": 2.0,
-     "text": "Drag the figure to turn it",
+     "text": "Turn the model by dragging it",
      "why": "no evidence"
     }
    ]

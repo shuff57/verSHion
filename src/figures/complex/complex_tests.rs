@@ -176,7 +176,7 @@ fn limits() {
                 p.set_i(d.key, extreme as i64)
             }
         }
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let s = render(&p);
         assert!(t.elapsed().as_secs_f64() < 0.5);
         assert!(s.len() < 200000);
@@ -660,7 +660,7 @@ fn finite_controls_and_large_locus() {
     p.set_s("cr", "1000000");
     p.set_s("ci", "0");
     p.set_s("lr", "1000000");
-    let t = std::time::Instant::now();
+    let t = crate::testclock::Stopwatch::start();
     let s = render(&p);
     assert!(t.elapsed().as_secs_f64() < 0.5);
     assert!(s.len() < 200000);

@@ -33,6 +33,10 @@ mod data_entry;
 mod ui_test;
 #[cfg(test)]
 mod bond_energy_tests;
+#[cfg(test)]
+mod share_menu_tests;
+#[cfg(test)]
+mod menu_field_tests;
 mod pedigree_panel;
 
 const DEBOUNCE: Duration = Duration::from_millis(150);
@@ -966,6 +970,7 @@ impl Workspace {
     }
 
     /// The paste box that reopens a share link (browser and toolbar menu).
+    /// It sits in a menu that stays open for clicks inside it (see `keep_open_menu_button`).
     fn link_box(&mut self, ui: &mut Ui, width: f32) -> bool {
         let mut opened = false;
         ui.horizontal(|ui| {
@@ -1697,7 +1702,7 @@ impl Workspace {
             self.examples_open = true;
         }
         if !toolbar_has_history {
-            ui.menu_button("Share link", |ui| {
+            keep_open_menu_button(ui, "Share link", |ui| {
                 ui.set_min_width(300.0);
                 if ui.button("Copy link").on_hover_text("Copy a link that reopens this exact figure").clicked()
                     && let Some(l) = self.share_link()
@@ -1720,7 +1725,7 @@ impl Workspace {
     fn presets_menu(&mut self, ui: &mut Ui) {
         let Some(si) = self.sel else { return };
         let def = &reg()[si];
-        ui.menu_button("Presets", |ui| {
+        keep_open_menu_button(ui, "Presets", |ui| {
             ui.set_min_width(230.0);
             let mut file = load_presets();
             let mut changed = false;
@@ -2886,7 +2891,7 @@ impl Workspace {
                     // cue is that card's own foot (its sides and rounded bottom continue under the
                     // edge), so the card ends closed instead of open on the page background.
                     let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
-                    let more = out.state.offset.y + out.inner_rect.height() < out.content_size.y - 4.0;
+                    let more = out.state.offset().y + out.inner_rect.height() < out.content_size.y - 4.0;
                     if more {
                         let edge = out.inner_rect.bottom();
                         let cut = chem_shell::card_rects(ui.ctx()).into_iter().find(|c| c.top() < edge - 4.0 && c.bottom() > edge + 1.0);
@@ -3770,6 +3775,20 @@ fn card(ui: &mut Ui, ctx: &egui::Context, def: &FigureDef, idx: usize, budget: &
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     r.clicked()
+}
+
+/// A menu button whose menu closes only on a click outside it, or Escape (egui's default closes it on
+/// any click, so a click into a text field inside, such as the share-link paste box, shut the menu
+/// before it took any text). Items that should dismiss the menu call `ui.close()` themselves.
+fn keep_open_menu_button<'a, R>(ui: &mut Ui, label: impl egui::IntoAtoms<'a>, add_contents: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<Option<R>> {
+    use egui::containers::menu::{MenuButton, MenuConfig, is_in_menu};
+    // (inside a menu this is a submenu, which takes its close behavior from the menu it opens from)
+    if is_in_menu(ui) {
+        return ui.menu_button(label, add_contents);
+    }
+    let config = MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+    let (response, inner) = MenuButton::new(label).config(config).ui(ui, add_contents);
+    egui::InnerResponse::new(inner.map(|i| i.inner), response)
 }
 
 fn chip_handles(ui: &mut Ui, on: bool) -> bool {
@@ -6372,10 +6391,11 @@ mod tests {
         comp_frame(ctx, ws, vec![]);
     }
 
-    /// The `k`-th shading swatch (blue, red, green, yellow) of the canvas' area `area`: its colour
-    /// buttons are the ones with no text.
+    /// The `k`-th shading swatch (blue, red, green, yellow) of the canvas' area `area`: the colour
+    /// buttons, found by their accessible names (egui 0.37 names them by their hover text).
     fn comp_swatch(ctx: &egui::Context, ws: &mut Workspace, area: &str, k: usize) -> egui::Pos2 {
-        let sw: Vec<egui::Pos2> = comp_widgets(ctx, ws, area).into_iter().filter(|w| w.0 == egui::accesskit::Role::Button && w.1.is_empty()).map(|w| w.2).collect();
+        const COLOURS: [&str; 4] = ["Blue", "Red", "Green", "Yellow"];
+        let sw: Vec<egui::Pos2> = comp_widgets(ctx, ws, area).into_iter().filter(|w| w.0 == egui::accesskit::Role::Button && COLOURS.contains(&w.1.as_str())).map(|w| w.2).collect();
         assert_eq!(sw.len(), 4, "four shading swatches in {area}");
         sw[k]
     }

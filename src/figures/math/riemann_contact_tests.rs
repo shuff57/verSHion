@@ -71,7 +71,7 @@ fn riemann_wide_contacts_settle_or_refuse() {
     let mut bad = vec![];
     for (f, g, x0, x1, want) in &cases {
         let ctx = format!("{f} vs {g} on [{x0}, {x1}]");
-        let t0 = std::time::Instant::now();
+        let t0 = crate::testclock::Stopwatch::start();
         let got = model(&p(f, g, *x0, *x1));
         let el = t0.elapsed();
         if el.as_secs_f64() > 0.5 { bad.push(format!("{ctx}: {el:?}")); }

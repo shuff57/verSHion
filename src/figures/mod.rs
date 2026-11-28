@@ -903,6 +903,8 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         math::slope_field::ID => math::slope_field::relevant(key, p),
         // only the controls of what is drawn: the typed f or f′, the marks on the key, f″'s own lines and range
         "derivative-graphs" => math::derivative_graphs::relevant(key, p),
+        // the grid's limit controls: the details only once a question is asked
+        "coordinate-grid" if math::limits::grid::KEYS.contains(&key) => math::limits::grid::relevant(key, p),
         _ => cards::relevant(id, key, p),
     }
 }
@@ -1121,7 +1123,7 @@ pub fn random_reading(id: &str, p: &mut Params, seed: u64) -> bool {
 /// The reference's "Classic setups" dropdown (population growth, Punnett square, pedigree):
 /// named starting points like `Example`, applied over the plain defaults.
 pub fn classic_setups(id: &str) -> Vec<Example> {
-    biology::classic_setups(id).or_else(|| math::conics::classic_setups(id)).or_else(|| math::limits::classic_setups(id)).unwrap_or_default()
+    biology::classic_setups(id).or_else(|| math::conics::classic_setups(id)).or_else(|| math::limits::classic_setups(id)).or_else(|| (id == "coordinate-grid").then(math::limits::grid::classic_setups)).unwrap_or_default()
 }
 
 /// A named starting point for a figure ("Start from an example"): parameter overrides on top of

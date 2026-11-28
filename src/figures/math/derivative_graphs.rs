@@ -28,6 +28,8 @@ mod round11;
 #[cfg(test)]
 mod round12;
 #[cfg(test)]
+mod round14;
+#[cfg(test)]
 mod round7;
 #[cfg(test)]
 mod round6;
@@ -760,6 +762,8 @@ impl Model {
     }
     /// f at x, where x is known exactly when `xe` is given: there f's value is derived exactly (√(2 − x²) at x = √2 is 0,
     /// though the float nearest √2 is past the end of the domain, where the float form has none).
+    /// x is inside the radius of a removable hole's local series, on that hole's piece.
+    pub(crate) fn local_covers(&self, x: f64) -> bool { self.locals.iter().any(|l| (x - l.x).abs() <= l.radius && self.piece_at(x) == Some(l.pi)) }
     pub(crate) fn f_at(&self, x: f64, xe: Option<&XV>) -> Option<f64> {
         if let (Mode::F, Some(xe)) = (&self.mode, xe) {
             if let Some(pi) = self.piece_at(x) {
@@ -927,8 +931,26 @@ impl Model {
                     // (a zero found numerically at a small fraction or a table angle, where the derivative is exactly 0 by exact
                     // arithmetic: that exact value; never a guess)
                     let pv = if pv.ex.is_none() && e.k == EvK::Zero { sxn.as_ref().and_then(|ex| exact_zero_near(ex, e.x)).map(Pv::of).unwrap_or(pv) } else { pv };
+                    // (a zero or a point with no value found a rounding away from an exact zero of a fractional power's base, an
+                    // |u| or a denominator in the derivative, where exact arithmetic shows that base is 0: that exact place.
+                    // sin(x)^(5/3)″ has sin(x)^(−1/3) in it, so its inflection is at 0, never at 9.18·10⁻⁴¹)
+                    let (pv, kind) = if pv.ex.is_none() {
+                        let mut bases = vec![];
+                        if let Some(ex) = self.fexpr(pi, n) { sym::singular_bases(ex, &mut bases); }
+                        match bases.iter().find_map(|u| exact_zero_near(u, e.x).filter(|c| (c.f() - e.x).abs() <= 1e-10 * (1.0 + e.x.abs()))) {
+                            Some(c) => {
+                                // (there the derivative is 0 only if it shrinks toward the place; one that grows toward it, as
+                                // (sin 2x)^(5/3)″ at π/2, has no value there, whatever sign change the samples read as a zero)
+                                let cx = c.f();
+                                let dl = 1e-6 * (1.0 + cx.abs());
+                                let grows = [-1.0, 1.0].iter().any(|sd: &f64| match (g(cx + sd * dl), g(cx + sd * dl * 1e-3)) { (Some(far), Some(near)) => near.abs() > far.abs(), _ => true });
+                                (Pv::of(c), if e.k == EvK::Zero && grows { EvK::Undef } else { e.k })
+                            }
+                            None => (pv, e.k),
+                        }
+                    } else { (pv, e.k) };
                     let x = pv.ex.as_ref().map(|v| v.f()).unwrap_or(e.x);
-                    here.push(Mark { x, k: e.k, pv });
+                    here.push(Mark { x, k: kind, pv });
                 }
                 // an exact zero the samples missed (a touching zero), when it is truly one
                 if let Some(z) = &exact_z { for c in z { if !here.iter().any(|m| (m.x - c.f()).abs() < 1e-6 * (1.0 + c.f().abs())) && g(c.f()).is_some_and(|v| v.abs() < 1e-7) { here.push(Mark { x: c.f(), k: EvK::Zero, pv: Pv::of(c.clone()) }); } } }
@@ -1119,6 +1141,45 @@ pub(crate) fn val_text(v: f64, pv: &Pv, dec: Option<i64>, decimal_input: bool) -
 }
 /// "name = value", or "name ≈ value" when the value is not exact.
 pub(crate) fn eq_text(name: &str, val: &str) -> String { match val.strip_prefix('\u{2248}') { Some(v) => format!("{name} \u{2248} {v}"), None => format!("{name} = {val}") } }
+/// The power of ten of the last place `val_text` writes a decimal value to, with `d` decimals: five significant figures in
+/// the power-of-ten form, d decimals otherwise, and a value that would round to 0 to two figures past its first.
+fn printed_place(v: f64, d: i64) -> i32 {
+    if v == 0.0 || !v.is_finite() { return -(d as i32); }
+    if v.abs() >= 1e12 || v.abs() < 1e-4 { return v.abs().log10().floor() as i32 - 4; }
+    let k = 10f64.powi(d as i32);
+    if (v * k + v.signum() * 1e-9).round() == 0.0 { -(((-v.abs().log10()).ceil() as i64 + 1).min(30) as i32) } else { -(d as i32) }
+}
+/// v rounded at the place 10^e, half away from zero, as `val_text` rounds.
+fn round_at(v: f64, e: i32) -> f64 { let n = v.signum() * 1e-9; if e >= 0 { let k = 10f64.powi(e); (v / k + n).round() * k } else { let k = 10f64.powi(-e); (v * k + n).round() / k } }
+/// A value w known to within ±u, rounded once, at the finest place both ends of [w − u, w + u] round to the same digit and
+/// no finer than `val_text` prints with `d` decimals: every figure written is then right, whatever the true value in the
+/// range (e^x at 11.70 = 120571.714986…, known to 9 figures, is 120571.71, never 120571.715 and then 120571.72). With the
+/// place it is rounded at, which is where it is to be written (`text_at`); None when not even its first figure is known.
+pub(crate) fn round_known(w: f64, u: f64, d: i64) -> Option<(f64, i32)> {
+    let e0 = printed_place(w, d);
+    if !(u > 0.0) || w == 0.0 { return Some((w, e0)); }
+    let lead = w.abs().log10().floor() as i32;
+    for e in e0..=lead + 1 {
+        let (lo, hi) = (round_at(w - u, e), round_at(w + u, e));
+        if lo == hi && lo != 0.0 { return Some((lo, e)); }
+    }
+    None
+}
+/// A value already rounded at the place 10^e, written to that place and no other, in `val_text`'s forms (five figures and
+/// a power of ten past 10¹² or below 10⁻⁴): 0.00496 rounded at 10⁻⁴ is 0.005, never 0.01 when it crosses the printer's
+/// threshold of rounding to 0.
+pub(crate) fn text_at(v: f64, e: i32) -> String {
+    if v != 0.0 && (v.abs() >= 1e12 || v.abs() < 1e-4) && v.is_finite() {
+        let n = v.abs().log10().floor() as i32;
+        let k = (n - e).clamp(0, 4);
+        let mut n = n;
+        let mut m = round_at(v.abs() / 10f64.powi(n), -k);
+        if m >= 10.0 { m /= 10.0; n += 1; }
+        let sup: String = n.to_string().chars().map(|c| match c { '-' => '\u{207b}', '0' => '\u{2070}', '1' => '\u{b9}', '2' => '\u{b2}', '3' => '\u{b3}', c => char::from_u32(0x2070 + c.to_digit(10).unwrap_or(0)).unwrap_or(c) }).collect();
+        return format!("{}{} \u{d7} 10{sup}", if v < 0.0 { MINUS } else { "" }, fmt_full(m, k as i64));
+    }
+    fmt_full(v, (-e).max(0) as i64)
+}
 /// A large value as m × 10ⁿ, m to five significant figures (1.0686 × 10¹³).
 pub(crate) fn sci(v: f64) -> String {
     let mut n = v.abs().log10().floor() as i32;
@@ -1885,8 +1946,20 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     // (a derivative at the tracer that neither exact algebra nor the expansions can settle, and whose float is a residue
     // near 0: not written as a value, and said)
     let undecided: std::cell::Cell<[bool; 3]> = std::cell::Cell::new([false; 3]);
-    let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
+    // (a value settled by its two one-sided limits meeting, at a zero of a root's base typed exactly: (x³)^(1/3) at 0 has
+    // f′(0) = 1 from both sides, though its plain formula underflows to no value at the neighbouring floats)
+    let settled: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    // (the rounding bound of a value taken from a smooth side form beside an |u|, 1 − cos x for |x| − sin x: part of its error)
+    let side_err: std::cell::Cell<Option<f64>> = std::cell::Cell::new(None);
+    // (each reading's place, where it was rounded to its known figures, and its value before rounding: the text is written at
+    // that place; the tracer's dot and tangent stand at the value itself, on the curve)
+    let placed: std::cell::Cell<[Option<i32>; 3]> = std::cell::Cell::new([None; 3]);
+    let raw: std::cell::Cell<[Option<f64>; 3]> = std::cell::Cell::new([None; 3]);
+    let tval_raw = |fi: usize| -> Option<(f64, Option<XV>)> {
         let (m, t) = (model.as_ref()?, tx.as_ref()?);
+        settled.set(false);
+        side_err.set(None);
+        { let mut a = placed.get(); a[fi] = None; placed.set(a); let mut b = raw.get(); b[fi] = None; raw.set(b); }
         if !m.has_value(t.v, te.as_ref()) { return None; }
         // (f′ and f″ exist only where f is continuous: at a jump, whatever the slopes on its two sides, they do not; x for
         // x < 1 and x + 1 after has no f′(1), though both pieces have slope 1)
@@ -1958,13 +2031,16 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                     match sides(fi).filter(|_| f_meets) {
                         // (a float beside 0 that neither exact algebra nor the expansions settle: undecided)
                         Some((v, None)) if v.abs() < 1e-6 => { let mut u = undecided.get(); u[fi] = true; undecided.set(u); (None, None) }
-                        Some((v, e)) => (Some(v), e),
+                        Some((v, e)) => { settled.set(true); (Some(v), e) }
                         None => (None, None),
                     }
                 }
                 _ => {
                     // Use the same smooth branch as the plotted curve beside an absolute-value corner.
                     // Differentiating u/|u| directly can introduce cancelling terms of order 1/|u|.
+                    // (its float is checked and rounded as any other value's, its own rounding bound part of its error: |x| − sin x
+                    // has f′ = 1 − cos x ≈ 5.0000 × 10⁻¹³ at 10⁻⁶, whose float 5.0004 × 10⁻¹³ is good to three figures)
+                    let mut side_v: Option<f64> = None;
                     if lp.is_some_and(|pi| lp == rp && sym::print(&m.pieces[pi].e).contains("abs(")) {
                         let left = domain::side_form(m, fi, t.v, -1.0);
                         let right = domain::side_form(m, fi, t.v, 1.0);
@@ -1974,10 +2050,12 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                             }
                             let (value, error) = sym::ev_err(&form, t.v);
                             if value.is_finite() && error <= 1e-8 * (1.0 + value.abs()) {
-                                return Some((value, None));
+                                side_err.set(Some(error));
+                                side_v = Some(value);
                             }
                         }
                     }
+                    if let Some(value) = side_v { (Some(value), None) } else {
                     // (an ordinary point: the derivative's own value. Where its exact expression has no value and f has values
                     // on one side only, the slope there is the one side's, which must settle)
                     let undefined = te.as_ref().is_some_and(|x| [lp, rp].iter().flatten().any(|&pi| m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, x))));
@@ -1998,6 +2076,7 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
                             None => (typed_d(m, fi, t.v), None),
                         }
                     }
+                    }
                 }
             }
         };
@@ -2009,14 +2088,146 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         let steady = |g: &dyn Fn(f64) -> Option<f64>, v: f64| [t.v.next_down(), t.v.next_up()].iter().all(|&y| g(y).is_some_and(|w| (w - v).abs() <= 1e-4 * (v.abs() + 1e-300) || (w - v).abs() <= 1e-12));
         let v = match v {
             // (a point typed on its own takes its neighbours' common limit: no plain form there to condition)
-            Some(w) if fi > 0 && ve.is_none() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) =>
+            Some(w) if fi > 0 && ve.is_none() && !settled.get() && side_err.get().is_none() && !m.is_isolated(t.v) && !steady(&|y| m.d(fi, y).or_else(|| typed_d(m, fi, y)), w) => {
                 // (a rational piece's expanded form ruined by cancellation beside a pole: its typed form, if steady there)
-                typed_d(m, fi, t.v).filter(|&w2| steady(&|y| typed_d(m, fi, y), w2)),
+                let typed_v = typed_d(m, fi, t.v).filter(|&w2| steady(&|y| typed_d(m, fi, y), w2));
+                // (otherwise the value is a cancellation the floats cannot settle, as (cos(2x)³)^(1/3)″ at 0.7854 beside the base's
+                // zero at π/4, where f″ = −4 cos 2x ≈ 1.5·10⁻⁵ is lost in terms of size 10⁵: a corner was already refused above, so
+                // the derivative is not said not to exist; it is said to be undecided here)
+                if typed_v.is_none() { let mut u = undecided.get(); u[fi] = true; undecided.set(u); }
+                typed_v
+            }
             other => other,
+        };
+        // (an exact rational value is exact: f′(1.0000001) = 1 for |x − 1| beside its corner is never questioned)
+        let rational = ve.as_ref().is_some_and(|e| e.rational().is_some());
+        // A difference of what is below the value (f itself for f; f for f′; f′ for f″), a thousandth, half and a quarter of that
+        // away, central or one-sided beside the edge of the domain, extrapolated; for f itself, the average of its two sides,
+        // extrapolated the same way. Sound only where the three steps agree (so it says nothing across a kink or a cusp).
+        // Some((estimate, its error)) where sound.
+        let x = t.v;
+        let est: Option<(f64, f64)> = {
+            let h1 = 1e-3;
+            let step = |h: f64| -> Option<f64> {
+                if fi == 0 {
+                    let g = |y: f64| m.d(0, y);
+                    match (g(x + h), g(x - h)) {
+                        (Some(a), Some(c)) => Some(0.5 * (a + c)),
+                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(3.0 * g(x + sd * h)? - 3.0 * g(x + 2.0 * sd * h)? + g(x + 3.0 * sd * h)?) }
+                    }
+                } else {
+                    let g = |y: f64| m.d(fi - 1, y);
+                    match (g(x + h), g(x - h)) {
+                        (Some(a), Some(c)) => Some((a - c) / (2.0 * h)),
+                        _ => { let sd = if g(x + h).is_some() { 1.0 } else { -1.0 }; Some(sd * (-2.5 * g(x + sd * h)? + 4.0 * g(x + 2.0 * sd * h)? - 1.5 * g(x + 3.0 * sd * h)?) / h) }
+                    }
+                }
+            };
+            match (step(h1), step(h1 / 2.0), step(h1 / 4.0)) {
+                (Some(d1), Some(d2), Some(d3)) => {
+                    let (f12, f23) = ((4.0 * d2 - d1) / 3.0, (4.0 * d3 - d2) / 3.0);
+                    let err = (f12 - f23).abs();
+                    (f23.is_finite() && err <= 1e-6 * (1.0 + f23.abs())).then_some((f23, err))
+                }
+                _ => None,
+            }
+        };
+        // (the difference confirms a value only where it resolves it, its own error below a millionth of the value's size, and
+        // the two agree to 10⁻⁵ of it; it contradicts one only where they differ by more than that and its error; in between,
+        // as for a value of 5·10⁻¹³ whose differences are good to 10⁻¹⁶, it says nothing and the rounding bound decides)
+        let size = |w: f64| est.map_or(0.0, |(e, _)| w.abs().max(e.abs()));
+        let agrees = |w: f64| est.is_some_and(|(e, err)| err <= 1e-6 * size(w) && (w - e).abs() <= 1e-5 * size(w));
+        let contradicts = |w: f64| est.is_some_and(|(e, err)| (w - e).abs() > 1e-5 * size(w) + 10.0 * err);
+        let mut set_undecided = || { let mut u = undecided.get(); u[fi] = true; undecided.set(u); };
+        // (the typed formula's own rounding bound at x: the expanded derivative's, or for a rational piece its typed form's,
+        // whichever is better; it counts every sum's rounding, x + 3 too)
+        let fbound = m.piece_at(t.v).and_then(|pi| {
+            let a = m.fexpr(pi, fi).map(|e| sym::ev_err(e, t.v).1);
+            let b = (matches!(m.mode, Mode::F) && fi > 0 && m.pieces[pi].rat.is_some()).then(|| { let mut e = m.pieces[pi].e.clone(); for _ in 0..fi { e = sym::deriv(&e); } sym::ev_err(&e, t.v).1 });
+            match (a, b) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) }
+        }).filter(|b| b.is_finite());
+        let (v, ve, unc) = match v {
+            // (inside a removable hole's local series, f and its derivatives are the series' own, as on the curves: beside
+            // the hole the typed formula, and an exact form of it (−2·10¹⁵ + 1999980000100000·e^(1/100000) for (eˣ − 1)/x″ at
+            // 0.00001), lose their digits to cancellation; the series, checked against the formula where both are sound,
+            // does not. So (1 − cos x)/x² reads f(0.0000001) ≈ 0.5, (eˣ − e⁻ˣ)/(2x) reads f′(0.00001) ≈ 3.3333 × 10⁻⁶, and a
+            // hole at 100 reads as one at 0.)
+            Some(w) if !rational && !m.is_isolated(t.v) && m.local_covers(t.v) => match m.d(fi, t.v) { Some(dv) => (Some(dv), None, 1e-13 * dv.abs()), None => (Some(w), ve, 0.0) },
+            // (an exact rational, a value settled by its two sides or a proven zero is written as it is)
+            Some(w) if rational || settled.get() || proven_zero || m.is_isolated(t.v) => (Some(w), ve, 0.0),
+            // (a side form's float: its own rounding bound is its error; the differences across the corner say nothing)
+            Some(w) if side_err.get().is_some() => (Some(w), ve, side_err.get().unwrap_or(0.0)),
+            // (otherwise: a value the sound difference confirms is written; one it contradicts is replaced by the model's own
+            // value if that agrees, and else not written; where no difference is sound (a kink or a cusp within a thousandth),
+            // the value's own rounding bound decides, to four figures, and a 0 the rounding was read as only below 10⁻⁹)
+            Some(w) => {
+                // (a confirmed value keeps its formula's own rounding as part of its error: the difference is worked out from the
+                // same formula and carries the same rounding, ln(1 + x) − x at 0.000004 both ways −8.0001 × 10⁻¹²)
+                if agrees(w) { let (e, err) = est.unwrap(); (Some(w), ve, err.max((w - e).abs()).max(fbound.unwrap_or(0.0))) }
+                else if contradicts(w) {
+                    match m.d(fi, t.v).filter(|dv| agrees(*dv)) { Some(dv) => { let (e, err) = est.unwrap(); (Some(dv), None, err.max((dv - e).abs()).max(fbound.unwrap_or(0.0))) } None => { set_undecided(); (None, None, 0.0) } }
+                } else {
+                    let bound = fbound;
+                    let lost = bound.is_some_and(|b| if w == 0.0 { !(b <= 1e-9) } else { !(b <= 1e-4 * w.abs()) });
+                    if lost { set_undecided(); (None, None, 0.0) } else { (Some(w), ve, bound.unwrap_or(0.0)) }
+                }
+            }
+            // (no value: a derivative does not exist only at a break the analysis found exactly there (a corner, a cusp, a
+            // pole, a jump, the end of the domain), or where f has no value; at any other typed x it exists, and a value the
+            // floats could not give is undecided, never absent)
+            None => (None, ve, 0.0),
+        };
+        // (a value not held exactly is written to the figures it is known to, and no more: its error is the largest of the
+        // check's, the rounding bound's, and the gap between the typed decimal and the double it is read at, half a unit in
+        // the last place of x, times the next derivative (beside a zero of sin, 3.1415926535897 is 10⁻¹⁶ from its double,
+        // which moves sin there in its third figure). Fewer than one known figure: undecided.)
+        // (an exact form too long to print is printed as its decimal, the float of the same formula: that decimal is held to the
+        // same figures, ln(250001/250000) − 1/250000 included; the form itself is exact and is never refused)
+        let printed_as_decimal = ve.as_ref().is_some_and(|e| e.rational().is_none() && exact::text(e).chars().count() > 18);
+        let unc = if printed_as_decimal { unc.max(fbound.unwrap_or(0.0)) } else { unc };
+        { let mut b = raw.get(); b[fi] = v; raw.set(b); }
+        let place = |e: i32| { let mut a = placed.get(); a[fi] = Some(e); placed.set(a); };
+        let v = match (v, &ve) {
+            (Some(w), Some(_)) if printed_as_decimal && w != 0.0 => {
+                let u = unc.max(x.abs() * f64::EPSILON * m.d(fi + 1, x).map_or(0.0, f64::abs));
+                // (the form itself is exact and is never refused: at worst its first figure)
+                let lead = w.abs().log10().floor() as i32;
+                let (r, e) = round_known(w, u, dec.unwrap_or(2)).unwrap_or_else(|| (round_at(w, lead), lead));
+                place(e);
+                Some(r)
+            }
+            (Some(w), None) if w != 0.0 => {
+                let gap = x.abs() * f64::EPSILON;
+                let next = if fi < 2 { m.d(fi + 1, x) } else { let h = 1e-6 * (1.0 + x.abs()); match (m.d(2, x + h), m.d(2, x - h)) { (Some(a), Some(c)) => Some((a - c) / (2.0 * h)), _ => None } };
+                let u = unc.max(next.map_or(0.0, |d| d.abs() * gap));
+                // (at any size: 37320539.6 known to 7 figures is written 37320540, not to its last decimal; rounded once, at the
+                // finest place both ends of its error round alike, so 1/sin x at 3.14159263 = 42391215.13 is never 42391210)
+                match round_known(w, u, dec.unwrap_or(2)) { Some((r, e)) => { place(e); Some(r) } None => { set_undecided(); None } }
+            }
+            (w, _) => w,
         };
         v.filter(|v| v.is_finite()).map(|v| (v, ve))
     };
     // (f″ where f′ does not exist does not exist either; where f′ is only undecided, f″ is worked out on its own)
+    // (no value for f′ or f″: a derivative does not exist only at a break the analysis found exactly there (a corner, a cusp,
+    // a pole, a jump), at the end of the domain, where f has no value, or at an exactly typed x where the derivative's own
+    // expression has none (sin(x)^(4/3)″ at π); at any other typed x it exists, and a value the floats could not give is
+    // undecided, never absent: |x| + (1 − cos x)/x² at 0.00001, sin(πx)/((x − 100)(x − 101))″ at 100.00001)
+    let tval_one = |fi: usize| -> Option<(f64, Option<XV>)> {
+        let r = tval_raw(fi);
+        if r.is_some() || fi == 0 || undecided.get()[fi] { return r; }
+        let (Some(m), Some(t)) = (model.as_ref(), tx.as_ref()) else { return r };
+        let x = t.v;
+        if !m.has_value(x, te.as_ref()) { return r; }
+        let near = |q: f64| (q - x).abs() <= 1e-12 * (1.0 + x.abs());
+        let at_break = an.as_ref().is_some_and(|a| a.breaks.iter().any(|q| near(*q)) || a.fp_marks.iter().chain(a.fpp_marks.iter()).any(|mk| mk.k == EvK::Undef && near(mk.x)));
+        let edge = [-1.0, 1.0].iter().any(|sd: &f64| m.f(x + sd * 1e-9 * (1.0 + x.abs())).is_none());
+        let own_undefined = te.as_ref().is_some_and(|xe| [m.piece_at(x - 1e-9 * (1.0 + x.abs())), m.piece_at(x + 1e-9 * (1.0 + x.abs()))].iter().flatten().any(|&pi| {
+            m.fexpr(pi, fi).is_some_and(|e| exact::undefined_at(e, xe)) || domain::singular_at(&m.pieces[pi].e, x, Some(xe))
+        }));
+        if !at_break && !edge && !own_undefined { let mut u = undecided.get(); u[fi] = true; undecided.set(u); }
+        r
+    };
     let tval = |fi: usize| -> Option<(f64, Option<XV>)> {
         if fi == 2 && tval_one(1).is_none() && !undecided.get()[1] { return None; }
         tval_one(fi)
@@ -2026,9 +2237,13 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         model.as_ref()?;
         let nm = &names[fi];
         Some(match tval(fi) {
-            Some((v, ve)) => eq_text(&format!("{nm}({})", t.show), &val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal)),
-            None if fi == 0 => format!("{nm}({}) has no value", t.show),
+            // (written at the place it was rounded at where the printer's own place, from the rounded value, would be coarser)
+            Some((v, ve)) => {
+                let text = match placed.get()[fi] { Some(e) if v != 0.0 && printed_place(v, dec.unwrap_or(2)) > e => format!("\u{2248}{}", text_at(v, e)), _ => val_text(v, &Pv { ex: ve, show: None }, dec, t.decimal) };
+                eq_text(&format!("{nm}({})", t.show), &text)
+            }
             None if undecided.get()[fi] => format!("{nm}({}) cannot be decided here", t.show),
+            None if fi == 0 => format!("{nm}({}) has no value", t.show),
             None => format!("{nm}({}) does not exist", t.show),
         })
     };
@@ -2192,10 +2407,11 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
         for (k, pn) in panels.iter().enumerate() {
             for fi in fis_of(pn.kind) {
                 if !shows(p, fi) { continue; }
-                let v = tval(fi).map(|v| v.0);
+                let at = |fi: usize| tval(fi).map(|v| raw.get()[fi].unwrap_or(v.0));
+                let v = at(fi);
                 if let Some(v) = v { if inside(pn, t.v, v) { let q = (pn.sx(t.v), pn.sy(v)); dots.push((q, "tracer")); let _ = k; tracer_pts.push(q); } }
                 if fi == 0 {
-                    if let (Some(v), Some(s)) = (tval(0).map(|v| v.0), tval(1).map(|v| v.0)) {
+                    if let (Some(v), Some(s)) = (at(0), at(1)) {
                         if inside(pn, t.v, v) {
                             // the tangent: 75 px each way along it, cut at the plot's edge
                             let (cx, cy) = (pn.sx(t.v), pn.sy(v));
@@ -2391,9 +2607,10 @@ fn build_at_cached(p: &Params, tall: f64, wide: f64, cache: &mut Option<(Result<
     if let Some(t) = tx.as_ref() {
         let u = undecided.get();
         if u.iter().any(|u| *u) {
-            let which = if u[1] && u[2] { format!("{name}{PRIME} and {name}{DPRIME}") } else if u[1] { format!("{name}{PRIME}") } else { format!("{name}{DPRIME}") };
+            let names: Vec<String> = [(0usize, name.to_string()), (1, format!("{name}{PRIME}")), (2, format!("{name}{DPRIME}"))].into_iter().filter(|(i, _)| u[*i]).map(|(_, n)| n).collect();
+            let which = match names.len() { 1 => names[0].clone(), 2 => format!("{} and {}", names[0], names[1]), _ => format!("{}, {} and {}", names[0], names[1], names[2]) };
             let advice = if model.as_ref().is_some_and(|m| m.pieces.iter().any(|pc| domain::root_product(&pc.e))) { ": typed as a single power (x^(4/3) for x\u{b7}x^(1/3)) it can be decided" } else { "" };
-            notes.push(format!("{which} at x = {} cannot be decided exactly where the root's base is 0, so it is not written{advice}", t.show));
+            notes.push(format!("{which} at x = {} cannot be decided here (the arithmetic loses its digits at this x), so it is not written{advice}", t.show));
         }
     }
     // ── draw the marks (guides under the dots) ──

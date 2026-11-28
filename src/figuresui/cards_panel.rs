@@ -1165,7 +1165,7 @@ impl Workspace {
             };
             // named for screen readers (and the panel tests), as a checkbox
             let v = *on;
-            r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, v, text));
+            r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::CheckBox, true, v, text));
             r.changed()
         };
         ui.add_space(if phys { 12.0 } else { 4.0 });

@@ -647,7 +647,7 @@ fn ends_of_the_ranges() {
     let mut p = lined(&[("n", i(MAX_N)), ("x_marks", bo(true)), ("sample_pts", bo(true)), ("strip_labels", s("Heights")), ("key_line", bo(true)), ("label_size", s("Large"))]);
     for rule in RULES {
         p.set_s("rule", rule);
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let (svg, notes) = build(&p);
         assert!(t.elapsed().as_secs_f64() < 5.0, "{rule}: {:?}", t.elapsed());
         assert_eq!(svg.matches(r#"data-rs="strip""#).count(), if rule == "Trapezoid" { 100 } else { 100 });
@@ -658,7 +658,7 @@ fn ends_of_the_ranges() {
     let mut h = lined(&[("region", s("Between f(x) and g(x)")), ("f", s("x")), ("g", s("x^2")), ("bounds", s("Where f and g cross")), ("strips", s("Horizontal")), ("n", i(MAX_N))]);
     for rule in ["Upper", "Lower", "Midpoint"] {
         h.set_s("rule", rule);
-        let t = std::time::Instant::now();
+        let t = crate::testclock::Stopwatch::start();
         let _ = build(&h);
         assert!(t.elapsed().as_secs_f64() < 1.0, "horizontal {rule}: {:?}", t.elapsed());
     }
@@ -1225,7 +1225,7 @@ fn fifth_check_cases() {
     // speed: sums of |…| with 96 and 100 strips well under half a second
     for (f, rule, n) in [("abs(x - 1) - abs(x - 2)", "Lower", 96), ("abs(x - 1) - abs(x - 2)", "Upper", 100), ("(x + abs(x))/2 + abs(x - 1)", "Upper", 100)] {
         let p = with(&[("f", s(f)), ("a", s("0")), ("b", s("3")), ("rule", s(rule)), ("n", i(n)), ("sum_line", bo(true)), ("key_line", bo(true))]);
-        let t0 = std::time::Instant::now();
+        let t0 = crate::testclock::Stopwatch::start();
         let t = all(&p);
         assert!(t0.elapsed().as_secs_f64() < 0.5, "{f} {rule} {n}: {:?}", t0.elapsed());
         assert!(!t.contains("1.0000"), "a flat strip is written exactly: {t}");
