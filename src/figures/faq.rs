@@ -4054,7 +4054,7 @@ const CHI_SQUARE_TABLE: &[Faq] = &[
 const CIRCLE: &[Faq] = &[
     Faq {
         q: "How do I add points, lines, tangents, shading and labels on the figure?",
-        a: "Click the circle to put a point there (B, then C, then D, E and so on) and drag any point round it; a drag snaps to whole degrees and to the familiar angles, typed values are exact. Click a point to draw the tangent there, and again to take it off. Type two letters in Lines between points for a chord (BD) or a radius (OC). Click inside an enclosed area to shade it, and click beside an arc or on a line to label it: an arc in degrees, then by its length; a line by its length. Each is also a list you can type into, such as arc BC 70\u{b0} for your own text. The circle is always drawn the same size: the radius is a number to read.",
+        a: "Click the circle to put a point there (B, then C, then D, E and so on) and drag any point round it in 5\u{b0} steps (1\u{b0} with Ctrl, or Cmd on a Mac, held), or pull it well away to take it off the circle; typed values are exact. Inscribed polygon adds that many points round the circle joined by chords, and each corner then drags on its own. Click a point to draw the tangent there, and again to take it off. Type two letters in Lines between points for a chord (BD) or a radius (OC). Click inside an enclosed area to shade it, and click beside an arc or on a line to label it: an arc in degrees, then by its length; a line by its length. Each is also a list you can type into, such as arc BC 70\u{b0} for your own text. The circle is always drawn the same size: the radius is a number to read.",
     },
     Faq {
         q: "How do I make a worksheet and its answer key?",

@@ -478,11 +478,11 @@ fn a_point_is_dragged_off_the_circle_and_back_on() {
     let q = drag(&p, at_dir(&p, 270.0, 1.0), at_dir(&p, 260.0, 1.1));
     assert_eq!(q.s("more_points"), "D 260", "a small pull keeps D on the circle");
     let q = drag(&p, at_dir(&p, 270.0, 1.0), at_dir(&p, 240.0, 1.62));
-    assert_eq!(q.s("more_points"), "D 240 1.6r", "pulled well away, D leaves the circle (to the nearest 0.05 radii)");
-    let q2 = drag(&q, at_dir(&q, 240.0, 1.6), at_dir(&q, 200.0, 0.43));
-    assert_eq!(q2.s("more_points"), "D 200 0.45r", "off the circle it goes anywhere, inside too");
-    let q3 = drag(&q2, at_dir(&q2, 200.0, 0.45), at_dir(&q2, 150.0, 0.95));
-    assert_eq!(q3.s("more_points"), "D 150", "brought within 0.08 radii of the circle, it is back on");
+    assert_eq!(q.s("more_points"), "D 240 1.5r", "pulled well away, D leaves the circle (to the nearest quarter radius, round 412)");
+    let q2 = drag(&q, at_dir(&q, 240.0, 1.5), at_dir(&q, 200.0, 0.43));
+    assert_eq!(q2.s("more_points"), "D 200 0.5r", "off the circle it goes anywhere, inside too");
+    let q3 = drag(&q2, at_dir(&q2, 200.0, 0.5), at_dir(&q2, 150.0, 0.95));
+    assert_eq!(q3.s("more_points"), "D 150", "brought within 0.1 radii of the circle, it is back on");
     // the knob's tip says so, and the click area's summary names it for the figure's opening state
     let h = handle_at(&p, at_dir(&p, 270.0, 1.0)).unwrap();
     assert!(h.tip.contains("pull it well away to take it off the circle"));

@@ -4,6 +4,8 @@ use super::*;
 
 /// At most this many More points are drawn (the rows after them are kept but not drawn).
 pub const MAX_EXTRA: usize = 12;
+/// Most Lines between points drawn.
+pub const MAX_JOINS: usize = 24;
 
 /// The rows of a list param, split the way the list control splits them (on `;` when there is one, else on `,`).
 pub fn rows(s: &str) -> Vec<String> {
@@ -188,6 +190,20 @@ pub fn move_extra_to(p: &mut Params, i: usize, deg: f64, dist: f64) {
     let mut r = rows(p.s("more_points"));
     if let (Some(e), Some(row)) = (ex.get(i), r.get_mut(i)) {
         *row = if on_rim(dist) { format!("{} {}", e.0, fmt_deg(deg)) } else { format!("{} {} {}", e.0, fmt_deg(deg), fmt_dist(dist)) };
+        set_rows(p, "more_points", &r);
+    }
+}
+
+/// Moves More point `i`, on the circle, to `deg` written to 10 decimals (trimmed): a point turned with a saved polygon, whose
+/// corners (a heptagon's) are at no whole or tenth degree, keeps its place on its corner as typed, the turn being whole degrees
+/// (checker, round 412: written to tenths, a point near the edge of the half degree that names a corner after it fell off it).
+pub fn move_extra_on_rim_fine(p: &mut Params, i: usize, deg: f64) {
+    let ex = extras_all(p);
+    let mut r = rows(p.s("more_points"));
+    if let (Some(e), Some(row)) = (ex.get(i), r.get_mut(i)) {
+        let t = format!("{:.10}", wrap(deg));
+        let t = t.trim_end_matches('0').trim_end_matches('.');
+        *row = format!("{} {}", e.0, if t == "360" { "0" } else { t });
         set_rows(p, "more_points", &r);
     }
 }
@@ -424,26 +440,24 @@ pub fn handles(p: &Params, cx: f64, off: Pt) -> Vec<Handle> {
     let centre = (cx + off.0, CY + off.1);
     let mut v = vec![];
     // every More points row has a knob (in row order, so a point taken off the circle keeps its knob): one on the circle moves round
-    // it and leaves it when pulled well away (more than 0.2 radii, 30 px); one off it goes anywhere and comes back on when brought
-    // within 0.08 radii (12 px) of the circle
+    // it and leaves it when pulled well away (more than a third of a radius); one off it goes anywhere and comes back on when brought
+    // within 0.1 radii of the circle; directions and distances step as A's, B's and C's do (`drag_b8::stepped`, `drag_dist`)
     for (i, (nm, d, r0)) in extras_all(p).into_iter().enumerate() {
         let q = (cx + R * r0 * d.to_radians().cos(), CY - R * r0 * d.to_radians().sin());
         let at = (q.0 + off.0, q.1 + off.1);
         let nm2 = nm.clone();
-        let tip = if on_rim(r0) { format!("Drag point {nm} round the circle (pull it well away to take it off the circle); click it for the tangent there, or click it and then another point to join them; double-click it to rename it") }
-            else if r0 > 1.0 { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it for the tangents from it, or click it and then another point to join them; double-click it to rename it") }
-            else { format!("Drag point {nm} anywhere (bring it to the circle to put it back on); click it and then another point to join them; double-click it to rename it") };
+        let steps = super::drag_b8::STEPS;
+        let tip = if on_rim(r0) { format!("Drag point {nm} round the circle (pull it well away to take it off the circle){steps}; click it for the tangent there, or click it and then another point to join them; double-click it to rename it") }
+            else if r0 > 1.0 { format!("Drag point {nm} anywhere (bring it to the circle to put it back on){steps}; click it for the tangents from it, or click it and then another point to join them; double-click it to rename it") }
+            else { format!("Drag point {nm} anywhere (bring it to the circle to put it back on){steps}; click it and then another point to join them; double-click it to rename it") };
         let k = Handle::knob(at, &tip, move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
             let r = interact::dist(centre, t) / R;
             let raw = interact::angle_deg(centre, t);
             let cur = extras_all(p).get(i).map(|e| e.2).unwrap_or(1.0);
-            let snapd = |r: f64| ((r * 20.0).round() / 20.0).clamp(0.1, super::pts::MAX_DIST);
-            let dist = if on_rim(cur) { if (r - 1.0).abs() > 0.2 { snapd(r) } else { 1.0 } } else if (r - 1.0).abs() < 0.08 { 1.0 } else { snapd(r) };
-            // (checker round 2) a familiar angle, but never onto another point's ray at another distance
-            let snapped = snap_angle(raw) % 360.0;
+            let dist = super::drag_b8::drag_dist(cur, r);
             let me = extras_all(p).get(i).map(|e| e.0.clone()).unwrap_or_default();
-            let deg = if snapped != raw.round() % 360.0 && super::drag_b8::on_another_ray(p, &me, snapped, dist) { raw.round() % 360.0 } else { snapped };
+            let deg = super::drag_b8::stepped(p, &me, raw, dist);
             move_extra_to(p, i, deg, dist);
         });
         let nm3 = nm.clone();
@@ -578,7 +592,7 @@ pub fn joins(p: &Params) -> Vec<((String, String), End, End)> {
     let pts = circle_points(p);
     let known = known_names(p, &pts);
     let mut v = vec![];
-    for r in rows(p.s("joins")).iter().take(24) {
+    for r in rows(p.s("joins")).iter().take(MAX_JOINS) {
         let Some((a, b)) = pair_names(r, &known) else { continue };
         let (Some(x), Some(y)) = (find(p, &pts, &a), find(p, &pts, &b)) else { continue };
         if !same_place(p, x, y) { v.push(((name_of(p, &pts, x), name_of(p, &pts, y)), x, y)); }

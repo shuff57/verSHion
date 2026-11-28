@@ -599,6 +599,11 @@ pub struct Workspace {
     /// The last click on an area that also takes a double-click to type (when, where in SVG units, the params before it),
     /// so the double-click that follows can take that click back.
     click_undo: Option<(Instant, (f64, f64), Params)>,
+    /// The handle being dragged (its widget id) and the params as its drag found them, handed to the drag at every frame
+    /// (`interact::drag_start`).
+    drag_start: Option<(UiId, Params)>,
+    /// Where the drawing's anchor was (`interact::anchor`) when the held view was last moved with it, while a handle is dragged.
+    drag_anchor: Option<(f64, f64)>,
     qa_init: bool,
     /// An action chosen on the preview toolbar this frame (chemistry skin), handed up by `workspace_view`.
     tool_act: Option<Act>,
@@ -1897,6 +1902,22 @@ impl Workspace {
         // leaves it or shrinks well inside it.
         let fresh = if phys_whole_on || (phys && phys_ref(def.id).is_none() && phys_vb(def.id).is_some()) { [0.0, 0.0, cw, ch] } else if math { math_view(self.content, def.id, (cw, ch)) } else if whole { [0.0, 0.0, cw, ch] } else if let (true, Some(pr), Some(b)) = (phys, phys_ref(def.id), self.content) { phys_view(pr, b, def.id) } else { view_box_padded(self.content, (cw, ch), if chem { Some(CHEM_PAD) } else if phys { self.content.map(|b| PHYS_PAD * (b[2] - b[0]).max(b[3] - b[1])) } else { None }) };
         let pointer_down = ui.input(|i| i.pointer.any_down());
+        // (a drag that ended unseen is let go)
+        if !pointer_down {
+            self.drag_start = None;
+        }
+        // while a handle is dragged, the held view moves with the drawing (`interact::anchor`): grown on the left or top, or
+        // re-centred over a wider readout, the drawing stays still on the screen under the pointer
+        if self.drag_start.is_some() {
+            let now = figures::interact::anchor(def.id, &self.params);
+            if let (Some(v), Some(a), Some(b)) = (self.view.as_mut(), self.drag_anchor, now) {
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                *v = [v[0] + dx, v[1] + dy, v[2] + dx, v[3] + dy];
+            }
+            self.drag_anchor = now;
+        } else {
+            self.drag_anchor = None;
+        }
         match self.view {
             Some(v) if pointer_down || keep_view(v, fresh) => {}
             _ => self.view = Some(fresh),
@@ -2060,6 +2081,10 @@ impl Workspace {
                 let t = to_svg(ptr);
                 ui.data_mut(|d| d.insert_temp(UiId::new("fig_drag_off"), (t.0 - h.pos.0, t.1 - h.pos.1)));
             }
+            if r.drag_started() {
+                self.drag_start = Some((r.id, self.params.clone()));
+                self.drag_anchor = figures::interact::anchor(def.id, &self.params);
+            }
             // a label being dragged holds the page as it was (no growing or shifting under the pointer); let go, the page
             // grows to take the label in, as the reference's frame does
             if h.label_drag && r.drag_started() {
@@ -2076,10 +2101,19 @@ impl Workspace {
             {
                 let off: (f64, f64) = ui.data(|d| d.get_temp(UiId::new("fig_drag_off"))).unwrap_or((0.0, 0.0));
                 let t = to_svg(ptr);
+                // Ctrl (Cmd on a Mac) held: a fine drag, for the handles that step more finely then
+                figures::interact::set_fine(ui.input(|i| i.modifiers.command));
+                // (only this handle's own drag: one that began unseen is a step from the params as they are)
+                figures::interact::set_drag_start(self.drag_start.as_ref().filter(|(id, _)| *id == r.id).map(|(_, s)| s.clone()));
                 f(&mut self.params, (t.0 - off.0, t.1 - off.1));
+                figures::interact::set_fine(false);
+                figures::interact::set_drag_start(None);
                 self.params.normalize(&pdefs, true);
                 self.live = true;
                 changed = true;
+            }
+            if r.drag_stopped() {
+                self.drag_start = None;
             }
             let edit_here = match (&h.edit_at, r.double_clicked(), r.interact_pointer_pos()) {
                 // two quick clicks on two different parts are two clicks, not a double-click on the second
@@ -5462,6 +5496,45 @@ mod tests {
             comp_frame(&ctx, &mut ws, vec![]);
         }
         (ctx, ws)
+    }
+
+    /// A circle point dragged out to the left (the page growing there, the drawing moving right on it) or with a readout row
+    /// whose width changes (the drawing re-centred) stays under a pointer held still: the held view moves with the drawing
+    /// (`interact::anchor`; checkers 7 and 8, round 412: the point ran away from the pointer, or flickered between two steps).
+    #[test]
+    fn a_circle_point_stays_under_a_still_pointer_as_its_page_grows() {
+        const R: f64 = 150.0;
+        for (over, from, to, want) in [
+            (vec![("more_points", "D 180 1.5r")], (180.0, 1.5), (180.0, 2.8), ("more_points", "D 180 2.75r")),
+            (vec![("more_points", "D 90 1.5r")], (90.0, 1.5), (90.0, 3.3), ("more_points", "D 90 3.25r")),
+            (vec![("m_om", "true"), ("g_om", "Given")], (20.0, 1.0), (110.0, 1.0), ("a1", "110")),
+        ] {
+            let (ctx, mut ws) = open_fig("circle");
+            for (k, v) in &over {
+                if *v == "true" { ws.params.set_b(k, true) } else { ws.params.set_s(k, v) }
+            }
+            for _ in 0..3 {
+                comp_frame(&ctx, &mut ws, vec![]);
+            }
+            let c = figures::interact::anchor("circle", &ws.params).unwrap();
+            let at = |(d, r): (f64, f64)| (c.0 + R * r * d.to_radians().cos(), c.1 - R * r * d.to_radians().sin());
+            let (o, k) = ws.preview_map.expect("preview drawn");
+            let sc = |q: (f64, f64)| egui::pos2(o.x + (q.0 * k) as f32, o.y + (q.1 * k) as f32);
+            let (pa, pb) = (sc(at(from)), sc(at(to)));
+            comp_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(pa)]);
+            comp_frame(&ctx, &mut ws, btn(pa, true));
+            for i in 1..=4 {
+                comp_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(pa + (pb - pa) * (i as f32 / 4.0))]);
+            }
+            // held still (the pointer moving on the spot, as a hand does): the point stays
+            let mut seen = vec![];
+            for _ in 0..8 {
+                comp_frame(&ctx, &mut ws, vec![egui::Event::PointerMoved(pb)]);
+                seen.push(if want.0 == "a1" { format!("{}", ws.params.f("a1")) } else { ws.params.s(want.0).to_string() });
+            }
+            comp_frame(&ctx, &mut ws, btn(pb, false));
+            assert!(seen.iter().all(|v| v == want.1), "{over:?}: {seen:?}");
+        }
     }
 
     /// Dragging a label on the preview moves only that label (offset param), as one undo step,

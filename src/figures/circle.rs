@@ -33,6 +33,8 @@ mod drag_b8_tests;
 mod drag_b8_r1_tests;
 #[cfg(test)]
 mod drag_b8_r2_tests;
+#[cfg(test)]
+mod drag_r412_tests;
 
 type Pt = (f64, f64);
 
@@ -80,13 +82,13 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("a1", "Point A at (degrees)", 0.0, 360.0, 1.0, 20.0),
         ParamDef::float("a2", "Point B at (degrees)", 0.0, 360.0, 1.0, 110.0),
         ParamDef::float("c_angle", "Point C at (degrees)", 0.0, 360.0, 1.0, 250.0),
-        ParamDef::float("a_dist", "Point A from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle. Or drag A on the figure: pull it well away to take it off the circle, bring it near to put it back on"),
-        ParamDef::float("b_dist", "Point B from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle (B stays on it while a chord length or OM distance places it)"),
-        ParamDef::float("c_dist", "Point C from the centre (radii)", 0.1, 3.0, 0.05, 1.0).hint("1 is on the circle"),
+        ParamDef::float("a_dist", "Point A from the centre (radii)", 0.1, 5.0, 0.05, 1.0).hint("1 is on the circle. Or drag A on the figure: pull it well away to take it off the circle, bring it near to put it back on"),
+        ParamDef::float("b_dist", "Point B from the centre (radii)", 0.1, 5.0, 0.05, 1.0).hint("1 is on the circle (B stays on it while a chord length or OM distance places it)"),
+        ParamDef::float("c_dist", "Point C from the centre (radii)", 0.1, 5.0, 0.05, 1.0).hint("1 is on the circle"),
         b("show_b", "Point B", false).hint("B on its own, without a chord; a chord, arc, sector or angle through B draws it anyway"),
         b("show_c", "Point C", false).hint("C on its own, without the inscribed angle"),
         ParamDef::list("more_points", "More points (letter and degrees)", "").hint("One point per row, such as D 270 (its letter, then its direction in degrees from the right, counterclockwise). Or click the circle on the figure to put a point there; a row without a letter gets the next free one"),
-        ParamDef::choice("polygon", "Inscribed polygon", &pts::POLYGONS, "None").hint("A regular polygon with a corner at A, the other corners lettered after the points already on the figure; drag A to turn it"),
+        ParamDef::choice("polygon", "Inscribed polygon", &pts::POLYGONS, "None").hint("Adds that many points round the circle, evenly spaced and joined by chords, as More points: each corner then drags on its own. A figure saved with a regular polygon keeps it, and dragging A or a corner turns it"),
         ParamDef::choice("define", "Define the chord by", &["Points", "Angle", "Chord length", "OM distance"], "Points").hint("Points: drag B or type its angle. Angle: B is A plus the central angle. Chord length or OM distance: type the length and B follows (c = 2r sin(theta/2), OM = r cos(theta/2))"),
         ParamDef::float("chord_len", "Chord length", 0.0, 20000.0, 0.1, 8.0),
         ParamDef::float("om_dist", "Distance OM (centre to chord)", 0.0, 10000.0, 0.1, 3.0),
@@ -103,6 +105,7 @@ fn params() -> Vec<ParamDef> {
         b("show_inscribed", "Inscribed angle ACB", false),
         ParamDef::text("join_from", "Point waiting to be joined", "").hint("Set by a click on a point on the figure: a click on another point joins the two"),
         ParamDef::list("poly_names", "Letters kept for the polygon's corners", "").hint("Written when a point is renamed, so that the polygon's corners keep their letters"),
+        ParamDef::text("poly_carry", "Where the polygon was last drawn", "").hint("Written as A is dragged off the circle with a saved regular polygon: where the polygon was last drawn, and where A went"),
         ParamDef::list("joins", "Lines between points", "").hint("Two letters per row: BD is a chord, OC a radius. Any point on the figure, and the centre"),
         ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure. A point outside the circle gets both tangents from it (P), with touch points lettered (P T U), or one of them (P T - or P - U)"),
         ParamDef::list("midpoints", "Midpoints", "").hint("A letter and two points per row: N BD is the midpoint of BD. Or click the middle of a chord on the figure"),
@@ -1124,7 +1127,10 @@ pub fn tangent_grow(p: &Params) -> Grow {
         g.t = g.t.max(14.0 - (e.1 - m));
         g.b = g.b.max(e.1 + m - bottom);
     }
-    let side = |x: f64| if x > 0.0 { (x + 4.0).min(400.0) } else { 0.0 };
+    // (round 412: a point may be dragged or typed out to 5 radii; the room past 400 px is only for a point beyond 3, the old limit,
+    // so every figure saved before draws exactly as it did)
+    let cap = if off.iter().any(|(_, q)| q.0.hypot(q.1) > 3.0 + 1e-9) { 820.0 } else { 400.0 };
+    let side = |x: f64| if x > 0.0 { (x + 4.0).min(cap) } else { 0.0 };
     Grow { l: side(g.l), r: side(g.r), t: side(g.t), b: side(g.b) }
 }
 
@@ -1792,6 +1798,9 @@ fn unmoved(at: Pt, pt: Pt) -> bool { (pt.0 - at.0).hypot(pt.1 - at.1) <= 1.0 }
 
 /// Puts point B `gap` degrees on from A: the central angle when it is typed, the chord or OM when the chord is defined by length
 /// (from the shorter gap), else B's own direction.
+/// After the panel chose an inscribed polygon: its corners become points of their own (see `pts::polygon_chosen`).
+pub fn polygon_chosen(p: &mut Params) { pts::polygon_chosen(p) }
+
 fn set_gap(p: &mut Params, gap: f64) {
     let a = wrap(p.f("a1"));
     let r = fin(p.f("radius")).clamp(0.1, 10000.0);
@@ -1805,6 +1814,12 @@ fn set_gap(p: &mut Params, gap: f64) {
         _ if p.b("use_theta") => p.set_f("theta", gap),
         _ => p.set_f("a2", (a + gap).rem_euclid(360.0)),
     }
+}
+
+/// The circle's centre as drawn (SVG units): where the drawing is on its page (see `interact::anchor`).
+pub fn anchor(p: &Params) -> Pt {
+    let rep = build(p).1;
+    (layout_of(p).cx + rep.ox, CY + rep.oy)
 }
 
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
@@ -1824,8 +1839,18 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     let key = |nm: &str| if nm == n.a { "name_a" } else if nm == n.b { "name_b" } else { "name_c" };
     // A, B and C go round the circle and off it (batch 8); a click on one outside the circle draws the tangents from it
     if pt.a { v.push(drag_b8::knob(p, 0, centre, sh(qa)).with_click(tan(&n.a)).with_edit_at(key(&n.a), ren(&n.a))); }
-    if pt.b { v.push(drag_b8::knob(p, 1, centre, sh(qb)).with_click(tan(&n.b)).with_edit_at(key(&n.b), ren(&n.b))); }
-    if pt.c { v.push(drag_b8::knob(p, 2, centre, sh(qc)).with_click(tan(&n.c)).with_edit_at(key(&n.c), ren(&n.c))); }
+    // (B on A is not drawn, A standing for both: its knob waits off the canvas, so that no knob after it changes its place in the
+    // hit order as B is dragged onto A or a turn brings A onto B, the workspace keeping a drag on the knob at the same place:
+    // checker, round 412)
+    if pt.b || (pt.deg && (pt.two || p.b("show_b"))) {
+        let at = if pt.b { sh(qb) } else { drag_b8::AWAY };
+        v.push(drag_b8::knob(p, 1, centre, at).with_click(tan(&n.b)).with_edit_at(key(&n.b), ren(&n.b)));
+    }
+    // (C, drawn for the inscribed angle only, is not drawn on A or B, nor while A is on B: its knob waits off the canvas too)
+    if pt.c || p.b("show_inscribed") {
+        let at = if pt.c { sh(qc) } else { drag_b8::AWAY };
+        v.push(drag_b8::knob(p, 2, centre, at).with_click(tan(&n.c)).with_edit_at(key(&n.c), ren(&n.c)));
+    }
     // the More points' knobs, then the click area (the workspace puts every area under the knobs)
     v.extend(edit::handles(p, cx, off));
     // the polygon's corners turn it (after the points' knobs, so their number never moves another knob's place)
@@ -2126,20 +2151,25 @@ mod tests {
         assert_eq!(snap_angle(359.0), 0.0);
         assert_eq!(snap_angle(0.4), 0.0);
         assert_eq!(snap_angle(f64::NAN), 0.0);
-        // point A moves by whole degrees (so 31 is reachable); point B moves the central angle, which snaps
+        // round 412: every point moves in the reference's 5 degree steps, 1 with Ctrl (or Cmd) held, so 31 is reachable fine
         let p = with(&[b("show_chord", true), f("a1", 10.0), f("a2", 100.0)]);
         let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
         let cx = layout_of(&p).cx;
         let at = |deg: f64| (cx + R * deg.to_radians().cos(), CY - R * deg.to_radians().sin());
         let mut q = p.clone();
         (hs[0].drag.as_ref().unwrap())(&mut q, at(31.4));
+        assert_eq!(q.f("a1"), 30.0);
+        let mut q = p.clone();
+        interact::set_fine(true);
+        (hs[0].drag.as_ref().unwrap())(&mut q, at(31.4));
+        interact::set_fine(false);
         assert_eq!(q.f("a1"), 31.0);
         let mut q = p.clone();
         (hs[1].drag.as_ref().unwrap())(&mut q, at(10.0 + 61.5));
-        assert_eq!(q.f("a2"), 70.0, "a 61.5 degree gap snaps to 60");
+        assert_eq!(q.f("a2"), 70.0, "B at 71.5 degrees steps to 70 (a 60 degree gap)");
         let mut q = p.clone();
         (hs[1].drag.as_ref().unwrap())(&mut q, at(10.0 + 71.4));
-        assert_eq!(q.f("a2"), 81.0, "71 degrees is no familiar angle: whole degrees");
+        assert_eq!(q.f("a2"), 80.0, "B at 81.4 degrees steps to 80");
         // with the central angle set by number the drag sets that number
         let mut t = p.clone(); t.set_b("use_theta", true); t.set_f("theta", 90.0);
         let hs = knobs("circle", &t, (1.0, 1.0)).unwrap();
@@ -2153,12 +2183,15 @@ mod tests {
         // nothing draws A: no handle at all
         let p = with(&[b("show_radius", false)]);
         assert!(knobs("circle", &p, (1.0, 1.0)).unwrap().is_empty());
-        // A and B in the same place: B is not drawn, so it has no handle
+        // A and B in the same place: B is not drawn, so it has no handle on the canvas (since round 412 its knob waits off it, so
+        // that a drag of B over A keeps its knob)
         let p = with(&[b("show_chord", true), f("a1", 40.0), f("a2", 40.0)]);
-        assert_eq!(knobs("circle", &p, (1.0, 1.0)).unwrap().len(), 1);
-        // C on A: not drawn
+        let hs = knobs("circle", &p, (1.0, 1.0)).unwrap();
+        assert_eq!(hs.iter().filter(|h| h.pos != drag_b8::AWAY).count(), 1);
+        assert_eq!(hs.len(), 2);
+        // C on A: not drawn (its knob off the canvas)
         let p = with(&[b("show_inscribed", true), f("a1", 40.0), f("a2", 140.0), f("c_angle", 40.0)]);
-        assert_eq!(knobs("circle", &p, (1.0, 1.0)).unwrap().len(), 2);
+        assert_eq!(knobs("circle", &p, (1.0, 1.0)).unwrap().iter().filter(|h| h.pos != drag_b8::AWAY).count(), 2);
         // a readout row that needs B makes B a drawn point
         assert_eq!(knobs("circle", &with(&[b("m_chord", true)]), (1.0, 1.0)).unwrap().len(), 2);
     }

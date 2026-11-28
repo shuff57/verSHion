@@ -1,8 +1,8 @@
 # Figures parity score
 
-Generated: 2026-11-25T00:15:46+00:00 · probe: 2026-11-24T16:15:46
+Generated: 2026-11-28T01:20:33+00:00 · probe: 2026-11-27T17:20:33
 
-**Pooled 92.6** · mean 92.4 over 92 figures · built 93 of 93 reference figures
+**Pooled 92.6** · mean 92.5 over 92 figures · built 93 of 93 reference figures
 
 Comparable with the frozen baseline: **yes**
 
@@ -98,12 +98,11 @@ Comparable with the frozen baseline: **yes**
   - cap-03c [control 3] Number the springs k₁, k₂, k₃ instead of labeling each k — no evidence
 - `population-growth`: 98 (128/131)
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
-- `circle`: 99 (161/163)
-  - cap-01g [interaction 2] Drag any point on the figure, not only A — no evidence
 - `angles`: 100 (71/71)
 - `bar-chart`: 100 (87/87)
 - `bohr-model`: 100 (64/64)
 - `box-plot`: 100 (57/57)
+- `circle`: 100 (163/163)
 - `circuit-diagram`: 100 (61/61)
 - `composite-shape`: 100 (50/50)
 - `cone`: 100 (66/66)

@@ -1,0 +1,29 @@
+{
+ "round": 412,
+ "figure": "circle",
+ "capability": "cap-01g",
+ "hypothesis": "Evidence only, no code change: batch 8 (2026-11-11) made B, C, typed More points (on or off the circle) and inscribed polygon corners draggable, confirmed by checkers then, but handles were read at the opening state only, where A is the only point. The owner-approved handle@ token reads them with the point shown. Expected circle 98.8 -> 100. Revised the same day, when the first checker found the reference's drag rules missing: the owner chose to build them (5-degree steps, 1 fine; off past 1/3 radius, on within 0.1; distances 0.25, 0.05 fine, to 5) and to make a polygon chosen in the panel its corners as points of their own, so this became a code round.",
+ "started_at": "2026-11-24T16:16:44",
+ "git": "a23cc04",
+ "before": {
+  "figure": 98.8,
+  "pooled": 92.6
+ },
+ "before_comparable": true,
+ "before_drift": [],
+ "closed": "2026-11-27T17:20:45",
+ "after": {
+  "figure": 100.0,
+  "pooled": 92.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: checker 9 of 9 (checkers 1-8 failed it, each fix rechecked fresh). Frame order and view-shift sign confirmed against figuresui.rs; ~190k drags / 3.6M frames in a workspace model and 16 real egui drags: no point leaves a still pointer, the drawing moves 0 px, no knob changes place, no corner letter changes, nothing picked up or left behind; the anchor equals the drawn centre in 1530/1530 configs; 4000 old figures byte-identical to HEAD; one minor defect (the ray rule told a drag of A by letter) fixed after, with a test that fails on the old rule",
+ "result": "hit",
+ "evidence": "figures::circle 180, figures::interact 5, census 5, figuresui 120 (incl. real-workspace still-pointer test, which fails with the view shift off), faq 1; probe 1939 pass / 0 fail; circle 98.8 -> 100.0, pooled 92.6, comparable",
+ "next": "dot-plot batch (wire the drafted dot_b10: value/count and fraction data, X marks, title modes, tick numbering, line ends), then probability-tree, scatterplot, normal-curve, electric-field's six gaps"
+}

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-25T00:15:46+00:00",
+ "generated_at": "2026-11-28T01:20:33+00:00",
  "spec_generated_at": "2026-11-24T16:38:52+00:00",
  "figures": [
   {
@@ -373,6 +373,7 @@
     "show_inscribed",
     "join_from",
     "poly_names",
+    "poly_carry",
     "joins",
     "tangents",
     "midpoints",
@@ -424,7 +425,7 @@
     "style",
     "label_size"
    ],
-   "param_count": 81,
+   "param_count": 82,
    "handles": 3,
    "label_drag": false,
    "show_answers": true,

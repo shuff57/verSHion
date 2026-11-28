@@ -15,6 +15,43 @@ use std::sync::Arc;
 use super::Params;
 
 pub type Pt = (f64, f64);
+
+thread_local! {
+    /// Whether the drag the workspace is applying is a fine one (Ctrl held, or Cmd on a Mac): set around each drag call.
+    static FINE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether the drag being applied is a fine one (Ctrl, or Cmd on a Mac, held), for a handle that steps more finely then (the
+/// circle's points: 1 degree instead of 5). False outside a drag, and in every headless use.
+pub fn fine() -> bool { FINE.with(|f| f.get()) }
+
+/// Sets [`fine`] for the drag about to be applied; the workspace puts it back to false after.
+pub fn set_fine(on: bool) { FINE.with(|f| f.set(on)); }
+
+thread_local! {
+    /// The params as the drag being applied found them, when it began: set by the workspace around each drag call.
+    static START: std::cell::RefCell<Option<Params>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The params as the drag being applied found them, when it began: for a handle whose every frame is worked out from where the
+/// drag started (the circle's saved polygon, whose corner points turn with it). None outside a drag and in every headless use,
+/// where a drag is one step from the params it is given.
+pub fn drag_start() -> Option<Params> { START.with(|s| s.borrow().clone()) }
+
+/// Sets [`drag_start`] for the drag about to be applied; the workspace puts it back to None after.
+pub fn set_drag_start(p: Option<Params>) { START.with(|s| *s.borrow_mut() = p); }
+
+/// A point fixed in the drawing (SVG units), for a figure whose drawing moves on its page as it is edited: the circle's centre,
+/// which the page's growth on the left or top (for a point dragged off the circle, for its labels) and the readout's width move
+/// right or down. While a handle is dragged the workspace moves its held view by as much as this point moves, so the drawing
+/// stays still on the screen under a pointer held still (checker, round 412: otherwise the point ran away from it, or flickered
+/// between two steps). None for a figure whose drawing keeps its place.
+pub fn anchor(id: &str, p: &Params) -> Option<Pt> {
+    match id {
+        "circle" => Some(super::circle::anchor(p)),
+        _ => None,
+    }
+}
 pub type DragFn = Arc<dyn Fn(&mut Params, Pt) + Send + Sync>;
 pub type ClickFn = Arc<dyn Fn(&mut Params) + Send + Sync>;
 pub type ScrollFn = Arc<dyn Fn(&mut Params, f64) + Send + Sync>;

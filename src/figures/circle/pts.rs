@@ -13,6 +13,40 @@ pub fn polygon_n(p: &Params) -> usize {
     p.s("polygon").split_whitespace().next().and_then(|t| t.parse::<usize>().ok()).filter(|n| (3..=8).contains(n)).unwrap_or(0)
 }
 
+/// The panel chose an inscribed polygon (round 412, as the reference's Add inscribed polygon): its corners are added as More points
+/// on the circle, evenly spaced with the bottom side level (the first at 270 - 180/n degrees), each with the next free letter, and
+/// joined in turn by Lines between points; the choice goes back to None, so each corner is a point of its own that drags on its own.
+/// With no room left in More points for every corner, the regular polygon is kept as it was drawn before.
+pub fn polygon_chosen(p: &mut Params) {
+    let n = polygon_n(p);
+    if n < 3 { return; }
+    let mut rows = edit::rows(p.s("more_points"));
+    if !polygon_fits(p, n) { return; }
+    let mut used = edit::taken_letters(p, false);
+    let mut corners = vec![];
+    for r in 0..n {
+        let l = edit::next_free(&used);
+        used.push(l.clone());
+        let d = ((270.0 - 180.0 / n as f64 + 360.0 * r as f64 / n as f64).rem_euclid(360.0) * 100.0).round() / 100.0;
+        // to 0.01 degrees, as the reference writes them (a heptagon's corners are not whole or tenths)
+        let t = format!("{d:.2}");
+        let t = t.trim_end_matches('0').trim_end_matches('.');
+        rows.push(format!("{l} {t}"));
+        corners.push(l);
+    }
+    edit::set_rows(p, "more_points", &rows);
+    let mut joins = edit::rows(p.s("joins"));
+    for r in 0..n { joins.push(format!("{} {}", corners[r], corners[(r + 1) % n])); }
+    edit::set_rows(p, "joins", &joins);
+    p.set_s("polygon", POLYGONS[0]);
+    p.set_s("poly_names", "");
+}
+
+/// Whether an n-sided polygon's corners fit as points of their own: room in More points (12) and in Lines between points (24).
+pub fn polygon_fits(p: &Params, n: usize) -> bool {
+    edit::rows(p.s("more_points")).len() + n <= edit::MAX_EXTRA && edit::rows(p.s("joins")).len() + n <= edit::MAX_JOINS
+}
+
 /// The polygon's vertices in order round the circle from A (counterclockwise): (letter, direction). A vertex that falls on a point
 /// already on the circle (B, C or a More point, within half a degree) is that point; the others take the next free letters.
 pub fn polygon_vertices(p: &Params) -> Vec<(String, f64)> {
@@ -201,4 +235,4 @@ pub fn unknown(p: &Params) -> Vec<String> {
 }
 
 /// Points off the circle may be put up to this many radii from the centre.
-pub const MAX_DIST: f64 = 3.0;
+pub const MAX_DIST: f64 = 5.0;

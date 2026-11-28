@@ -848,7 +848,7 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         nets::ID => nets::relevant(key, p),
         "lever" | "pendulum" | "roller-coaster" | "spring" | "torque" => physics::mechanics_relevant(id, key, p),
         // the circle's point waiting for a second click (to be joined) is set on the figure, not typed
-        "circle" if key == "join_from" || key == "poly_names" => false,
+        "circle" if matches!(key, "join_from" | "poly_names" | "poly_carry") => false,
         // the reference has no "Show resultant" box (the arrow's "Left off" does it) and no bold switch
         "vector-diagram" if matches!(key, "resultant" | "bold") => false,
         "vector-diagram" if matches!(key, "ang_lab_mode" | "ang_lab" | "ang_from") => p.b("mark_angle"),
@@ -938,6 +938,14 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
     }
     if id == "transformations" {
         transform::panel_changed(key, p);
+    }
+    // choosing an inscribed polygon on the circle adds its corners as points of their own (as the reference does)
+    if (id, key) == ("circle", "polygon") {
+        circle::polygon_chosen(p);
+    }
+    // (where a saved polygon was last drawn holds only while A is where the drag that took it off the circle left it)
+    if id == "circle" && matches!(key, "a1" | "a_dist" | "polygon") && !p.s("poly_carry").is_empty() {
+        p.set_s("poly_carry", "");
     }
     // a typed conic equation fills the value boxes; a changed value rewrites the typed equation
     if id == math::conics::ID {

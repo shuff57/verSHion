@@ -1,8 +1,8 @@
 {
  "meta": {
-  "built_at": "2026-11-25T00:15:45+00:00",
-  "src_mtime": 1795565410.4684422,
-  "git": "98d3397+dirty",
+  "built_at": "2026-11-28T01:20:32+00:00",
+  "src_mtime": 1795828400.583442,
+  "git": "a23cc04+dirty",
   "figures": 213
  },
  "figures": {
@@ -31391,6 +31391,13 @@
      "default": ""
     },
     {
+     "key": "poly_carry",
+     "label": "Where the polygon was last drawn",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "joins",
      "label": "Lines between points",
      "kind": "list",
@@ -31833,7 +31840,7 @@
       "click"
      ],
      "edit": "name_a",
-     "tip": "Drag point A round the circle, or off it (pull it well away; bring it near to put it back on); click it for the tangent there, or click it and then another point to join them; double-click it to rename it"
+     "tip": "Drag point A round the circle, or off it (pull it well away; bring it near to put it back on) in 5° steps (1° with Ctrl or Cmd held); click it for the tangent there, or click it and then another point to join them; double-click it to rename it"
     },
     {
      "actions": [

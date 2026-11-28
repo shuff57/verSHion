@@ -42,8 +42,8 @@
    "id": "cap-01g",
    "text": "Drag any point on the figure, not only A",
    "class": "interaction",
-   "evidence": "",
-   "note": "Unscored (handles are read at the opening state only, where A is the only point). Built in batch 8 (2026-11-11) and confirmed by independent checkers: A, B, C, typed More points and polygon corners all drag; the centre, midpoints, crossings and tangent touch points do not (the reference does not drag the centre or midpoints either)."
+   "evidence": "handle@{\"show_b\":true,\"show_c\":true}:drag:Drag point B round the circle + handle@{\"show_b\":true,\"show_c\":true}:drag:Drag point C round the circle + handle@{\"more_points\":\"D 270, E 200 1.8r\"}:drag:Drag point E anywhere + handle@{\"more_points\":\"D 225, E 315, F 45, G 135\",\"joins\":\"D E, E F, F G, G D\"}:drag:Drag point F round the circle + ui-test:figures::circle::drag_r412_tests::every_point_turns_in_5_degree_steps_and_1_with_ctrl",
+   "note": "Built in batch 8 (2026-11-11): A, B, C, typed More points (on or off the circle) and polygon corners drag. Round 412 (2026-11-24, owner's choice): every point drags by the reference's rules, read from its page code: the direction in 5 degree steps (1 with Ctrl or Cmd held), off the circle past a third of a radius and back on within 0.1, the distance in 0.25 radii (0.05 fine) up to 5. Choosing an inscribed polygon now adds its corners as More points joined by chords, as the reference's Add inscribed polygon does, so each corner drags on its own; a regular polygon saved before still turns with A or a corner, the points on its corners as the drag began turning with it (worked out from where the drag started, not frame by frame) so the corners keep their letters (the points known by place, not letter), and a corner after A is kept from stopping on a point it does not carry (the turn stops at the nearest whole degree where none does, usually one away, a few in a crowd of points; A itself may stop on a point, as it may with no polygon). While a point is dragged the drawing stays still on the screen (the held view moves with it as the page grows on the left or top or the readout re-centres it), so the point stays under a still pointer. A point keeps its drag as it passes over another (B on A, or C drawn for the inscribed angle only on A or B, is not drawn, its knob waiting off the canvas). The centre, midpoints, crossings and tangent touch points do not drag, as on the reference. Known differences kept: a step that would put a point on another point's ray at another distance takes the whole degree instead (about 1.5% of drops; the reference has no such rule); a fine drag stops 0.1 radii from the centre (the reference 0.05); a polygon with no room for its corners (More points 12, Lines between points 24) stays a regular polygon, with a note; B placed by a chord length or OM distance steps by that rounded value, not by 5 degrees, and dragged clockwise of A lands on the mirror side (as before round 412); a saved heptagon's dragged corner lands within half a degree of its step (A stays a whole degree)."
   },
   {
    "id": "cap-01f",
@@ -281,7 +281,7 @@
    "text": "An inscribed polygon of 3 to 8 sides",
    "class": "control",
    "evidence": "changes:polygon=6 sides",
-   "note": "Built in batch 5, round 244 (2026-11-10). No parameter."
+   "note": "Built in batch 5, round 244 (2026-11-10). Round 412 (2026-11-24): choosing it in the panel adds that many points round the circle (bottom side level, the next free letters) joined by chords, as the reference does; the token renders a regular polygon saved before, which still draws as it did."
   },
   {
    "id": "cap-07c",

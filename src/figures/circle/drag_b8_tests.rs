@@ -72,11 +72,12 @@ fn every_drawn_point_can_be_dragged_and_the_figure_follows() {
     // (point, where it is, where it is dropped, the params the drag may change)
     let pts_now = edit::circle_points(&base);
     let cases: Vec<(&str, (f64, f64), (f64, f64), Vec<&str>)> = vec![
-        ("A", (20.0, 1.0), (35.0, 1.0), vec!["a1"]),
+        // (round 412: B sits on a corner of the square, so dragging A turns the square and B with it, keeping the corners' letters)
+        ("A", (20.0, 1.0), (35.0, 1.0), vec!["a1", "a2", "poly_carry"]),
         ("B", (110.0, 1.0), (150.0, 1.0), vec!["a2"]),
         ("C", (250.0, 1.0), (230.0, 1.0), vec!["c_angle"]),
         ("D", (300.0, 1.0), (320.0, 1.0), vec!["more_points"]),
-        ("P", (45.0, 1.8), (60.0, 2.2), vec!["more_points"]),
+        ("P", (45.0, 1.8), (60.0, 2.25), vec!["more_points"]),
         // and off the circle (cap-01f): B out, C in
         ("B", (110.0, 1.0), (130.0, 1.5), vec!["a2", "b_dist"]),
         ("C", (250.0, 1.0), (240.0, 0.5), vec!["c_angle", "c_dist"]),
@@ -99,9 +100,10 @@ fn every_drawn_point_can_be_dragged_and_the_figure_follows() {
     // the lines through A follow it: AD from A's new place to D, OA to A, on the circle and off it
     let r = drag_pt(&base, (20.0, 1.0), (35.0, 1.0), 4);
     assert!(seg_between(&r, at_deg(&r, 35.0, 1.0), at_deg(&r, 300.0, 1.0)) && seg_between(&r, centre(&r), at_deg(&r, 35.0, 1.0)), "AD and OA do not follow A");
-    let r = drag_pt(&base, (20.0, 1.0), (35.0, 1.7), 6);
-    assert_eq!(r.f("a_dist"), 1.7);
-    assert!(seg_between(&r, at_deg(&r, 35.0, 1.7), at_deg(&r, 300.0, 1.0)) && seg_between(&r, centre(&r), at_deg(&r, 35.0, 1.7)), "AD and OA do not follow A off the circle");
+    // (round 412: off the circle the distance steps in quarter radii)
+    let r = drag_pt(&base, (20.0, 1.0), (35.0, 1.75), 6);
+    assert_eq!(r.f("a_dist"), 1.75);
+    assert!(seg_between(&r, at_deg(&r, 35.0, 1.75), at_deg(&r, 300.0, 1.0)) && seg_between(&r, centre(&r), at_deg(&r, 35.0, 1.75)), "AD and OA do not follow A off the circle");
     // the polygon's own corners: each is a knob that turns the polygon so that corner is where it is dropped (A turns with it)
     let corners = pts::polygon_points(&base);
     // (a square from A at 20 degrees has a corner at 110, which is B: B's own knob; the other two are the polygon's)
@@ -113,11 +115,13 @@ fn every_drawn_point_can_be_dragged_and_the_figure_follows() {
         let h = pick(&base, from).expect("a knob on the corner");
         // (the knobs are worked out each frame: a corner's stays at its place in the hit order while the polygon turns)
         assert!(h.tip.contains(&format!("corner {nm}")) && h.drag.is_some(), "{}", h.tip);
-        let r = drag_pt(&base, (d, 1.0), (d + 17.0, 1.0), 5);
+        // (round 412: a turn steps by 5 degrees, and B, on a corner of the square, turns with it, so the corners keep their letters)
+        let r = drag_pt(&base, (d, 1.0), (d + 15.0, 1.0), 5);
         let after = pts::polygon_vertices(&r);
-        assert!(after.iter().any(|(_, e)| angdiff(*e, d + 17.0) < 0.6), "corner {nm} not at {}: {after:?}", d + 17.0);
-        assert!(angdiff(r.f("a1"), 20.0 + 17.0) < 0.6, "A did not turn with the polygon");
-        for (k, v) in &r.0 { if k != "a1" { assert_eq!(base.0.get(k), Some(v), "turning the polygon changed {k}"); } }
+        assert!(after.iter().any(|(_, e)| angdiff(*e, d + 15.0) < 0.6), "corner {nm} not at {}: {after:?}", d + 15.0);
+        assert!(angdiff(r.f("a1"), 20.0 + 15.0) < 0.6, "A did not turn with the polygon");
+        assert_eq!(after.iter().map(|v| v.0.clone()).collect::<Vec<_>>(), pts::polygon_vertices(&base).into_iter().map(|v| v.0).collect::<Vec<_>>(), "the corners kept their letters");
+        for (k, v) in &r.0 { if !matches!(k.as_str(), "a1" | "a2" | "poly_carry") { assert_eq!(base.0.get(k), Some(v), "turning the polygon changed {k}"); } }
     }
 }
 
@@ -140,12 +144,13 @@ fn a_b_and_c_drag_off_the_circle_and_back_on() {
     let base = with(&[b("show_b", true), b("show_c", true), b("show_chord", true), b("show_inscribed", true), f("a1", 20.0), f("a2", 110.0), f("c_angle", 250.0)]);
     for (i, (nm, d)) in [("A", 20.0), ("B", 110.0), ("C", 250.0)].into_iter().enumerate() {
         let key = drag_b8::DIST_KEYS[i];
-        // a little way out (0.15 radii) it stays on the circle
+        // a little way out (0.15 radii) it stays on the circle (round 412: on until a third of a radius out)
         let fig = def();
         let r = drag_pt(&base, (d, 1.0), (d, 1.15), 5);
         assert_eq!(r.f(key), 1.0, "{nm} left the circle at 0.15 radii");
         assert_eq!(fig.svg(&r), fig.svg(&base), "{nm}: a small pull changed the figure");
-        for target in [1.6, 0.5, 2.4, 0.25] {
+        // (round 412: off the circle the distance steps in quarter radii)
+        for target in [1.5, 0.5, 2.5, 0.25] {
             let r = drag_pt(&base, (d, 1.0), (d, target), 8);
             assert!((r.f(key) - target).abs() < 0.026, "{nm} at {} not {target}", r.f(key));
             let q = at_deg(&r, d, r.f(key));
@@ -255,7 +260,8 @@ fn odd_inputs_draw_sensibly_or_are_refused() {
         let p = with(c);
         let r = rep(&p);
         let ds = drag_b8::dists(&p);
-        assert!(ds.iter().all(|d| d.is_finite() && (0.1..=3.0).contains(d)), "{ds:?}");
+        // (round 412: out to 5 radii, the reference's limit)
+        assert!(ds.iter().all(|d| d.is_finite() && (0.1..=pts::MAX_DIST).contains(d)), "{ds:?}");
         for (i, l) in r.placed.iter().enumerate() {
             assert!(l.rect.x0 >= 0.0 && l.rect.y0 >= 0.0 && l.rect.x1 <= r.w && l.rect.y1 <= r.h, "{:?} off the page: {c:?}", l.text);
             for m in &r.placed[i + 1..] { assert!(!l.rect.grow(-0.5).hit(&m.rect.grow(-0.5)), "{:?} on {:?}: {c:?}", l.text, m.text); }

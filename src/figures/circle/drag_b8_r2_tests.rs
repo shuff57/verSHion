@@ -91,18 +91,18 @@ fn same_ray_pairs_at_different_distances_over_every_switch() {
     assert!(n >= 200, "{n}");
 }
 
-/// Dragged through its knob near another point's ray at another distance, a point takes the direction it is dropped at: B at 0.4
-/// radii dropped at 31 or 33 degrees with A at 30 (the gap snaps to familiar angles, but not onto A's ray); a More point dropped at
-/// 31 degrees, 1.5 radii out, with A at 30 on the circle.
+/// Dragged through its knob near another point's ray at another distance, a point does not step onto that ray: B at 0.5 radii
+/// dropped at 31 degrees with A at 30 takes 31 (the 5 degree step, 30, is A's ray), at 33 it takes the step, 35 (round 412: the
+/// reference's 5 degree steps); a More point dropped at 31 degrees, 1.5 radii out, with A at 30 on the circle.
 #[test]
 fn a_drag_does_not_snap_onto_another_points_ray() {
-    let p = with(&[f("a1", 30.0), f("a2", 100.0), f("b_dist", 0.4), b("show_b", true), b("show_chord", true)]);
-    for want in [31.0, 33.0] {
-        let r = drag_pt(&p, (100.0, 0.4), (want, 0.4), 6);
-        assert_eq!(r.f("a2"), want, "B snapped onto A's ray");
-        assert!(dot_at(&rep(&r), at_deg(&r, want, 0.4)));
+    let p = with(&[f("a1", 30.0), f("a2", 100.0), f("b_dist", 0.5), b("show_b", true), b("show_chord", true)]);
+    for (drop, want) in [(31.0, 31.0), (33.0, 35.0)] {
+        let r = drag_pt(&p, (100.0, 0.5), (drop, 0.5), 6);
+        assert_eq!(r.f("a2"), want, "B snapped onto A's ray, or off the step");
+        assert!(dot_at(&rep(&r), at_deg(&r, want, 0.5)));
     }
-    // on the circle the gap still snaps as before (to 90 from A within 3 degrees)
+    // on the circle the step lands on 120 (90 from A)
     let q = with(&[f("a1", 30.0), f("a2", 100.0), b("show_b", true), b("show_chord", true)]);
     assert_eq!(drag_pt(&q, (100.0, 1.0), (121.5, 1.0), 6).f("a2"), 120.0);
     let m = with(&[f("a1", 30.0), s("more_points", "D 100 1.5r")]);
